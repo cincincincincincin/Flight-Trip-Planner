@@ -326,8 +326,8 @@ function App() {
     const newTripRoutes = [...tripRoutes];
 
     if (isFirstLeg) {
-      if (!selectedItem) return;
-      const startData = selectedItem.data as any;
+      const originFeat = airportsData?.features.find(f => f.properties.code === originCode);
+      const startData = originFeat ? originFeat.properties : { code: originCode, city_code: '', country_code: '' };
       setTripState({
         startAirport: {
           code: startData.code,
