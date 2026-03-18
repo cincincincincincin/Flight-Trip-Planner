@@ -1,7 +1,7 @@
 .vscode/
 
 .env
-
+.env.prod
 *.log
 
 node_modules/
