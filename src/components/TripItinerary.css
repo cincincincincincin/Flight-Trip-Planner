@@ -138,3 +138,33 @@
   transform: none;
   box-shadow: none;
 }
+
+.trip-itinerary-actions {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: white;
+  border-top: 1px solid #e0e0e0;
+  border-radius: 0 0 8px 8px;
+}
+
+.trip-action-btn {
+  background: none;
+  border: none;
+  color: #5c6bc0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.trip-action-btn:hover:not(:disabled) {
+  background: #f0f4ff;
+}
+
+.trip-action-btn:disabled {
+  color: #ccc;
+  cursor: not-allowed;
+}

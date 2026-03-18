@@ -82,6 +82,7 @@ function App() {
     tripRoutes, setTripRoutes,
     manualTransferAirportCodes, setManualTransferAirportCodes,
     setPreviewAirportCode,
+    pushToHistory,
     clearTrip,
   } = useTripStore();
 
@@ -323,6 +324,10 @@ function App() {
 
     // In trip mode: check if flight departs from a manual transfer airport
     const isFromTransferAirport = !isFirstLeg && manualTransferAirportCodes.includes(originCode);
+    
+    // Save current state to undo stack before modifying
+    pushToHistory();
+
     const newTripRoutes = [...tripRoutes];
 
     if (isFirstLeg) {
@@ -393,6 +398,18 @@ function App() {
     }
   }, [tripState, selectedItem, airportsData, tripRoutes, manualTransferAirportCodes, flyToLocation, setTripState, setTripRoutes, setManualTransferAirportCodes, setHighlightedAirports, setFlightsData, setSelectedAirportCode, setSelectedItem]);
   handleAddToTripRef.current = handleAddToTrip;
+
+  const handleUndoRedo = useCallback(() => {
+    // Defer slightly so Zustand stores (trip and selection) fully update
+    setTimeout(() => {
+      const item = useSelectionStore.getState().selectedItem;
+      if (!item) return;
+      const coords = extractCoordinates(item);
+      if (coords) {
+        flyToLocation(coords.lng, coords.lat, FALLBACK_ZOOM.AIRPORT);
+      }
+    }, 0);
+  }, [flyToLocation]);
 
   const handleClosePanel = () => {
     setPendingCountryPicker(null);
@@ -489,7 +506,7 @@ function App() {
           )}
           {user && <UserMenu onOpenSavedTrips={() => setShowSavedTrips(true)} />}
           {tripState && user && <SaveTripButton />}
-          {tripState && <TripItinerary />}
+          <TripItinerary onUndo={handleUndoRedo} onRedo={handleUndoRedo} />
         </div>
 
         <MemoizedMapComponent

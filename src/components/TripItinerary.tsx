@@ -38,8 +38,13 @@ const getDurationMs = (from: string | undefined, to: string | undefined): number
   return diff > 0 ? diff : null;
 };
 
-const TripItinerary = () => {
-  const { tripState } = useTripStore();
+interface TripItineraryProps {
+  onUndo?: () => void;
+  onRedo?: () => void;
+}
+
+const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo }) => {
+  const { tripState, undo, redo, pastTrips, futureTrips } = useTripStore();
   const { travelDate } = useSettingsStore();
   const { data: airportsData } = useAirportsQuery();
 
@@ -62,9 +67,9 @@ const TripItinerary = () => {
     };
   }, []);
 
-  if (!tripState || !tripState.legs.length) return null;
+  if (!tripState && pastTrips.length === 0 && futureTrips.length === 0) return null;
 
-  const { legs } = tripState;
+  const legs = tripState?.legs || [];
 
   const showPopup = (e: React.MouseEvent<HTMLDivElement>, flight: Flight | undefined) => {
     if (!flight) return;
@@ -96,91 +101,93 @@ const TripItinerary = () => {
 
   return (
     <div className="trip-itinerary-wrapper" ref={wrapperRef}>
-      <div className="trip-itinerary">
-        {legs.map((leg, i) => {
-          const isManual = leg.type === 'manual';
-          const f = leg.flight;
-          const depStr = f?.scheduled_departure_local || f?.scheduled_departure_utc;
-          const arrStr = f?.scheduled_arrival_local || f?.scheduled_arrival_utc;
-          const duration = !isManual
-            ? getDuration(f?.scheduled_departure_utc, f?.scheduled_arrival_utc)
-            : null;
+      {legs.length > 0 && (
+        <div className="trip-itinerary">
+          {legs.map((leg, i) => {
+            const isManual = leg.type === 'manual';
+            const f = leg.flight;
+            const depStr = f?.scheduled_departure_local || f?.scheduled_departure_utc;
+            const arrStr = f?.scheduled_arrival_local || f?.scheduled_arrival_utc;
+            const duration = !isManual
+              ? getDuration(f?.scheduled_departure_utc, f?.scheduled_arrival_utc)
+              : null;
 
-          // "time available in: city" between two consecutive flight legs (no manual between them)
-          let timeAvailableMs: number | null = null;
-          let timeAvailableCity: string | null = null;
-          if (!isManual && i > 0) {
-            const prevLeg = legs[i - 1];
-            if ((prevLeg as { type?: string }).type !== 'manual' && prevLeg.flight?.scheduled_arrival_utc && f?.scheduled_departure_utc) {
-              timeAvailableMs = getDurationMs(prevLeg.flight.scheduled_arrival_utc, f.scheduled_departure_utc);
-              timeAvailableCity = airportCityNameMap[leg.fromAirportCode] ?? leg.fromAirportCode;
+            // "time available in: city" between two consecutive flight legs (no manual between them)
+            let timeAvailableMs: number | null = null;
+            let timeAvailableCity: string | null = null;
+            if (!isManual && i > 0) {
+              const prevLeg = legs[i - 1];
+              if ((prevLeg as { type?: string }).type !== 'manual' && prevLeg.flight?.scheduled_arrival_utc && f?.scheduled_departure_utc) {
+                timeAvailableMs = getDurationMs(prevLeg.flight.scheduled_arrival_utc, f.scheduled_departure_utc);
+                timeAvailableCity = airportCityNameMap[leg.fromAirportCode] ?? leg.fromAirportCode;
+              }
             }
-          }
 
-          // "time to transfer" for manual legs
-          let timeToTransferMs: number | null = null;
-          if (isManual) {
-            const lastRealLegBeforeManual = legs.slice(0, i).reverse().find(l => (l as { type?: string }).type !== 'manual');
-            const nextRealLeg = legs.slice(i + 1).find(l => (l as { type?: string }).type !== 'manual');
-            if (lastRealLegBeforeManual?.flight?.scheduled_arrival_utc && nextRealLeg?.flight?.scheduled_departure_utc) {
-              timeToTransferMs = getDurationMs(lastRealLegBeforeManual.flight.scheduled_arrival_utc, nextRealLeg.flight.scheduled_departure_utc);
+            // "time to transfer" for manual legs
+            let timeToTransferMs: number | null = null;
+            if (isManual) {
+              const lastRealLegBeforeManual = legs.slice(0, i).reverse().find(l => (l as { type?: string }).type !== 'manual');
+              const nextRealLeg = legs.slice(i + 1).find(l => (l as { type?: string }).type !== 'manual');
+              if (lastRealLegBeforeManual?.flight?.scheduled_arrival_utc && nextRealLeg?.flight?.scheduled_departure_utc) {
+                timeToTransferMs = getDurationMs(lastRealLegBeforeManual.flight.scheduled_arrival_utc, nextRealLeg.flight.scheduled_departure_utc);
+              }
             }
-          }
 
-          return (
-            <React.Fragment key={i}>
-              {timeAvailableMs !== null && timeAvailableCity && (
-                <div className="trip-time-available">
-                  ⏱ Time in {timeAvailableCity}: {formatDurationMs(timeAvailableMs)}
-                </div>
-              )}
-              <div
-                className={`trip-leg${isManual ? ' trip-leg--manual' : ''}`}
-                onMouseEnter={(e) => !isManual && showPopup(e, f)}
-                onMouseLeave={scheduleHide}
-              >
-                <div className="trip-leg-row">
-                  <div className="trip-leg-airport">
-                    <span className="trip-leg-code">{leg.fromAirportCode}</span>
-                    {!isManual && depStr && (
-                      <span className="trip-leg-datetime">
-                        <span className="trip-leg-date">{formatDate(depStr)}</span>
-                        <span className="trip-leg-time">{formatTime(depStr)}</span>
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="trip-leg-middle">
-                    {isManual ? (
-                      <span className="trip-leg-manual-icon" title="Manual transfer">🚶</span>
-                    ) : (
-                      <>
-                        <span className="trip-leg-arrow">✈️</span>
-                        {duration && <span className="trip-leg-duration">{duration}</span>}
-                      </>
-                    )}
-                  </div>
-
-                  <div className="trip-leg-airport trip-leg-airport--dest">
-                    <span className="trip-leg-code">{leg.toAirportCode}</span>
-                    {!isManual && arrStr && (
-                      <span className="trip-leg-datetime">
-                        <span className="trip-leg-date">{formatDate(arrStr)}</span>
-                        <span className="trip-leg-time">{formatTime(arrStr)}</span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {isManual && timeToTransferMs !== null && (
-                  <div className="trip-leg-transfer-time">
-                    Time to transfer: {formatDurationMs(timeToTransferMs)}
+            return (
+              <React.Fragment key={i}>
+                {timeAvailableMs !== null && timeAvailableCity && (
+                  <div className="trip-time-available">
+                    ⏱ Time in {timeAvailableCity}: {formatDurationMs(timeAvailableMs)}
                   </div>
                 )}
-              </div>
-            </React.Fragment>
-          );
-        })}
-      </div>
+                <div
+                  className={`trip-leg${isManual ? ' trip-leg--manual' : ''}`}
+                  onMouseEnter={(e) => !isManual && showPopup(e, f)}
+                  onMouseLeave={scheduleHide}
+                >
+                  <div className="trip-leg-row">
+                    <div className="trip-leg-airport">
+                      <span className="trip-leg-code">{leg.fromAirportCode}</span>
+                      {!isManual && depStr && (
+                        <span className="trip-leg-datetime">
+                          <span className="trip-leg-date">{formatDate(depStr)}</span>
+                          <span className="trip-leg-time">{formatTime(depStr)}</span>
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="trip-leg-middle">
+                      {isManual ? (
+                        <span className="trip-leg-manual-icon" title="Manual transfer">🚶</span>
+                      ) : (
+                        <>
+                          <span className="trip-leg-arrow">✈️</span>
+                          {duration && <span className="trip-leg-duration">{duration}</span>}
+                        </>
+                      )}
+                    </div>
+
+                    <div className="trip-leg-airport trip-leg-airport--dest">
+                      <span className="trip-leg-code">{leg.toAirportCode}</span>
+                      {!isManual && arrStr && (
+                        <span className="trip-leg-datetime">
+                          <span className="trip-leg-date">{formatDate(arrStr)}</span>
+                          <span className="trip-leg-time">{formatTime(arrStr)}</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {isManual && timeToTransferMs !== null && (
+                    <div className="trip-leg-transfer-time">
+                      Time to transfer: {formatDurationMs(timeToTransferMs)}
+                    </div>
+                  )}
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </div>
+      )}
 
       {hoveredFlight && popupPos && (
         <div
@@ -196,6 +203,22 @@ const TripItinerary = () => {
           />
         </div>
       )}
+      <div className="trip-itinerary-actions">
+        <button 
+          onClick={() => { undo(); onUndo?.(); }} 
+          disabled={pastTrips.length === 0} 
+          className="trip-action-btn trip-action-btn--undo"
+        >
+          ↩ Undo
+        </button>
+        <button 
+          onClick={() => { redo(); onRedo?.(); }} 
+          disabled={futureTrips.length === 0} 
+          className="trip-action-btn trip-action-btn--redo"
+        >
+          Redo ↪
+        </button>
+      </div>
     </div>
   );
 };

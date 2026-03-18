@@ -11,7 +11,7 @@ interface SavedTripsPanelProps {
 
 const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose }) => {
   const qc = useQueryClient();
-  const { setTripState, setTripRoutes } = useTripStore();
+  const { setTripState, setTripRoutes, clearHistory } = useTripStore();
 
   const { data: trips, isLoading, isError } = useQuery({
     queryKey: ['user-trips'],
@@ -24,6 +24,7 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose }) => {
   });
 
   const handleLoad = (trip: SavedTrip) => {
+    clearHistory();
     setTripState(trip.trip_state);
     setTripRoutes(trip.trip_routes);
     onClose();
