@@ -1,0 +1,377 @@
+.flight-card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.flight-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.flight-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.flight-number {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flight-number .airline {
+  font-weight: 600;
+  font-size: 14px;
+  color: #1976d2;
+  background: #e3f2fd;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.flight-number .number {
+  font-weight: 700;
+  font-size: 16px;
+  color: #333;
+}
+
+.airline-name {
+  font-size: 12px;
+  color: #666;
+}
+
+.flight-route {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.airport {
+  flex: 1;
+  text-align: center;
+}
+
+.airport.origin {
+  text-align: left;
+}
+
+.airport.destination {
+  text-align: right;
+}
+
+.airport-code {
+  font-size: 20px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.airport-name {
+  font-size: 12px;
+  color: #666;
+}
+
+.flight-path {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.path-line {
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(to right, #1976d2, #42a5f5);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plane-icon {
+  font-size: 16px;
+  background: white;
+  padding: 0 4px;
+}
+
+.duration {
+  font-size: 11px;
+  color: #666;
+  background: #f5f5f5;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.flight-times {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.times-row {
+  display: flex;
+  gap: 8px;
+}
+
+
+.time {
+  flex: 1;
+  text-align: center;
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.time-label {
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.time-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #333;
+}
+
+.date-value {
+  font-size: 11px;
+  color: #999;
+  margin-top: 2px;
+}
+
+.date-value.different-day {
+  font-weight: 700;
+  color: #555;
+}
+
+.tz-diff {
+  font-size: 11px;
+  font-weight: 500;
+  margin-left: 3px;
+}
+
+.tz-diff.positive {
+  color: #4caf50;
+}
+
+.tz-diff.negative {
+  color: #f44336;
+}
+
+.origin-tz-diff {
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 3px;
+  vertical-align: middle;
+}
+
+.origin-tz-diff.positive {
+  color: #4caf50;
+}
+
+.origin-tz-diff.negative {
+  color: #f44336;
+}
+
+.flight-details {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 8px;
+  background: #f0f4f8;
+  border-radius: 6px;
+}
+
+.flight-details .detail {
+  font-size: 12px;
+  color: #555;
+}
+
+.flight-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flight-actions-row {
+  display: flex;
+  gap: 8px;
+}
+
+.add-to-trip-button {
+  width: 100%;
+  padding: 10px 16px;
+  border: 2px solid #4caf50;
+  background: white;
+  color: #4caf50;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.add-to-trip-button:hover {
+  background: #4caf50;
+  color: white;
+}
+
+.search-online-button {
+  flex: 1;
+  padding: 10px 16px;
+  border: 2px solid #f57c00;
+  background: white;
+  color: #f57c00;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-online-button:hover {
+  background: #f57c00;
+  color: white;
+}
+
+.price-button {
+  flex: 1;
+  padding: 10px 16px;
+  border: 2px solid #1976d2;
+  background: white;
+  color: #1976d2;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.price-button:hover:not(:disabled) {
+  background: #1976d2;
+  color: white;
+}
+
+.price-button.active {
+  background: #1976d2;
+  color: white;
+}
+
+.price-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.price-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.price-loading,
+.price-error {
+  text-align: center;
+  padding: 16px;
+  font-size: 14px;
+}
+
+.price-loading {
+  color: #666;
+}
+
+.price-error {
+  color: #d32f2f;
+  background: #ffebee;
+  border-radius: 6px;
+}
+
+.price-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.price-amount {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px;
+  color: white;
+}
+
+.price-amount .currency {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.price-amount .amount {
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.price-detail {
+  text-align: center;
+  font-size: 13px;
+  color: #666;
+}
+
+.book-button {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  background: #4caf50;
+  color: white;
+  text-align: center;
+  text-decoration: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.book-button:hover {
+  background: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
+}
+
+/* Trip highlight backgrounds */
+.flight-card--trip-airport {
+  background-color: rgba(0, 77, 0, 0.18);
+  border-left: 3px solid #1B5E20;
+}
+
+.flight-card--trip-city {
+  background-color: rgba(46, 125, 50, 0.15);
+  border-left: 3px solid #388E3C;
+}
+
+.flight-card--trip-country {
+  background-color: rgba(129, 199, 132, 0.18);
+  border-left: 3px solid #66BB6A;
+}
+
+.flight-card--trip-soon {
+  background-color: rgba(255, 152, 0, 0.13);
+  border-left: 3px solid #FF9800;
+}

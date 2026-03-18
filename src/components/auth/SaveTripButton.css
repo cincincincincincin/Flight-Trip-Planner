@@ -1,0 +1,21 @@
+.save-trip-btn {
+  background: rgba(30, 30, 46, 0.9);
+  border: 1px solid #7c6ff7;
+  border-radius: 8px;
+  color: #c4b8ff;
+  font-size: 13px;
+  padding: 7px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.save-trip-btn:hover:not(:disabled) {
+  background: rgba(124, 111, 247, 0.2);
+  color: #fff;
+}
+
+.save-trip-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

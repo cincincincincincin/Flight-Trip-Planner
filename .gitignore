@@ -1,0 +1,11 @@
+.vscode/
+
+.env
+
+*.log
+
+node_modules/
+
+dist/
+
+*.old

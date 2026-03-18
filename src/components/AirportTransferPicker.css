@@ -1,0 +1,199 @@
+.airport-transfer-picker {
+  position: relative;
+  width: 100%;
+}
+
+.atp-display {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 5px 7px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: background-color 0.15s, border-color 0.15s;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.atp-display:hover {
+  background-color: #f0f4ff;
+  border-color: #c5cae9;
+}
+
+.atp-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.atp-name {
+  font-size: 0.95rem;
+  color: #555;
+  line-height: 1.4;
+}
+
+.atp-hint {
+  font-size: 12px;
+  opacity: 0.45;
+  flex-shrink: 0;
+}
+
+.atp-input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 2px solid #667eea;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  outline: none;
+  box-sizing: border-box;
+  /* Force light styling regardless of system/browser dark mode */
+  background-color: #ffffff;
+  color: #333333;
+  color-scheme: light;
+  -webkit-text-fill-color: #333333;
+}
+
+.atp-input::placeholder {
+  color: #aaa;
+  -webkit-text-fill-color: #aaa;
+}
+
+.atp-dropdown {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  right: 0;
+  max-height: 270px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+  z-index: 1000;
+}
+
+.atp-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.1s;
+  border-bottom: 1px solid #f2f2f2;
+}
+
+.atp-option:last-child {
+  border-bottom: none;
+}
+
+.atp-option:hover {
+  background-color: #f0f4ff;
+}
+
+.atp-option-code {
+  font-weight: 700;
+  font-size: 13px;
+  color: #5c6bc0;
+  min-width: 36px;
+  flex-shrink: 0;
+}
+
+.atp-option-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.atp-option-name {
+  font-size: 13px;
+  color: #222;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.atp-option-location {
+  font-size: 11px;
+  color: #888;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.atp-option-dist {
+  font-size: 11px;
+  color: #aaa;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.atp-no-results {
+  padding: 16px;
+  text-align: center;
+  color: #aaa;
+  font-size: 13px;
+}
+
+.atp-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.atp-counter {
+  font-size: 11px;
+  color: #888;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.atp-checkbox {
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.atp-option.atp-checked {
+  background-color: #e8f5e9;
+}
+
+.atp-option.atp-pre-checked {
+  background-color: #dcedc8;
+  opacity: 0.85;
+}
+
+.airport-transfer-picker--inline .atp-dropdown {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  right: 0;
+  z-index: 1000;
+}
+
+.atp-option.atp-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.atp-option.atp-disabled .atp-checkbox {
+  cursor: not-allowed;
+}
+
+.atp-confirm-btn {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: #3f51b5;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.atp-confirm-btn:hover {
+  background: #303f9f;
+}

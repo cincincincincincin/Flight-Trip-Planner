@@ -1,0 +1,428 @@
+.color-settings {
+  padding: 10px 14px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  overflow: visible;
+}
+
+.color-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.color-settings-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.color-settings-reset {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.6);
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  padding: 2px 7px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.color-settings-reset:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Column headers */
+.color-settings-col-headers {
+  display: grid;
+  grid-template-columns: 1fr 36px 36px;
+  gap: 4px;
+  padding: 0 2px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 4px;
+}
+
+.color-settings-col-headers--sp7 {
+  grid-template-columns: 1fr 24px 24px 24px 24px 24px 24px;
+}
+
+.color-settings-col-headers--elem {
+  grid-template-columns: 1fr 28px 28px;
+}
+
+.color-settings-col-headers--elem2 {
+  grid-template-columns: 1fr 28px 28px;
+}
+
+.color-settings-col-headers--elem4 {
+  grid-template-columns: 1fr 24px 24px 24px 24px;
+}
+
+.color-col-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+}
+
+.color-col-label:first-child {
+  text-align: left;
+}
+
+/* Start points section */
+.color-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 6px 0 3px;
+}
+
+.color-subsection-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 6px 0 3px;
+}
+
+/* Each row */
+.color-row {
+  display: grid;
+  grid-template-columns: 1fr 36px 36px;
+  gap: 4px;
+  align-items: center;
+  padding: 3px 0;
+}
+
+.color-row--single {
+  grid-template-columns: 1fr 36px;
+}
+
+.color-row--sp7 {
+  grid-template-columns: 1fr 24px 24px 24px 24px 24px 24px;
+}
+
+.color-row--with-hover {
+  grid-template-columns: 1fr 28px 28px;
+}
+
+.color-row--elem2 {
+  grid-template-columns: 1fr 28px 28px;
+}
+
+.color-row--elem4 {
+  grid-template-columns: 1fr 24px 24px 24px 24px;
+}
+
+.color-row-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.color-row-hint {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  margin-left: 4px;
+}
+
+/* Color swatch + input wrapper */
+.color-swatch-btn {
+  width: 22px;
+  height: 18px;
+  border-radius: 4px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.15s, transform 0.1s;
+  justify-self: center;
+}
+
+.color-swatch-btn:hover {
+  border-color: rgba(255, 255, 255, 0.7);
+  transform: scale(1.1);
+}
+
+
+/* Divider between start points and other elements */
+.color-divider {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  margin: 8px 0;
+}
+
+.size-row {
+  padding: 4px 0;
+}
+
+.size-row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.size-value {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  min-width: 28px;
+  text-align: right;
+}
+
+.size-slider {
+  width: 100%;
+  height: 3px;
+  accent-color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+}
+
+.range-slider {
+  position: relative;
+  height: 18px;
+  margin-top: 2px;
+}
+
+.range-slider__track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 7px;
+  height: 4px;
+  border-radius: 999px;
+}
+
+.range-slider__input {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  width: 100%;
+  height: 18px;
+  background: transparent;
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.range-slider__input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 12px;
+  width: 12px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.range-slider__input::-moz-range-thumb {
+  height: 12px;
+  width: 12px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.range-slider__input--min {
+  z-index: 2;
+}
+
+.range-slider__input--max {
+  z-index: 3;
+}
+
+/* ─── Color picker ─────────────────────────────────────────────────────────── */
+
+.color-picker-wrapper {
+  position: relative;
+  display: inline-block;
+  justify-self: center;
+}
+
+.color-picker-popover {
+  /* position/top/left set via inline style (fixed, viewport-aware) */
+  background: #1e1e2e;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  padding: 8px;
+  z-index: 1000;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+  width: 210px;
+  user-select: none;
+}
+
+.cp-eyedropper {
+  display: block;
+  margin-bottom: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+  padding: 3px 8px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+
+.cp-eyedropper:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+/* Canvas row */
+.cp-canvases {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.cp-sv-canvas {
+  flex: 1;
+  height: 120px;
+  border-radius: 5px;
+  cursor: crosshair;
+  display: block;
+}
+
+.cp-strip {
+  width: 14px;
+  height: 120px;
+  border-radius: 4px;
+  cursor: ns-resize;
+  flex-shrink: 0;
+  display: block;
+}
+
+/* Alpha strip */
+.cp-alpha-strip {
+  position: relative;
+  background-size: 8px 8px;
+}
+
+.cp-alpha-cursor {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: white;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.4);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+/* RGBA inputs row */
+.cp-rgba-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+.cp-color-preview {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+  background-size: 8px 8px;
+}
+
+.cp-channel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.cp-channel-label {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 2px;
+  font-weight: 600;
+}
+
+.cp-channel-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 10px;
+  font-family: monospace;
+  padding: 2px 3px;
+  text-align: center;
+  outline: none;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.cp-channel-input::-webkit-inner-spin-button,
+.cp-channel-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+}
+
+.cp-channel-input:focus {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Zoom info row */
+.zoom-info-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 8px;
+}
+
+.zoom-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.zoom-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  font-family: monospace;
+  min-width: 36px;
+}
+
+.zoom-copy-btn {
+  margin-left: auto;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  padding: 2px 7px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.zoom-copy-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.size-at-zoom {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-left: 2px;
+}

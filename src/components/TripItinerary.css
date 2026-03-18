@@ -1,0 +1,140 @@
+.trip-itinerary-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.trip-itinerary {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  max-height: 40vh;
+  overflow-y: auto;
+  width: 100%;
+}
+
+.trip-leg {
+  padding: 7px 10px;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background-color 0.1s;
+}
+
+.trip-leg:last-child {
+  border-bottom: none;
+}
+
+.trip-leg:not(.trip-leg--manual):hover {
+  background-color: #f0f4ff;
+  cursor: pointer;
+}
+
+.trip-leg--manual {
+  background-color: #fafafa;
+  opacity: 0.7;
+}
+
+.trip-leg-transfer-time {
+  font-size: 10px;
+  color: #888;
+  padding: 2px 0 0 4px;
+  font-style: italic;
+}
+
+.trip-time-available {
+  font-size: 10px;
+  color: #5c6bc0;
+  padding: 2px 10px;
+  background: #f3f4fd;
+  border-bottom: 1px solid #e8eaf6;
+  text-align: center;
+}
+
+.trip-leg-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 6px;
+}
+
+.trip-leg-airport {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trip-leg-airport--dest {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.trip-leg-code {
+  font-size: 14px;
+  font-weight: 700;
+  color: #333;
+  letter-spacing: 0.04em;
+}
+
+.trip-leg-datetime {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.trip-leg-date {
+  font-size: 10px;
+  color: #999;
+  line-height: 1.2;
+}
+
+.trip-leg-time {
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.trip-leg-middle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 50px;
+}
+
+.trip-leg-arrow {
+  font-size: 13px;
+}
+
+.trip-leg-duration {
+  font-size: 10px;
+  color: #999;
+  white-space: nowrap;
+}
+
+.trip-leg-manual-icon {
+  font-size: 14px;
+}
+
+/* Popup: FlightCard shown on hover, positioned fixed */
+.trip-leg-popup {
+  position: fixed;
+  z-index: 500;
+  width: 320px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
+  max-height: 80vh;
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+.trip-leg-popup .flight-card {
+  margin-bottom: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.trip-leg-popup .flight-card:hover {
+  transform: none;
+  box-shadow: none;
+}

@@ -1,0 +1,227 @@
+.flights-filter {
+  border-top: 1px solid #e0e0e0;
+  background: #fafafa;
+}
+
+.ff-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+}
+
+.ff-toggle-btn {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #444;
+  cursor: pointer;
+}
+
+.ff-toggle-btn:hover {
+  background: #f0f0f0;
+}
+
+.ff-clear-btn {
+  font-size: 11px;
+  color: #e53935;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+.ff-body {
+  padding: 8px 12px 12px;
+  border-top: 1px solid #eee;
+  max-height: 350px;
+  overflow-y: auto;
+  background: #fafafa;
+  color: #333;
+}
+
+.ff-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.ff-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px 2px 8px;
+  background: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 12px;
+  font-size: 11px;
+  color: #1565c0;
+}
+
+.ff-chip button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #1565c0;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.ff-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.ff-search-input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  box-sizing: border-box;
+  margin-bottom: 6px;
+  color: #333;
+  background-color: #ffffff;
+  -webkit-text-fill-color: #333;
+}
+
+.ff-search-input::placeholder {
+  color: #aaa;
+  -webkit-text-fill-color: #aaa;
+}
+
+.ff-search-input:focus {
+  outline: none;
+  border-color: #90caf9;
+}
+
+.ff-results {
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+}
+
+.ff-section {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.ff-section:last-child {
+  border-bottom: none;
+}
+
+.ff-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #888;
+  padding: 4px 8px 2px;
+  text-transform: uppercase;
+  background: #f8f8f8;
+}
+
+.ff-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  gap: 4px;
+  color: #333;
+}
+
+.ff-item:hover {
+  background: #f5f5f5;
+}
+
+.ff-item.ff-selected {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.ff-item-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  cursor: pointer;
+}
+
+.ff-country-wrapper {
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.ff-city-wrapper {
+  padding-left: 8px;
+}
+
+.ff-nested {
+  padding-left: 8px;
+  border-left: 2px solid #f0f0f0;
+}
+
+.ff-expand-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 10px;
+  color: #888;
+  padding: 2px 4px;
+  flex-shrink: 0;
+}
+
+.ff-check {
+  color: #2e7d32;
+  font-weight: bold;
+  font-size: 11px;
+}
+
+.ff-code {
+  color: #888;
+  font-size: 10px;
+}
+
+.ff-dest-section {
+  margin-bottom: 10px;
+}
+
+.ff-airline-section {
+  border-top: 1px solid #eee;
+  padding-top: 8px;
+}
+
+.ff-airlines {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+.ff-airline-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #333;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.ff-airline-item input {
+  cursor: pointer;
+}

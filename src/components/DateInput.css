@@ -1,0 +1,139 @@
+.date-input-container {
+  position: relative;
+}
+
+.date-input-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.date-input-display:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.date-icon {
+  font-size: 1.2rem;
+}
+
+.date-text-input {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  width: 100px;
+  cursor: pointer;
+  outline: none;
+}
+
+.date-text-input::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.calendar-popup {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  z-index: 1000;
+  min-width: 280px;
+}
+
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.month-nav {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #667eea;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.month-nav:hover {
+  background: #f0f0f0;
+}
+
+.month-year {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.weekday {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #999;
+  padding: 4px;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.calendar-day {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #333;
+}
+
+.calendar-day:not(.empty):not(.disabled):hover {
+  background: #f0f0f0;
+}
+
+.calendar-day.empty {
+  cursor: default;
+}
+
+.calendar-day.disabled {
+  color: #ccc;
+  cursor: not-allowed;
+}
+
+.calendar-day.today {
+  border: 2px solid #667eea;
+  font-weight: 600;
+}
+
+.calendar-day.selected {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-weight: 600;
+}
+
+.calendar-day.selected.today {
+  border: 2px solid white;
+}

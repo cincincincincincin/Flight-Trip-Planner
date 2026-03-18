@@ -1,0 +1,141 @@
+.saved-trips-panel {
+  position: fixed;
+  top: 60px;
+  right: 16px;
+  width: 320px;
+  max-height: calc(100vh - 80px);
+  background: #1e1e2e;
+  border: 1px solid #444;
+  border-radius: 12px;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+}
+
+.saved-trips-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #333;
+}
+
+.saved-trips-panel__header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
+.saved-trips-panel__header button {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.saved-trips-panel__header button:hover {
+  color: #fff;
+}
+
+.saved-trips-panel__body {
+  overflow-y: auto;
+  flex: 1;
+  padding: 8px 0;
+}
+
+.saved-trips-panel__status {
+  text-align: center;
+  padding: 16px;
+  font-size: 13px;
+  color: #888;
+}
+
+.saved-trips-panel__status--error {
+  color: #f87171;
+}
+
+.saved-trips-panel__empty {
+  text-align: center;
+  padding: 24px 16px;
+  font-size: 13px;
+  color: #666;
+}
+
+.saved-trips-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.saved-trips-panel__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid #2a2a3e;
+  gap: 10px;
+}
+
+.saved-trips-panel__item:last-child {
+  border-bottom: none;
+}
+
+.saved-trips-panel__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.saved-trips-panel__info strong {
+  font-size: 13px;
+  color: #e0e0e0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.saved-trips-panel__info small {
+  font-size: 11px;
+  color: #888;
+}
+
+.saved-trips-panel__actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.saved-trips-panel__actions button {
+  background: #2a2a3e;
+  border: 1px solid #444;
+  border-radius: 5px;
+  color: #e0e0e0;
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.saved-trips-panel__actions button:hover:not(:disabled) {
+  background: #333350;
+}
+
+.saved-trips-panel__actions button.danger {
+  color: #f87171;
+  border-color: #5a2a2a;
+}
+
+.saved-trips-panel__actions button.danger:hover:not(:disabled) {
+  background: #3a1a1a;
+}
+
+.saved-trips-panel__actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

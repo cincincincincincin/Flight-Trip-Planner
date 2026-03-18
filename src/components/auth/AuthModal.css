@@ -1,0 +1,135 @@
+.auth-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.auth-modal {
+  background: #1e1e2e;
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 28px 32px;
+  width: 340px;
+  position: relative;
+  color: #e0e0e0;
+}
+
+.auth-modal h2 {
+  margin: 0 0 20px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.auth-modal__close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.auth-modal__close:hover {
+  color: #fff;
+}
+
+.auth-modal__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auth-modal__form input {
+  background: #2a2a3e;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 14px;
+  padding: 9px 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.auth-modal__form input:focus {
+  border-color: #7c6ff7;
+}
+
+.auth-modal__error {
+  color: #f87171;
+  font-size: 13px;
+  margin: 2px 0;
+}
+
+.auth-modal__info {
+  color: #6ee7b7;
+  font-size: 13px;
+  margin: 2px 0;
+}
+
+.auth-modal__submit {
+  background: #7c6ff7;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px;
+  cursor: pointer;
+  margin-top: 4px;
+  transition: background 0.15s;
+}
+
+.auth-modal__submit:hover:not(:disabled) {
+  background: #6b5ef0;
+}
+
+.auth-modal__submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-modal__google {
+  width: 100%;
+  margin-top: 12px;
+  background: #2a2a3e;
+  border: 1px solid #555;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 14px;
+  padding: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.auth-modal__google:hover:not(:disabled) {
+  background: #333350;
+}
+
+.auth-modal__google:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-modal__switch {
+  text-align: center;
+  font-size: 13px;
+  color: #888;
+  margin: 14px 0 0;
+}
+
+.auth-modal__switch button {
+  background: none;
+  border: none;
+  color: #7c6ff7;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 0 0 4px;
+  text-decoration: underline;
+}
