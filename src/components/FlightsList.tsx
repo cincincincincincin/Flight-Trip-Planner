@@ -32,7 +32,7 @@ interface RawFlightsResponse {
 const FlightsList = forwardRef<unknown, FlightsListProps>(
   ({ airportCodes, timezone, initialFromDatetime, airportTimezones, originalAirportCode, tripArrivalTimeUTC, onAddToTrip }, ref) => {
     // ── Stores ────────────────────────────────────────────────────────────────
-    const { travelDate, minTransferHours, minManualTransferHours } = useSettingsStore();
+    const { travelDate, minTransferHours, minManualTransferHours, showRefreshButton } = useSettingsStore();
     const { setHighlightedAirports, setHighlightedCities, appendFlights } = useSelectionStore();
     const { tripState } = useTripStore();
     const { data: airportsData } = useAirportsQuery();
@@ -579,9 +579,11 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
               <div className="last-fetched">Last updated: {formatLastFetched(lastFetched)}</div>
             )}
           </div>
-          <button onClick={handleRefresh} disabled={anyLoading} className="refresh-button">
-            {anyLoading ? '⏳' : '🔄'} Refresh
-          </button>
+          {showRefreshButton && (
+            <button onClick={handleRefresh} disabled={anyLoading} className="refresh-button">
+              {anyLoading ? '⏳' : '🔄'} Refresh
+            </button>
+          )}
         </div>
 
         {displayedFlatFlights.length === 0 && !anyLoading ? (

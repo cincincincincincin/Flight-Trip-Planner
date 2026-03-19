@@ -1,12 +1,36 @@
 .trip-itinerary-wrapper {
   position: relative;
   width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.trip-itinerary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: white;
+  border-radius: 8px; /* standalone — rounded all around */
+  gap: 4px;
+  min-height: 40px;
+}
+
+/* When a scrollable list follows below, flatten the bottom edge */
+.trip-itinerary-actions--has-list {
+  border-radius: 0;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.trip-itinerary-middle {
+  flex: 1;
+  display: flex;
+  justify-content: center;
 }
 
 .trip-itinerary {
   background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   max-height: 40vh;
   overflow-y: auto;
   width: 100%;
@@ -139,15 +163,6 @@
   box-shadow: none;
 }
 
-.trip-itinerary-actions {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 10px;
-  background: white;
-  border-top: 1px solid #e0e0e0;
-  border-radius: 0 0 8px 8px;
-}
-
 .trip-action-btn {
   background: none;
   border: none;
@@ -167,4 +182,27 @@
 .trip-action-btn:disabled {
   color: #ccc;
   cursor: not-allowed;
+}
+
+.trip-action-btn--edit {
+  color: #7c6ff7;
+}
+
+.trip-action-btn--edit:hover:not(:disabled) {
+  background: rgba(124, 111, 247, 0.1);
+}
+
+.trip-action-btn--close {
+  color: #e57373;
+}
+
+.trip-action-btn--close:hover:not(:disabled) {
+  background: rgba(229, 115, 115, 0.1);
+}
+
+/* SaveTripButton rendered inside the compact actions bar */
+.trip-itinerary-middle .save-trip-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
 }

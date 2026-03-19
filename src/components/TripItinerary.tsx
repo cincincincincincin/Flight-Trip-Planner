@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import FlightCard from './FlightCard';
+import SaveTripButton from './auth/SaveTripButton';
 import type { Flight } from '../types';
 import { useTripStore } from '../stores/tripStore';
-import { useSettingsStore } from '../stores/settingsStore';
 import { useAirportsQuery } from '../hooks/queries';
 import './TripItinerary.css';
 
@@ -41,11 +42,13 @@ const getDurationMs = (from: string | undefined, to: string | undefined): number
 interface TripItineraryProps {
   onUndo?: () => void;
   onRedo?: () => void;
+  onEditTrip?: () => void;
+  onClose?: () => void;
+  showSaveButton?: boolean;
 }
 
-const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo }) => {
-  const { tripState, undo, redo, pastTrips, futureTrips } = useTripStore();
-  const { travelDate } = useSettingsStore();
+const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTrip, onClose, showSaveButton }) => {
+  const { tripState, undo, redo, pastTrips, futureTrips, isLoadedTrip, editMode } = useTripStore();
   const { data: airportsData } = useAirportsQuery();
 
   const airportCityNameMap = useMemo<Record<string, string>>(() => {
@@ -60,6 +63,21 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo }) => {
   const [popupPos, setPopupPos] = useState<{ top: number; left: number } | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // In edit mode: block undo only if the last leg has already departed (real flight, past departure).
+  // Manual legs have no departure time so they can always be undone.
+  // Must be declared before any early return to satisfy Rules of Hooks.
+  const canUndoInEditMode = useMemo(() => {
+    if (pastTrips.length === 0) return false;
+    if (!editMode) return true;
+    const currentLegs = tripState?.legs ?? [];
+    if (currentLegs.length === 0) return false;
+    const lastLeg = currentLegs[currentLegs.length - 1];
+    const isManual = (lastLeg as { type?: string }).type === 'manual';
+    if (isManual) return true; // manual legs have no departure time — always undoable
+    if (!lastLeg.flight?.scheduled_departure_utc) return true;
+    return new Date(lastLeg.flight.scheduled_departure_utc).getTime() >= Date.now();
+  }, [editMode, pastTrips.length, tripState]);
 
   useEffect(() => {
     return () => {
@@ -99,8 +117,63 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo }) => {
     }
   };
 
+  // Compute tripEnded for view mode
+  const lastArrivalUTC = (() => {
+    if (!tripState?.legs?.length) return null;
+    for (let i = tripState.legs.length - 1; i >= 0; i--) {
+      const leg = tripState.legs[i];
+      if ((leg as { type?: string }).type !== 'manual' && leg.flight?.scheduled_arrival_utc) {
+        return leg.flight.scheduled_arrival_utc;
+      }
+    }
+    return null;
+  })();
+  const tripEnded = lastArrivalUTC ? new Date(lastArrivalUTC) < new Date() : false;
+  const isViewMode = isLoadedTrip && !editMode;
+
   return (
     <div className="trip-itinerary-wrapper" ref={wrapperRef}>
+      {/* Actions bar — always on top */}
+      <div className={`trip-itinerary-actions${legs.length > 0 ? ' trip-itinerary-actions--has-list' : ''}`}>
+        {/* LEFT: Undo (disabled in view mode since pastTrips=[]) */}
+        <button
+          onClick={() => { undo(); onUndo?.(); }}
+          disabled={editMode ? !canUndoInEditMode : pastTrips.length === 0}
+          className="trip-action-btn trip-action-btn--undo"
+          title="Undo"
+        >
+          ↩ Undo
+        </button>
+
+        {/* MIDDLE: Close (view mode) or Save/Update (edit/normal mode) */}
+        <div className="trip-itinerary-middle">
+          {isViewMode
+            ? <button className="trip-action-btn trip-action-btn--close" onClick={onClose}>✕ Close</button>
+            : showSaveButton && <SaveTripButton />
+          }
+        </div>
+
+        {/* RIGHT: Edit (view mode) or Redo (edit/normal mode) */}
+        {isViewMode ? (
+          <button
+            onClick={onEditTrip}
+            disabled={tripEnded || !onEditTrip}
+            className="trip-action-btn trip-action-btn--edit"
+            title={tripEnded ? 'Trip has already ended' : 'Edit this trip'}
+          >
+            ✏️ Edit
+          </button>
+        ) : (
+          <button
+            onClick={() => { redo(); onRedo?.(); }}
+            disabled={futureTrips.length === 0}
+            className="trip-action-btn trip-action-btn--redo"
+          >
+            Redo ↪
+          </button>
+        )}
+      </div>
+
       {legs.length > 0 && (
         <div className="trip-itinerary">
           {legs.map((leg, i) => {
@@ -189,7 +262,7 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo }) => {
         </div>
       )}
 
-      {hoveredFlight && popupPos && (
+      {hoveredFlight && popupPos && createPortal(
         <div
           className="trip-leg-popup"
           style={{ top: popupPos.top, left: popupPos.left }}
@@ -201,24 +274,9 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo }) => {
             flight={hoveredFlight}
             hideAddToTrip={true}
           />
-        </div>
+        </div>,
+        document.body
       )}
-      <div className="trip-itinerary-actions">
-        <button 
-          onClick={() => { undo(); onUndo?.(); }} 
-          disabled={pastTrips.length === 0} 
-          className="trip-action-btn trip-action-btn--undo"
-        >
-          ↩ Undo
-        </button>
-        <button 
-          onClick={() => { redo(); onRedo?.(); }} 
-          disabled={futureTrips.length === 0} 
-          className="trip-action-btn trip-action-btn--redo"
-        >
-          Redo ↪
-        </button>
-      </div>
     </div>
   );
 };

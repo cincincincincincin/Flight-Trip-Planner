@@ -3,7 +3,7 @@ import type { TripState, TripRoute, SelectedItem, Flight } from '../types';
 import { useSelectionStore } from './selectionStore';
 import type { ExplorationItem } from './selectionStore';
 
-interface TripSnapshot {
+export interface TripSnapshot {
   tripState: TripState | null;
   tripRoutes: TripRoute[];
   selectedItem: SelectedItem | null;
@@ -21,6 +21,11 @@ interface TripStoreState {
   futureTrips: TripSnapshot[];
   previewAirportCode: string | null;
   manualTransferAirportCodes: string[];
+  // Save / load tracking
+  savedTripId: number | null;
+  savedTripStateJSON: string | null;
+  isLoadedTrip: boolean;
+  editMode: boolean;
   setTripState: (v: TripState | null) => void;
   setTripRoutes: (v: TripRoute[]) => void;
   pushToHistory: () => void;
@@ -30,6 +35,10 @@ interface TripStoreState {
   setManualTransferAirportCodes: (v: string[]) => void;
   clearHistory: () => void;
   clearTrip: () => void;
+  setSavedTrip: (id: number, stateJSON: string) => void;
+  setLoadedTrip: (id: number, stateJSON: string) => void;
+  setEditMode: (v: boolean) => void;
+  setPastTrips: (snapshots: TripSnapshot[]) => void;
 }
 
 export const useTripStore = create<TripStoreState>((set, get) => ({
@@ -39,6 +48,10 @@ export const useTripStore = create<TripStoreState>((set, get) => ({
   futureTrips: [],
   previewAirportCode: null,
   manualTransferAirportCodes: [],
+  savedTripId: null,
+  savedTripStateJSON: null,
+  isLoadedTrip: false,
+  editMode: false,
 
   setTripState: v => set({ tripState: v }),
   setTripRoutes: v => set({ tripRoutes: v }),
@@ -142,5 +155,20 @@ export const useTripStore = create<TripStoreState>((set, get) => ({
     futureTrips: [],
     previewAirportCode: null,
     manualTransferAirportCodes: [],
+    savedTripId: null,
+    savedTripStateJSON: null,
+    isLoadedTrip: false,
+    editMode: false,
   }),
+  setSavedTrip: (id, stateJSON) => set({ savedTripId: id, savedTripStateJSON: stateJSON }),
+  setLoadedTrip: (id, stateJSON) => set({
+    savedTripId: id,
+    savedTripStateJSON: stateJSON,
+    isLoadedTrip: true,
+    editMode: false,
+    pastTrips: [],
+    futureTrips: [],
+  }),
+  setEditMode: (v) => set({ editMode: v }),
+  setPastTrips: (snapshots) => set({ pastTrips: snapshots, futureTrips: [] }),
 }));

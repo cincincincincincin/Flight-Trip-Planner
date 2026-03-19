@@ -26,6 +26,8 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
     currency, setCurrency,
     minTransferHours, setMinTransferHours,
     minManualTransferHours, setMinManualTransferHours,
+    showRefreshButton, setShowRefreshButton,
+    showConsoleLogs, setShowConsoleLogs,
   } = useSettingsStore();
 
   const { data: airportsData, isFetching: loadingAirports } = useAirportsQuery();
@@ -106,8 +108,11 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
             <option value="https://tiles.basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json">Dark Matter</option>
             <option value="https://tiles.basemaps.cartocdn.com/gl/positron-gl-style/style.json">Positron</option>
             <option value="https://tiles.basemaps.cartocdn.com/gl/voyager-gl-style/style.json">Voyager</option>
-            <option value="/data/satelite_map.json">Satelite</option>
-            <option value="/data/satelite_globe.json">Satelite Globe</option>
+            <option value="arcgis:satellite">Satellite</option>
+            <option value="arcgis:satellite-globe">Satellite Globe</option>
+            <option value="arcgis:imagery">ArcGIS Imagery</option>
+            <option value="arcgis:charted-territory">ArcGIS Charted Territory</option>
+            <option value="arcgis:community">ArcGIS Community</option>
           </select>
         </div>
 
@@ -133,6 +138,28 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
         {/* Zawartość developera */}
         {showDeveloper && (
           <div className="developer-section">
+            <div className="control-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={showRefreshButton}
+                  onChange={e => setShowRefreshButton(e.target.checked)}
+                />
+                <span>🔄 Show Refresh Button</span>
+              </label>
+            </div>
+
+            <div className="control-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={showConsoleLogs}
+                  onChange={e => setShowConsoleLogs(e.target.checked)}
+                />
+                <span>🖥️ Show Console Logs</span>
+              </label>
+            </div>
+
             <div className="developer-stats">
               <div className="stat-item">✈️ Airports: {airportsData?.features?.length || 0}{loadingAirports ? ' (loading...)' : ''}</div>
               <div className="stat-item">🛫 Routes: {routesData?.features?.length || 0}</div>

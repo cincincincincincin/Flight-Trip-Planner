@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle, useMemo } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { BasemapStyle } from '@esri/maplibre-arcgis';
 import type { SelectedItem, Viewport, Flight, TripRoute } from '../types';
 import { useMapStore } from '../stores/mapStore';
 import { useSelectionStore } from '../stores/selectionStore';
@@ -19,6 +20,137 @@ import type { GCPath } from './map/routeAnimations';
 import './MapComponent.css';
 import './FlightCard.css';
 
+const ARCGIS_API_KEY = import.meta.env.VITE_ARCGIS_API_KEY ?? '';
+
+const ARCGIS_DOMAINS = [
+  'ibasemaps-api.arcgis.com',
+  'basemapstyles-api.arcgis.com',
+  'services.arcgisonline.com',
+  'static.arcgis.com',
+  'tiles.arcgis.com',
+  'basemaps.arcgis.com',
+];
+
+function isArcGISUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return ARCGIS_DOMAINS.some(d => host === d || host.endsWith('.' + d));
+  } catch {
+    return false;
+  }
+}
+
+// Styles that use the @esri/maplibre-arcgis BasemapStyle plugin (not inline specs or raw URLs)
+const ARCGIS_PLUGIN_STYLES = new Set(['arcgis:imagery', 'arcgis:charted-territory', 'arcgis:community']);
+
+function isArcGISPluginStyle(style: string): boolean {
+  return ARCGIS_PLUGIN_STYLES.has(style);
+}
+
+// Convert 'arcgis:imagery' → 'arcgis/imagery' (the format expected by the plugin)
+function toPluginStyleName(style: string): string {
+  return style.replace(':', '/');
+}
+
+function arcGISTransformRequest(url: string, _resourceType?: string): { url: string } {
+  if (isArcGISUrl(url) && ARCGIS_API_KEY) {
+    const separator = url.includes('?') ? '&' : '?';
+    return { url: `${url}${separator}token=${ARCGIS_API_KEY}` };
+  }
+  return { url };
+}
+
+function resolveMapStyle(style: string): string | maplibregl.StyleSpecification {
+  switch (style) {
+    case 'arcgis:satellite':
+      return {
+        version: 8,
+        name: 'Satellite Map',
+        glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+        sources: {
+          satellite: {
+            type: 'raster',
+            tiles: ['https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+            tileSize: 256,
+          },
+          world: {
+            type: 'vector',
+            url: 'https://demotiles.maplibre.org/tiles/tiles.json',
+          },
+        },
+        layers: [
+          { id: 'satellite', type: 'raster', source: 'satellite' } as maplibregl.RasterLayerSpecification,
+          {
+            id: 'country-borders',
+            type: 'line',
+            source: 'world',
+            'source-layer': 'countries',
+            paint: { 'line-color': '#ffffff', 'line-width': 1.2 },
+          } as maplibregl.LineLayerSpecification,
+          {
+            id: 'country-labels',
+            type: 'symbol',
+            source: 'world',
+            'source-layer': 'centroids',
+            layout: {
+              'text-field': ['get', 'NAME'],
+              'text-font': ['Open Sans Regular'],
+              'text-size': ['interpolate', ['linear'], ['zoom'], 0, 14, 5, 18, 8, 22],
+            },
+            paint: { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 },
+          } as maplibregl.SymbolLayerSpecification,
+        ],
+      };
+    case 'arcgis:satellite-globe':
+      return {
+        version: 8,
+        name: 'Satellite Globe',
+        glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+        projection: { type: 'globe' } as any,
+        sources: {
+          satellite: {
+            type: 'raster',
+            tiles: ['https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+            tileSize: 256,
+          },
+          world: {
+            type: 'vector',
+            url: 'https://demotiles.maplibre.org/tiles/tiles.json',
+          },
+        },
+        layers: [
+          { id: 'satellite', type: 'raster', source: 'satellite' } as maplibregl.RasterLayerSpecification,
+          {
+            id: 'country-borders',
+            type: 'line',
+            source: 'world',
+            'source-layer': 'countries',
+            paint: { 'line-color': '#ffffff', 'line-width': 1.5 },
+          } as maplibregl.LineLayerSpecification,
+          {
+            id: 'country-labels',
+            type: 'symbol',
+            source: 'world',
+            'source-layer': 'centroids',
+            layout: {
+              'text-field': ['get', 'NAME'],
+              'text-font': ['Open Sans Regular'],
+              'text-size': ['interpolate', ['linear'], ['zoom'], 0, 14, 5, 18, 8, 22],
+            },
+            paint: { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 },
+          } as maplibregl.SymbolLayerSpecification,
+        ],
+      };
+    case 'arcgis:imagery':
+    case 'arcgis:charted-territory':
+    case 'arcgis:community':
+      // Plugin styles: map is initialised with a blank spec; BasemapStyle.applyStyle
+      // fetches and applies the real style after the map's 'load' event fires.
+      return { version: 8, sources: {}, layers: [] } as maplibregl.StyleSpecification;
+    default:
+      return style;
+  }
+}
 
 interface MapComponentProps {
   onViewportChange: (viewport: Viewport) => void;
@@ -353,9 +485,14 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     isMapLoading.current = true;
 
     try {
+      const isPlugin = isArcGISPluginStyle(mapStyle);
+
+      // Always provide a style to the Map constructor so that map.style is never null.
+      // Plugin styles start with a blank spec; BasemapStyle.applyStyle is called once
+      // the blank style fires its 'load' event (at which point isStyleLoaded() is true).
       map.current = new maplibregl.Map({
         container: mapContainer.current,
-        style: mapStyle,
+        style: resolveMapStyle(mapStyle), // blank spec for plugins, real spec/URL for others
         center: [19.0, 52.0],
         zoom: 4,
         attributionControl: false,
@@ -363,10 +500,11 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
         preserveDrawingBuffer: true,
         failIfMajorPerformanceCaveat: false,
         desynchronized: false,
+        dragRotate: false,
+        transformRequest: arcGISTransformRequest,
       } as maplibregl.MapOptions);
 
-      map.current.on('load', () => {
-        console.log('Map loaded successfully');
+      const onMapReady = () => {
         isMapLoading.current = false;
         setMapLoaded(true);
         addControls();
@@ -376,6 +514,28 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
         const maxZ = Math.min(12, Math.max(zoomRangeMin, zoomRangeMax));
         map.current?.setMinZoom(minZ);
         map.current?.setMaxZoom(maxZ);
+      };
+
+      map.current.on('load', () => {
+        if (isPlugin) {
+          // Blank style is now loaded → isStyleLoaded() is true → safe to call applyStyle.
+          const bs = BasemapStyle.applyStyle(map.current!, {
+            map: map.current!,
+            style: toPluginStyleName(mapStyle),
+            token: ARCGIS_API_KEY,
+          });
+          bs.on('BasemapStyleLoad', () => {
+            console.log('ArcGIS plugin style loaded:', mapStyle);
+            onMapReady();
+          });
+          bs.on('BasemapStyleError', (err: Error) => {
+            console.error('ArcGIS basemap style error:', err);
+            isMapLoading.current = false;
+          });
+        } else {
+          console.log('Map loaded successfully');
+          onMapReady();
+        }
       });
 
       map.current.on('move', () => {
@@ -1986,7 +2146,12 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     if (!mapLoaded) return;
     
     // Determine style-default halo color (light style = white, dark style = black)
-    const isLight = !mapStyle || (!mapStyle.includes('dark-matter') && !mapStyle.includes('satelite'));
+    const isLight = !mapStyle || (
+      !mapStyle.includes('dark-matter') &&
+      !mapStyle.includes('satelite') &&          // legacy typo kept for any cached value
+      !mapStyle.startsWith('arcgis:satellite') && // our inline satellite styles
+      !isArcGISPluginStyle(mapStyle)             // arcgis/imagery etc. are dark/satellite
+    );
     const styleDefaultHalo = isLight ? '#FFFFFF' : '#000000';
     
     // Calculate opposite text color
@@ -2034,7 +2199,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
 
   // After style change, restore completed routes to map immediately (without animation)
   useEffect(() => {
-    if (!map.current || !mapLoaded) return;
+    if (!map.current || !mapLoaded || !map.current.isStyleLoaded()) return;
     const source = map.current.getSource('selected-routes') as maplibregl.GeoJSONSource | undefined;
     if (!source) return;
 

@@ -294,6 +294,15 @@
   cursor: not-allowed;
 }
 
+.country-airport-item.locked {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.country-airport-item.locked input {
+  cursor: default;
+}
+
 .country-airport-item input {
   cursor: pointer;
 }

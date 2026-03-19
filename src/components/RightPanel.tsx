@@ -81,9 +81,10 @@ interface RightPanelProps {
   onClearCountryPicker?: () => void;
   onFitBounds?: (codes: string[]) => void;
   onCountryAirportsConfirmed: (codes: string[], countryCode: string, countryName: string) => void;
+  onSwitchToCountryView?: (code: string, name: string) => void;
 }
 
-const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip, onPreviewAirport, onClearPreview, pendingCountryPicker, onClearCountryPicker, onFitBounds, onCountryAirportsConfirmed }, ref) => {
+const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip, onPreviewAirport, onClearPreview, pendingCountryPicker, onClearCountryPicker, onFitBounds, onCountryAirportsConfirmed, onSwitchToCountryView }, ref) => {
   const { selectedItem, flightsData, setSelectedAirportCodes, explorationItems, removeExplorationItem, addExplorationItem, clearExploration } = useSelectionStore();
   const { tripState, setManualTransferAirportCodes } = useTripStore();
   const { travelDate, setTravelDate, setTimezone, minTransferHours, minManualTransferHours } = useSettingsStore();
@@ -324,11 +325,16 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   useEffect(() => {
     if (!tripState && selectedItem && (selectedItem.type === 'airport' || selectedItem.type === 'city')) {
       if (explorationItems.length === 0) {
-        clearFilters();
-        onClose();
+        if (pendingCountryPicker) {
+          // Instead of closing, switch to the country view
+          onSwitchToCountryView?.(pendingCountryPicker.code, pendingCountryPicker.name);
+        } else {
+          clearFilters();
+          onClose();
+        }
       }
     }
-  }, [explorationItems.length, tripState, selectedItem, clearFilters, onClose]);
+  }, [explorationItems.length, tripState, selectedItem, clearFilters, onClose, pendingCountryPicker, onSwitchToCountryView]);
 
   // ── Load city airports when city selected ─────────────────────────────────
   useEffect(() => {
@@ -1019,6 +1025,12 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
 
         if (item.kind === 'country-group') {
           const isExpanded = expandedCityGroups.has(item.code);
+          // Determine TZ distribution: single TZ vs multiple
+          const tzSet = new Set(item.airportCodes.map(c => airportTimezoneMap[c]).filter(Boolean));
+          const hasSingleTZ = tzSet.size <= 1;
+          const countryTzBtn = hasSingleTZ
+            ? getAltTimeDisplay(item.airportCodes[0])
+            : null;
           return (
             <div key={item.code} className="exploration-group">
               <div className="exploration-item exploration-item--group">
@@ -1030,11 +1042,17 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                 <span className="exploration-icon">🌍</span>
                 <span className="exploration-name">{item.name}</span>
                 <span className="exploration-count">{item.airportCodes.length}ap</span>
+                {countryTzBtn && (
+                  <button className="exploration-tz-btn" title="Click to switch timezone"
+                    onClick={() => handleSwitchTimezone(item.airportCodes[0])}>{countryTzBtn}</button>
+                )}
                 <button className="exploration-remove-btn" onClick={() => removeAirportCodes(item.airportCodes)}>×</button>
               </div>
               {isExpanded && item.childCities?.map(city => {
                 const cityKey = `${item.code}:${city.cityCode}`;
                 const isCityExpanded = expandedInnerCities.has(cityKey);
+                const cityRepCode = city.airports[0]?.code;
+                const cityTzBtn = !hasSingleTZ && cityRepCode ? getAltTimeDisplay(cityRepCode) : null;
                 return (
                   <div key={city.cityCode} className="exploration-group exploration-group--nested">
                     <div className="exploration-item exploration-item--city-child">
@@ -1046,6 +1064,10 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                       <span className="exploration-icon">🏙️</span>
                       <span className="exploration-name">{city.cityName}</span>
                       <span className="exploration-count">{city.airports.length}ap</span>
+                      {cityTzBtn && cityRepCode && (
+                        <button className="exploration-tz-btn" title="Click to switch timezone"
+                          onClick={() => handleSwitchTimezone(cityRepCode)}>{cityTzBtn}</button>
+                      )}
                       <button className="exploration-remove-btn" onClick={() => removeAirportCodes(city.airports.map(a => a.code))}>×</button>
                     </div>
                     {isCityExpanded && city.airports.map(ap => (
@@ -1188,18 +1210,24 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
             <div className="pending-country-content">
               {(() => {
                 const hasMixedTZ = pendingCountryTzGroups.filter(g => g.tz !== '_unknown').length > 1;
+                const alreadySelectedCodes = new Set(explorationItems.flatMap(i => i.airportCodes));
                 const renderPendingCheckbox = (airport: { code: string; name: string }) => {
-                  const isSelected = pendingSelectedAirports.includes(airport.code);
-                  const canSelect = isSelected || pendingSelectedAirports.length < MAX_AIRPORTS;
+                  const alreadySelected = alreadySelectedCodes.has(airport.code);
+                  const isPendingSelected = pendingSelectedAirports.includes(airport.code);
+                  const isSelected = alreadySelected || isPendingSelected;
+                  const canSelect = !alreadySelected && (isPendingSelected || pendingSelectedAirports.length < MAX_AIRPORTS);
                   return (
                     <label key={airport.code}
-                      className={`country-airport-item ${isSelected ? 'selected' : ''} ${!canSelect ? 'disabled' : ''}`}>
-                      <input type="checkbox" checked={isSelected} disabled={!canSelect}
-                        onChange={() => setPendingSelectedAirports(prev =>
-                          prev.includes(airport.code)
-                            ? prev.filter(c => c !== airport.code)
-                            : (prev.length < MAX_AIRPORTS ? [...prev, airport.code] : prev)
-                        )} />
+                      className={`country-airport-item ${isSelected ? 'selected' : ''} ${alreadySelected ? 'disabled locked' : !canSelect ? 'disabled' : ''}`}>
+                      <input type="checkbox" checked={isSelected} disabled={alreadySelected || !canSelect}
+                        onChange={() => {
+                          if (alreadySelected) return;
+                          setPendingSelectedAirports(prev =>
+                            prev.includes(airport.code)
+                              ? prev.filter(c => c !== airport.code)
+                              : (prev.length < MAX_AIRPORTS ? [...prev, airport.code] : prev)
+                          );
+                        }} />
                       <span>✈️ {airport.name} ({airport.code})</span>
                     </label>
                   );

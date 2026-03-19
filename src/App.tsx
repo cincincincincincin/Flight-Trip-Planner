@@ -7,7 +7,6 @@ import TripItinerary from './components/TripItinerary';
 import AuthModal from './components/auth/AuthModal';
 import UserMenu from './components/auth/UserMenu';
 import SavedTripsPanel from './components/auth/SavedTripsPanel';
-import SaveTripButton from './components/auth/SaveTripButton';
 import { getAirport, getCity, getCountryCenter } from './api/search';
 import { useAirportsQuery } from './hooks/queries';
 import { useMapStore } from './stores/mapStore';
@@ -17,6 +16,10 @@ import { useSettingsStore } from './stores/settingsStore';
 import { useAuthStore } from './stores/authStore';
 import { useFilterStore } from './stores/filterStore';
 import './App.css';
+
+const _origLog = console.log;
+const _origWarn = console.warn;
+const _origDebug = console.debug;
 
 const AIRPORT_ZOOM_THRESHOLD = 1.2;
 
@@ -84,9 +87,23 @@ function App() {
     setPreviewAirportCode,
     pushToHistory,
     clearTrip,
+    setEditMode,
+    setPastTrips,
   } = useTripStore();
 
-  const { travelDate } = useSettingsStore();
+  const { travelDate, showConsoleLogs } = useSettingsStore();
+
+  useEffect(() => {
+    if (showConsoleLogs) {
+      console.log = _origLog;
+      console.warn = _origWarn;
+      console.debug = _origDebug;
+    } else {
+      console.log = () => {};
+      console.warn = () => {};
+      console.debug = () => {};
+    }
+  }, [showConsoleLogs]);
 
   const { data: airportsData } = useAirportsQuery();
 
@@ -419,6 +436,86 @@ function App() {
     clearTrip();
   };
 
+  const handleCloseLoadedTrip = useCallback(() => {
+    setPendingCountryPicker(null);
+    clearFilters();
+    clearExploration();
+    clearSelection();
+    clearTrip();
+  }, [clearFilters, clearExploration, clearSelection, clearTrip]);
+
+  const handleEditLoadedTrip = useCallback(async () => {
+    if (!tripState?.legs?.length) return;
+    setEditMode(true);
+
+    // Build undo history: allow undoing future legs (departure >= now), stop at departed legs
+    const now = Date.now();
+    const legs = tripState.legs;
+    const snapshots: import('./stores/tripStore').TripSnapshot[] = [];
+
+    for (let i = legs.length - 1; i >= 0; i--) {
+      const leg = legs[i];
+      const isManual = (leg as { type?: string }).type === 'manual';
+      if (!isManual && leg.flight?.scheduled_departure_utc) {
+        const dep = new Date(leg.flight.scheduled_departure_utc).getTime();
+        if (dep < now) break; // this flight already departed — stop here
+      }
+      const slicedLegs = legs.slice(0, i);
+      const slicedState = slicedLegs.length === 0 ? null : { ...tripState, legs: slicedLegs };
+      // Determine the "current airport" for this intermediate state
+      let snapCode: string | null = null;
+      for (let j = slicedLegs.length - 1; j >= 0; j--) {
+        const l = slicedLegs[j];
+        if ((l as { type?: string }).type !== 'manual') { snapCode = l.toAirportCode; break; }
+      }
+      const snapFeat = snapCode ? airportsData?.features.find(f => f.properties.code === snapCode) : null;
+      const snapData = snapFeat?.properties ?? (snapCode ? { code: snapCode } : null);
+      snapshots.unshift({
+        tripState: slicedState,
+        tripRoutes: tripRoutes.slice(0, i), // each leg adds exactly one route
+        selectedItem: snapData ? { type: 'airport', data: snapData as any } : null,
+        selectedAirportCode: snapCode,
+        selectedAirportCodes: snapCode ? [snapCode] : [],
+        highlightedAirports: [],
+        flightsData: [],
+        explorationItems: [],
+      });
+    }
+
+    if (snapshots.length > 0) {
+      setPastTrips(snapshots);
+    }
+
+    // Find last real leg's arrival airport to open the right panel there
+    let lastCode: string | null = null;
+    let lastArrivalUTC: string | null = null;
+    for (let i = legs.length - 1; i >= 0; i--) {
+      const leg = legs[i];
+      if ((leg as { type?: string }).type !== 'manual' && leg.flight?.scheduled_arrival_utc) {
+        lastCode = leg.toAirportCode;
+        lastArrivalUTC = leg.flight.scheduled_arrival_utc;
+        break;
+      }
+    }
+    if (!lastCode) return;
+    setSelectedAirportCode(lastCode);
+    try {
+      const destData = await getAirport(lastCode);
+      const overrideFromDatetime = lastArrivalUTC ? lastArrivalUTC.substring(0, 19) : undefined;
+      setSelectedItem({ type: 'airport', data: destData, overrideFromDatetime });
+      const coords = destData.coordinates;
+      if (coords) flyToLocation((coords.lon ?? coords.lng) ?? 0, coords.lat ?? 0, FALLBACK_ZOOM.AIRPORT);
+    } catch {
+      setSelectedItem({ type: 'airport', data: { code: lastCode, name: lastCode } as any });
+    }
+  }, [tripState, tripRoutes, airportsData, setEditMode, setPastTrips, setSelectedAirportCode, setSelectedItem, flyToLocation]);
+
+  const handleSwitchToCountryView = useCallback((code: string, name: string) => {
+    clearExploration();
+    setSelectedItem({ type: 'country', data: { code, name } as any });
+    setPendingCountryPicker(null);
+  }, [clearExploration, setSelectedItem]);
+
   const handleCountryAirportsConfirmed = useCallback((codes: string[], countryCode: string, countryName: string) => {
     if (!airportsData || codes.length === 0) return;
     // Resolve name: prefer passed countryName, fall back to country_name from GeoJSON, then code
@@ -505,8 +602,13 @@ function App() {
             </button>
           )}
           {user && <UserMenu onOpenSavedTrips={() => setShowSavedTrips(true)} />}
-          {tripState && user && <SaveTripButton />}
-          <TripItinerary onUndo={handleUndoRedo} onRedo={handleUndoRedo} />
+          <TripItinerary
+            onUndo={handleUndoRedo}
+            onRedo={handleUndoRedo}
+            onEditTrip={handleEditLoadedTrip}
+            onClose={handleCloseLoadedTrip}
+            showSaveButton={!!user}
+          />
         </div>
 
         <MemoizedMapComponent
@@ -518,7 +620,7 @@ function App() {
       </div>
 
       {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
-      {showSavedTrips && <SavedTripsPanel onClose={() => setShowSavedTrips(false)} />}
+      {showSavedTrips && <SavedTripsPanel onClose={() => setShowSavedTrips(false)} onTripLoaded={() => { clearSelection(); clearExploration(); }} />}
 
       {selectedItem && (
         <RightPanel
@@ -531,6 +633,7 @@ function App() {
           onClearCountryPicker={() => setPendingCountryPicker(null)}
           onFitBounds={fitBoundsToAirportCodes}
           onCountryAirportsConfirmed={handleCountryAirportsConfirmed}
+          onSwitchToCountryView={handleSwitchToCountryView}
         />
       )}
     </div>

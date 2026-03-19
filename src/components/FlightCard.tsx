@@ -17,10 +17,18 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
   const { currency, travelDate } = useSettingsStore();
   const [showPrices, setShowPrices] = useState(false);
 
+  // Use the flight's actual departure date for price queries so that prices
+  // shown in the TripItinerary popup match the stored flight, not the current
+  // travelDate filter setting.
+  const effectiveDate = useMemo(
+    () => flight.scheduled_departure_utc?.slice(0, 10) ?? travelDate,
+    [flight.scheduled_departure_utc, travelDate],
+  );
+
   const offersParams = useMemo(() => ({
-    departure_date: travelDate,
+    departure_date: effectiveDate,
     currency,
-  }), [travelDate, currency]);
+  }), [effectiveDate, currency]);
 
   const {
     data: offersResponse,
@@ -156,7 +164,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
     const airlineName = flight.airline_name || flight.airline_code || '';
     const origin = (flight.origin_airport_code || '').toLowerCase();
     const dest = (flight.destination_airport_code || '').toLowerCase();
-    const [year, month, day] = (travelDate || '').split('-');
+    const [year, month, day] = (effectiveDate || '').split('-');
     const date = year
       ? new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
           .toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })
