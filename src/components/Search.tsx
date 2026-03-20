@@ -4,6 +4,7 @@ import Phase1 from './search/Phase1';
 import Phase2 from './search/Phase2';
 import Phase3 from './search/Phase3';
 import { useSearchData } from './search/useSearchData';
+import { useSettingsStore } from '../stores/settingsStore';
 import './Search.css';
 
 interface SearchProps {
@@ -45,6 +46,7 @@ class SearchErrorBoundary extends React.Component<React.PropsWithChildren, Searc
 }
 
 const Search = ({ onSelectItem }: SearchProps) => {
+  const { showConsoleLogs } = useSettingsStore();
   const [query, setQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [visibleExpanded, setVisibleExpanded] = useState<{ country: string | null; city: string | null }>({ country: null, city: null });
@@ -340,9 +342,9 @@ const Search = ({ onSelectItem }: SearchProps) => {
       <div className="search-section">
         <div className="section-header">
           <h4>
-            {icon} {title} ({items.length})
-            {searchMode === 'contains' && ' (Contains)'}
-            {!isCurrentPhase && items.length > 0 && ' (Loaded)'}
+            {icon} {title}{showConsoleLogs && ` (${items.length})`}
+            {showConsoleLogs && searchMode === 'contains' && ' (Contains)'}
+            {showConsoleLogs && !isCurrentPhase && items.length > 0 && ' (Loaded)'}
           </h4>
           {loading.search && isCurrentPhase && hasMore[phaseNumber] &&
             <span className="loading-indicator">Loading...</span>}
@@ -350,7 +352,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
         <div className="section-content">
           {items.length > 0 ? (
             <>
-              {phaseNumber === 1 && query.trim() !== '' && (
+              {showConsoleLogs && phaseNumber === 1 && query.trim() !== '' && (
                 <div className="debug-info" style={{ fontSize: '10px', color: '#999', padding: '5px 16px' }}>
                   Phase 1: Showing {items.length} matching countries (collapsed by default)
                 </div>
@@ -368,7 +370,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
         </div>
       </div>
     );
-  }, [phaseData, currentPhase, hasMore, loading.search, searchMode, query, isMainScrollPaused]);
+  }, [phaseData, currentPhase, hasMore, loading.search, searchMode, query, isMainScrollPaused, showConsoleLogs]);
 
   const hasResults = useMemo(() => {
     return phaseData[1].length > 0 || phaseData[2].length > 0 || phaseData[3].length > 0;
@@ -424,8 +426,8 @@ const Search = ({ onSelectItem }: SearchProps) => {
               <div className="header-main">
                 <h3>
                   Search Results
-                  {searchMode === 'contains' && ' (Contains Search)'}
-                  {isMainScrollPaused && activeNestedScrolls.size > 0 && ` (Scrolling ${activeNestedScrolls.size} countries...)`}
+                  {showConsoleLogs && searchMode === 'contains' && ' (Contains Search)'}
+                  {showConsoleLogs && isMainScrollPaused && activeNestedScrolls.size > 0 && ` (Scrolling ${activeNestedScrolls.size} countries...)`}
                 </h3>
                 <button
                   className="close-results"
@@ -461,11 +463,10 @@ const Search = ({ onSelectItem }: SearchProps) => {
                           onClick={() => handleItemClick(exactAirport)}
                         >
                           <div className="item-main">
-                            <span className="item-icon"></span>
                             <span className="item-name"><b>{exactAirport.name}</b></span>
-                            <span className="item-code">({exactAirport.code})</span>
                             {exactAirport.flightable && <span className="item-badge"></span>}
                           </div>
+                          <span className="item-code">({exactAirport.code})</span>
                         </div>
                       </div>
                     </div>
@@ -474,7 +475,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
                   {renderPhaseSection(2, "Cities", "", renderPhase2Country)}
                   {renderPhaseSection(3, "Airports", "", renderPhase3Country)}
 
-                  {searchMode === 'contains' && hasResults && (
+                  {showConsoleLogs && searchMode === 'contains' && hasResults && (
                     <div className="debug-info" style={{
                       padding: '10px 16px',
                       backgroundColor: '#fff3cd',
@@ -494,24 +495,26 @@ const Search = ({ onSelectItem }: SearchProps) => {
               )}
             </div>
 
-            <div className="results-footer">
-              <div className="debug-info">
-                <small>
-                  Query: "{query}" |
-                  Phase: {currentPhase} |
-                  Mode: {searchMode} |
-                  P1: {phaseData[1].length} |
-                  P2: {phaseData[2].length} |
-                  P3: {phaseData[3].length} |
-                  Offset: {offset} |
-                  HasMore: {hasMore[currentPhase] ? 'Yes' : 'No'} |
-                  MainScroll: {isMainScrollPaused ? 'PAUSED' : 'ACTIVE'} |
-                  ActiveNested: {activeNestedScrolls.size} |
-                  Visible: {visibleExpanded.country ? `Country:${visibleExpanded.country}` : '-'}
-                  {visibleExpanded.city ? `, City:${visibleExpanded.city}` : ''}
-                </small>
+            {showConsoleLogs && (
+              <div className="results-footer">
+                <div className="debug-info">
+                  <small>
+                    Query: "{query}" |
+                    Phase: {currentPhase} |
+                    Mode: {searchMode} |
+                    P1: {phaseData[1].length} |
+                    P2: {phaseData[2].length} |
+                    P3: {phaseData[3].length} |
+                    Offset: {offset} |
+                    HasMore: {hasMore[currentPhase] ? 'Yes' : 'No'} |
+                    MainScroll: {isMainScrollPaused ? 'PAUSED' : 'ACTIVE'} |
+                    ActiveNested: {activeNestedScrolls.size} |
+                    Visible: {visibleExpanded.country ? `Country:${visibleExpanded.country}` : '-'}
+                    {visibleExpanded.city ? `, City:${visibleExpanded.city}` : ''}
+                  </small>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>

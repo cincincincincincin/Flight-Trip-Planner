@@ -51,7 +51,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
 
       <div className="controls">
         <div className="currency-selector">
-          <label>💱 Currency:</label>
+          <label> Currency:</label>
           <div className="currency-toggle">
             {CURRENCIES.map(({ code, label }) => (
               <button
@@ -132,7 +132,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
           className={`color-settings-toggle ${showDeveloper ? 'active' : ''}`}
           onClick={() => setShowDeveloper(v => !v)}
         >
-          🔧 {showDeveloper ? 'Hide Developer' : 'Developer'}
+          {showDeveloper ? 'Hide Developer' : 'Developer'}
         </button>
 
         {/* Zawartość developera */}
@@ -159,12 +159,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
                 <span>Show Console Logs</span>
               </label>
             </div>
-
-            <div className="developer-stats">
-              <div className="stat-item">Airports: {airportsData?.features?.length || 0}{loadingAirports ? ' (loading...)' : ''}</div>
-              <div className="stat-item">Routes: {routesData?.features?.length || 0}</div>
-            </div>
-
+            
             <div className="control-group">
               <label className="checkbox-label">
                 <input
@@ -173,9 +168,14 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
                   onChange={e => setShowRoutes(e.target.checked)}
                   disabled={loadingRoutes}
                 />
-                <span>Routes</span>
+                <span>Load Routes</span>
                 {loadingRoutes && <span className="loading"> (loading...)</span>}
               </label>
+            </div>
+
+            <div className="developer-stats">
+              <div className="stat-item">Airports: {airportsData?.features?.length || 0}{loadingAirports ? ' (loading...)' : ''}</div>
+              <div className="stat-item">Routes: {routesData?.features?.length || 0}</div>
             </div>
 
             <button
@@ -183,7 +183,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
               onClick={() => setShowSizes(v => !v)}
               style={{ marginTop: '12px' }}
             >
-              📏 {showSizes ? 'Hide Sizes' : 'Sizes'}
+              {showSizes ? 'Hide Size Settings' : 'Map Size Settings'}
             </button>
 
             {showSizes && <ColorSettings showOnlySizes={true} />}

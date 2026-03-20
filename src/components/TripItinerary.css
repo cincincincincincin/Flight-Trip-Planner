@@ -104,11 +104,6 @@
 
 .trip-leg:hover { background: var(--bg-hover); }
 
-.trip-leg--manual {
-  background: var(--c-plum-dim);
-}
-
-.trip-leg--manual:hover { background: var(--c-plum-dim); opacity: 0.85; }
 
 .trip-leg-row {
   display: flex;
@@ -161,12 +156,6 @@
   gap: 1px;
 }
 
-.trip-leg-arrow { font-size: 14px; }
-
-.trip-leg-manual-icon {
-  font-size: 14px;
-}
-
 .trip-leg-duration {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -174,15 +163,19 @@
   white-space: nowrap;
 }
 
-.trip-leg-transfer-time {
+
+/* ── Time available / transfer connectors ────────────────────── */
+.trip-time-transfer {
+  padding: 4px clamp(10px, 1.5vw, 16px);
   font-size: 10px;
   color: var(--c-plum);
-  font-family: var(--font-mono);
+  background: var(--c-plum-dim);
+  border-bottom: 1px solid var(--border);
   text-align: center;
-  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-weight: 600;
 }
 
-/* ── Time available connector ────────────────────────────────── */
 .trip-time-available {
   padding: 4px clamp(10px, 1.5vw, 16px);
   font-size: 10px;
@@ -192,6 +185,30 @@
   text-align: center;
   font-family: var(--font-mono);
   font-weight: 600;
+}
+
+/* ── Estimated arrival ───────────────────────────────────────── */
+.trip-leg-time--estimated {
+  background: var(--c-gold-dim);
+  color: var(--c-gold);
+  border-radius: 3px;
+  padding: 0 3px;
+  cursor: default;
+}
+
+.trip-estimated-tooltip {
+  position: fixed;
+  z-index: 9999;
+  max-width: 260px;
+  padding: 7px 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--c-gold-b);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  font-size: 11px;
+  color: var(--text-secondary);
+  pointer-events: none;
+  line-height: 1.5;
 }
 
 /* ── Flight popup (portal) ───────────────────────────────────── */

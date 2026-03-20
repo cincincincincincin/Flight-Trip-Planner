@@ -55,12 +55,10 @@
   right: 0;
   max-height: clamp(300px, 55vh, 520px);
   overflow-y: auto;
-  background: var(--bg-glass-hi);
+  background: var(--bg-raised);
   border: 1px solid var(--border-light);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-md);
   box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
   z-index: 500;
 }
 
@@ -68,8 +66,8 @@
 .results-header {
   padding: 10px 14px 8px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-glass);
-  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  background: var(--bg-raised);
+  border-radius: var(--r-md) var(--r-md) 0 0;
   position: sticky;
   top: 0;
   z-index: 1;
@@ -165,12 +163,14 @@
 .search-item {
   display: flex;
   align-items: center;
-  padding: 6px 8px;
-  border-radius: var(--r-sm);
+  gap: 6px;
+  padding: 5px 10px;
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background 0.10s;
+  border-bottom: 1px solid var(--border);
 }
 
+.search-item:last-child { border-bottom: none; }
 .search-item:hover { background: var(--bg-hover); }
 
 .item-main {
@@ -208,28 +208,16 @@
 /* ── Country/city expand button ──────────────────────────────── */
 .expand-btn,
 .expand-button {
-  flex-shrink: 0;
-  padding: 2px 8px;
-  font-size: 10px;
-  font-weight: 600;
-  border: 1px solid var(--border-light);
-  background: var(--bg-base);
-  color: var(--text-secondary);
-  border-radius: var(--r-pill);
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 9px;
   cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.12s;
-  order: 99; /* always last in its flex row */
+  flex-shrink: 0;
+  padding: 0 4px;
 }
 
-.expand-btn:hover,
-.expand-button:hover {
-  background: var(--accent-dim);
-  border-color: var(--accent-border);
-  color: var(--accent);
-}
-
-/* Country items: wrap so nested-list goes below, button stays right */
+/* Country items: wrap so nested-list goes below */
 .search-item.country-item {
   flex-wrap: wrap;
   align-items: center;
@@ -238,7 +226,17 @@
 .search-item.country-item .nested-list {
   flex-basis: 100%;
   width: 100%;
-  order: 100;
+}
+
+/* ── Nested lists (vertical lines) ──────────────────────────── */
+.search-item.country-item .nested-list {
+  border-left: 2px solid var(--c-teal-b);
+  margin-left: 8px;
+}
+
+.city-item-wrapper .nested-list {
+  border-left: 2px solid var(--c-coral-b);
+  margin-left: 14px;
 }
 
 /* ── Cities nested list ──────────────────────────────────────── */
@@ -326,6 +324,6 @@
     left: 0;
     right: 0;
     max-height: 55dvh;
-    border-radius: var(--r-xl);
+    border-radius: var(--r-md);
   }
 }

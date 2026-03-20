@@ -81,27 +81,23 @@ const Phase1 = React.memo(({
     return (
       <div key={`phase1-city-${city.code}`} className="city-item-wrapper">
         <div className="search-item city-item">
+          {(city.has_flightable_airport || cachedAirports) && (
+            <button
+              className="expand-button"
+              onClick={(e) => handleToggleCity(city.code, city.name, e)}
+              title={isCityExpanded ? "Collapse" : "Expand to show airports"}
+            >
+              {isCityExpanded ? '▼' : '▶'}
+            </button>
+          )}
           <div
             className="item-main"
             onClick={() => handleItemClick(city)}
           >
-            <span className="item-icon"></span>
             <span className="item-name">{city.name}</span>
-            <span className="item-code">({city.code})</span>
             {city.has_flightable_airport && <span className="item-badge"></span>}
           </div>
-
-          <button
-            className="expand-button"
-            onClick={(e) => handleToggleCity(city.code, city.name, e)}
-            title={isCityExpanded ? "Collapse" : "Expand to show airports"}
-            style={{
-              visibility: city.has_flightable_airport || cachedAirports ? 'visible' : 'hidden',
-              opacity: city.has_flightable_airport || cachedAirports ? 1 : 0.5
-            }}
-          >
-            {isCityExpanded ? '▼' : '▶'}
-          </button>
+          <span className="item-code">({city.code})</span>
         </div>
 
         {isCityExpanded && cachedAirports && (
@@ -120,11 +116,10 @@ const Phase1 = React.memo(({
                     onClick={() => handleItemClick(airport)}
                   >
                     <div className="item-main">
-                      <span className="item-icon"></span>
                       <span className="item-name">{airport.name}</span>
-                      <span className="item-code">({airport.code})</span>
                       {airport.flightable && <span className="item-badge"></span>}
                     </div>
+                    <span className="item-code">({airport.code})</span>
                   </div>
                 ))}
               </>
@@ -145,17 +140,6 @@ const Phase1 = React.memo(({
 
   return (
     <div className="search-item country-item">
-      <div
-        className="item-main"
-        onClick={() => handleItemClick(country)}
-      >
-        <span className="item-icon"></span>
-        <span className="item-name">
-          {highlightText(country.name, query, searchMode)}
-        </span>
-        <span className="item-code">({country.code})</span>
-      </div>
-
       <button
         className="expand-button"
         onClick={handleToggleCountry}
@@ -163,6 +147,16 @@ const Phase1 = React.memo(({
       >
         {isExpanded ? '▼' : '▶'}
       </button>
+
+      <div
+        className="item-main"
+        onClick={() => handleItemClick(country)}
+      >
+        <span className="item-name">
+          {highlightText(country.name, query, searchMode)}
+        </span>
+      </div>
+      <span className="item-code">({country.code})</span>
 
       {isExpanded && (
         <div className="nested-list">

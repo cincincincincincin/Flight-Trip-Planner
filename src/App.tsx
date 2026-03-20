@@ -489,11 +489,13 @@ function App() {
     // Find last real leg's arrival airport to open the right panel there
     let lastCode: string | null = null;
     let lastArrivalUTC: string | null = null;
+    let lastArrivalLocal: string | null = null;
     for (let i = legs.length - 1; i >= 0; i--) {
       const leg = legs[i];
       if ((leg as { type?: string }).type !== 'manual' && leg.flight?.scheduled_arrival_utc) {
         lastCode = leg.toAirportCode;
         lastArrivalUTC = leg.flight.scheduled_arrival_utc;
+        lastArrivalLocal = leg.flight.scheduled_arrival_local ?? null;
         break;
       }
     }
@@ -501,7 +503,9 @@ function App() {
     setSelectedAirportCode(lastCode);
     try {
       const destData = await getAirport(lastCode);
-      const overrideFromDatetime = lastArrivalUTC ? lastArrivalUTC.substring(0, 19) : undefined;
+      const overrideFromDatetime = lastArrivalLocal
+        ? lastArrivalLocal.toString().substring(0, 19)
+        : lastArrivalUTC ? lastArrivalUTC.substring(0, 19) : undefined;
       setSelectedItem({ type: 'airport', data: destData, overrideFromDatetime });
       const coords = destData.coordinates;
       if (coords) flyToLocation((coords.lon ?? coords.lng) ?? 0, coords.lat ?? 0, FALLBACK_ZOOM.AIRPORT);

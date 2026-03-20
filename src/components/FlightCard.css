@@ -178,6 +178,15 @@
   flex: 1;
 }
 
+.time-duration {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  align-self: center;
+}
+
 .time.arrival {
   align-items: flex-end;
   text-align: right;
@@ -221,6 +230,49 @@
 .date-value.different-day {
   color: var(--c-coral);
   font-weight: 600;
+}
+
+/* ── Estimated arrival ───────────────────────────────────────── */
+.arr-estimated-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.arr-estimated-time {
+  background: var(--c-gold-dim);
+  color: var(--c-gold);
+  border: 1px solid var(--c-gold-b);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+  font-size: inherit;
+  font-weight: inherit;
+  font-family: inherit;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.arr-estimated-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  width: 220px;
+  padding: 7px 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--c-gold-b);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  z-index: 100;
+  pointer-events: none;
+  white-space: normal;
+}
+
+.arr-estimated-time:hover .arr-estimated-tooltip {
+  display: block;
 }
 
 /* ── Details: terminal / gate ────────────────────────────────── */

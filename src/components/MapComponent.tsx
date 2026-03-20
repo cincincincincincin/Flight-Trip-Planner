@@ -72,10 +72,12 @@ function resolveMapStyle(style: string): string | maplibregl.StyleSpecification 
             type: 'raster',
             tiles: ['https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
             tileSize: 256,
+            attribution: 'Powered by <a href="https://www.esri.com/" target="_blank" rel="noopener noreferrer">Esri</a> | <a href="https://maplibre.org/" target="_blank" rel="noopener noreferrer">MapLibre</a> | Sources: Esri, TomTom, Garmin, FAO, NOAA, USGS, \u00a9 OpenStreetMap contributors, and the GIS User Community | Source: Esri, Vantor, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community',
           },
           world: {
             type: 'vector',
             url: 'https://demotiles.maplibre.org/tiles/tiles.json',
+            attribution: '',
           },
         },
         layers: [
@@ -112,10 +114,12 @@ function resolveMapStyle(style: string): string | maplibregl.StyleSpecification 
             type: 'raster',
             tiles: ['https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
             tileSize: 256,
+            attribution: 'Powered by <a href="https://www.esri.com/" target="_blank" rel="noopener noreferrer">Esri</a> | <a href="https://maplibre.org/" target="_blank" rel="noopener noreferrer">MapLibre</a> | Sources: Esri, TomTom, Garmin, FAO, NOAA, USGS, \u00a9 OpenStreetMap contributors, and the GIS User Community | Source: Esri, Vantor, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community',
           },
           world: {
             type: 'vector',
             url: 'https://demotiles.maplibre.org/tiles/tiles.json',
+            attribution: '',
           },
         },
         layers: [
@@ -527,6 +531,21 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
           bs.on('BasemapStyleLoad', () => {
             console.log('ArcGIS plugin style loaded:', mapStyle);
             onMapReady();
+            // The plugin injects its own attribution control at bottom-right.
+            // Move it to bottom-left and clean up the text to match other styles.
+            requestAnimationFrame(() => {
+              if (!map.current) return;
+              const c = map.current.getContainer();
+              const attrib = c.querySelector<HTMLElement>('.maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib');
+              const bottomLeft = c.querySelector('.maplibregl-ctrl-bottom-left');
+              if (attrib && bottomLeft) {
+                bottomLeft.appendChild(attrib);
+              }
+              const inner = c.querySelector('.maplibregl-ctrl-attrib-inner');
+              if (inner) {
+                inner.innerHTML = '© <a href="https://www.esri.com/" target="_blank" rel="noopener noreferrer">Esri</a> and contributors';
+              }
+            });
           });
           bs.on('BasemapStyleError', (err: Error) => {
             console.error('ArcGIS basemap style error:', err);
@@ -593,13 +612,25 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
         visualizePitch: true
       }), 'top-right');
       map.current.addControl(new maplibregl.ScaleControl({
-        maxWidth: 200,
+        maxWidth: 120,
         unit: 'metric'
       }), 'bottom-right');
+      if (!isArcGISPluginStyle(mapStyle)) {
+        const isDemotiles =
+          mapStyle === 'https://demotiles.maplibre.org/style.json' ||
+          mapStyle === 'https://demotiles.maplibre.org/globe.json';
+        const customAttribution = isDemotiles
+          ? '© <a href="https://maplibre.org/">MapLibre</a> | © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          : undefined;
+        map.current.addControl(
+          new maplibregl.AttributionControl({ compact: false, customAttribution }),
+          'bottom-left'
+        );
+      }
     } catch (error) {
       console.error('Error adding controls:', error);
     }
-  }, []);
+  }, [mapStyle]);
 
   const safeRemoveLayer = useCallback((id: string) => {
     if (map.current && map.current.getLayer(id)) {
@@ -2375,7 +2406,11 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     );
   }
 
-  return <div ref={mapContainer} className="map" />;
+  return (
+    <div className="map-root">
+      <div ref={mapContainer} className="map" />
+    </div>
+  );
 });
 
 export default MapComponent;

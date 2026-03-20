@@ -2,6 +2,11 @@
    MAP COMPONENT
    ═══════════════════════════════════════════════════════════════ */
 
+.map-root {
+  position: absolute;
+  inset: 0;
+}
+
 .map {
   position: absolute;
   inset: 0;
@@ -9,10 +14,15 @@
   height: 100%;
 }
 
+
 /* ── MapLibre GL overrides ────────────────────────────────────── */
 .maplibregl-ctrl-bottom-left,
 .maplibregl-ctrl-bottom-right {
-  bottom: clamp(32px, 5vh, 52px);
+  bottom: 0;
+}
+
+.maplibregl-ctrl-bottom-left {
+  max-width: calc(100% - 140px); /* leave room for scale on the right */
 }
 
 .maplibregl-ctrl-attrib {
@@ -21,6 +31,10 @@
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border-radius: var(--r-sm) !important;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .maplibregl-ctrl-attrib a { color: var(--text-muted) !important; }

@@ -41,7 +41,7 @@
 
 /* ── Airport time display ────────────────────────────────────── */
 .airport-time {
-  font-size: 11px;
+  font-size: 15px;
   font-family: var(--font-mono);
   color: var(--c-teal);
   background: var(--c-teal-dim);
@@ -58,6 +58,42 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.airport-time--estimated {
+  color: var(--c-gold);
+  background: var(--c-gold-dim);
+  border-color: var(--c-gold-b);
+  position: relative;
+  cursor: default;
+}
+
+.arrival-estimated-note {
+  font-size: 9px;
+  opacity: 0.8;
+}
+
+.arrival-estimated-tooltip {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 230px;
+  padding: 7px 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--c-gold-b);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  z-index: 100;
+  pointer-events: none;
+  white-space: normal;
+}
+
+.airport-time--estimated:hover .arrival-estimated-tooltip {
+  display: block;
 }
 
 .arrival-secondary {

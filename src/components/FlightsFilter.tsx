@@ -307,7 +307,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
     const selected = isEffectivelySelected('city', ci.code, undefined, ci.countryCode);
     return (
       <div key={ci.code} className="ff-city-wrapper">
-        <div className={`ff-item ff-city ${selected ? 'ff-selected' : ''}`}>
+        <div className={`ff-item ff-city ${selected ? 'ff-selected' : ''}${expanded && showAirports ? ' ff-city--expanded' : ''}`}>
           {ci.airports.length > 0 && (
             <button className="ff-expand-btn" onClick={onCityToggle}>{expanded ? '▼' : '▶'}</button>
           )}
@@ -337,7 +337,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
 
     return (
       <div key={`${phase}-${country.code}`} className="ff-country-wrapper">
-        <div className={`ff-item ff-country ${isCountrySelected ? 'ff-selected' : ''}`}>
+        <div className={`ff-item ff-country ${isCountrySelected ? 'ff-selected' : ''}${isCountryExpanded ? ' ff-country--expanded' : ''}`}>
           {phase === 1 && setCountryExpanded && (
             <button className="ff-expand-btn" onClick={() => setCountryExpanded(prev => { const n = new Set(prev); if (n.has(country.code)) n.delete(country.code); else n.add(country.code); return n; })}>
               {isCountryExpanded ? '▼' : '▶'}
@@ -348,15 +348,19 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
             {isCountrySelected && <span className="ff-check">✓</span>}
           </div>
         </div>
-        {isCountryExpanded && country.cities.filter(c => c.code !== '__nocity__').map(ci => {
-          const isCityExpanded = expandedCities.has(ci.code);
-          return renderCity(
-            ci,
-            isCityExpanded || phase === 3,
-            () => setExpandedCities(prev => { const n = new Set(prev); if (n.has(ci.code)) n.delete(ci.code); else n.add(ci.code); return n; }),
-            showAirports || isCityExpanded,
-          );
-        })}
+        {isCountryExpanded && (
+          <div className="ff-cities-list">
+            {country.cities.filter(c => c.code !== '__nocity__').map(ci => {
+              const isCityExpanded = expandedCities.has(ci.code);
+              return renderCity(
+                ci,
+                isCityExpanded || phase === 3,
+                () => setExpandedCities(prev => { const n = new Set(prev); if (n.has(ci.code)) n.delete(ci.code); else n.add(ci.code); return n; }),
+                showAirports || isCityExpanded,
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };
@@ -386,7 +390,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
 
   return (
     <div className="flights-filter">
-      <div className="ff-header">
+      <div className={`ff-header${activeFilterCount > 0 ? ' ff-header--has-clear' : ''}`}>
         <button className="ff-toggle-btn" onClick={onToggle}>
           {isOpen ? '▲' : '▼'} Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
         </button>

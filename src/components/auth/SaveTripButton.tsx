@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { saveTrip, updateTrip } from '../../api/trips';
 import { useTripStore } from '../../stores/tripStore';
@@ -74,14 +75,15 @@ const SaveTripButton: React.FC = () => {
         {isPending ? 'Saving...' : isUpdate ? 'Update Trip' : 'Save Trip'}
       </button>
 
-      {showNameModal && (
+      {showNameModal && createPortal(
         <TripNameModal
           initialName={`Trip ${new Date().toLocaleDateString()}`}
           title="Name your trip"
           confirmLabel="Save"
           onConfirm={handleNameConfirm}
           onCancel={() => setShowNameModal(false)}
-        />
+        />,
+        document.body
       )}
     </>
   );

@@ -16,6 +16,19 @@
   gap: 6px;
 }
 
+.ff-header--has-clear {
+  gap: 0;
+}
+
+.ff-header--has-clear .ff-toggle-btn {
+  border-radius: var(--r-sm) 0 0 var(--r-sm);
+  border-right-color: transparent;
+}
+
+.ff-header--has-clear .ff-clear-btn {
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+
 .ff-toggle-btn {
   width: 100%;
   padding: 6px clamp(10px, 1.2vw, 14px);
@@ -222,6 +235,17 @@
 .ff-country-wrapper:last-child { border-bottom: none; }
 
 .ff-country { font-weight: 600; }
+
+.ff-country--expanded { background: var(--bg-hover); }
+.ff-country--expanded:hover { background: var(--bg-active, var(--bg-hover)); filter: brightness(0.93); }
+
+.ff-cities-list {
+  border-left: 2px solid var(--c-teal-b);
+  margin-left: 8px;
+}
+
+.ff-city--expanded { background: var(--bg-hover); filter: brightness(0.92); }
+.ff-city--expanded:hover { filter: brightness(0.85); }
 
 .ff-nested {
   margin-left: 14px;

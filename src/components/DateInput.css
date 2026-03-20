@@ -35,7 +35,7 @@
   background: none;
   border: none;
   color: var(--text-primary);
-  font-size: clamp(12px, 1.1vw, 13px);
+  font-size: clamp(13px, 1.2vw, 14px);
   font-weight: 700;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;

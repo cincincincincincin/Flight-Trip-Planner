@@ -4,9 +4,9 @@
 
 .saved-trips-panel {
   position: fixed;
-  top: clamp(50px, 7vh, 70px);
+  top: clamp(80px, 10vh, 110px);
   right: clamp(10px, 1.5vw, 20px);
-  width: clamp(280px, 28vw, 380px);
+  width: clamp(320px, 32vw, 440px);
   max-height: clamp(320px, 65vh, 560px);
   background: var(--bg-raised);
   border: 1px solid var(--border-light);

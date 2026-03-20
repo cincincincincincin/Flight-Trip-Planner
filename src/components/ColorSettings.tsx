@@ -582,11 +582,36 @@ interface ColorSettingsProps {
   showSizes?: boolean; // controls visibility of sizes section (default true)
 }
 
-const ColorSettings: React.FC<ColorSettingsProps> = ({ 
+const ColorSettings: React.FC<ColorSettingsProps> = ({
   showOnlySizes = false,
-  showSizes = true 
+  showSizes = true
 }) => {
   const { startPoints, setStartPointColor, setColor, setSize, setZoomRange, resetColors, resetSizes, ...colors } = useColorStore();
+
+  const [activeTooltip, setActiveTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!activeTooltip) return;
+    const close = () => setActiveTooltip(null);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [activeTooltip]);
+
+  const helpBtn = useCallback((text: string) => (
+    <button
+      className="color-col-help"
+      title={text}
+      onClick={e => {
+        e.stopPropagation();
+        const rect = e.currentTarget.getBoundingClientRect();
+        setActiveTooltip(prev => prev?.text === text ? null : {
+          text,
+          x: rect.left + rect.width / 2,
+          y: rect.top - 4,
+        });
+      }}
+    >?</button>
+  ), []);
   const sizes = colors as unknown as Record<string, number>;
   const colorValues = colors as unknown as Record<string, string>;
   const { viewport, setFlyToZoom } = useMapStore();
@@ -606,13 +631,13 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
           {/* ── Starting points ── */}
           <div className="color-section-label">Starting points</div>
           <div className="color-settings-col-headers color-settings-col-headers--sp7">
-            <span className="color-col-label" style={{textAlign:'left'}}>Point</span>
-            <span className="color-col-label" title="Airport dot">Dot</span>
-            <span className="color-col-label" title="Airport dot hover">Hov</span>
-            <span className="color-col-label" title="Route line">Line</span>
-            <span className="color-col-label" title="Route line hover">Hov</span>
-            <span className="color-col-label" title="Label color">Lbl</span>
-            <span className="color-col-label" title="Label hover color">Hov</span>
+            <span className="color-col-label" style={{textAlign:'left'}}></span>
+            {helpBtn("Airport dot")}
+            {helpBtn("Airport dot hover")}
+            {helpBtn("Route line")}
+            {helpBtn("Route line hover")}
+            {helpBtn("Label color")}
+            {helpBtn("Label hover color")}
           </div>
           {startPoints.map((sp, i) => (
             <div key={i} className="color-row color-row--sp7">
@@ -633,10 +658,10 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
           <div className="color-subsection-label">Airports</div>
           <div className="color-settings-col-headers color-settings-col-headers--elem4">
             <span className="color-col-label" style={{textAlign:'left'}}></span>
-            <span className="color-col-label">Dot</span>
-            <span className="color-col-label">Hov</span>
-            <span className="color-col-label">Lbl</span>
-            <span className="color-col-label">Hov</span>
+            {helpBtn("Dot color")}
+            {helpBtn("Dot hover color")}
+            {helpBtn("Label color")}
+            {helpBtn("Label hover color")}
           </div>
           {MAP_AIRPORT_ROWS.map(({ key, label, hoverKey, labelKey, labelHoverKey }) => (
             <div key={key} className="color-row color-row--elem4">
@@ -651,8 +676,8 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
           <div className="color-subsection-label">Routes</div>
           <div className="color-settings-col-headers color-settings-col-headers--elem2">
             <span className="color-col-label" style={{textAlign:'left'}}></span>
-            <span className="color-col-label">Col</span>
-            <span className="color-col-label">Hov</span>
+            {helpBtn("Color")}
+            {helpBtn("Hover color")}
           </div>
       {MAP_ROUTE_ROWS.map(({ key, label, hoverKey, hint }) => (
         <div key={`${label}-${key}`} className="color-row color-row--elem2">
@@ -747,6 +772,18 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
             );
           })}
         </>
+      )}
+
+      {activeTooltip && ReactDOM.createPortal(
+        <div className="color-col-tooltip" style={{
+          position: 'fixed',
+          left: activeTooltip.x,
+          top: activeTooltip.y,
+          transform: 'translateX(-50%) translateY(-100%)',
+        }}>
+          {activeTooltip.text}
+        </div>,
+        document.body
       )}
     </div>
   );

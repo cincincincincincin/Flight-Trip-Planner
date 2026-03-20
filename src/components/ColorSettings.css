@@ -108,12 +108,48 @@
 .color-row--elem4 { grid-template-columns: 1fr repeat(4, 18px); }
 .color-row--elem2 { grid-template-columns: 1fr repeat(2, 18px); }
 
+.color-col-help {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--border-light);
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.12s;
+}
+
+.color-col-help:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.color-col-tooltip {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-light);
+  border-radius: var(--r-sm);
+  padding: 4px 8px;
+  font-size: 10px;
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+  z-index: 9999;
+}
+
 .color-row-label {
   font-size: 11px;
   color: var(--text-secondary);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .color-row-hint {

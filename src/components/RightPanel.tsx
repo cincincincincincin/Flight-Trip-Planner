@@ -16,6 +16,15 @@ import './RightPanel.css';
 const MAX_AIRPORTS = 6;
 const MAX_TRANSFER_AIRPORTS = 5;
 
+const haversineKm = (lon1: number, lat1: number, lon2: number, lat2: number): number => {
+  const R = 6371;
+  const toRad = (d: number) => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+};
+
 const BROWSER_TIMEZONE = (() => {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return null; }
 })();
@@ -184,6 +193,17 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   }, [airportsData, countryDisplayNames]);
 
   // ── Trip state derived ─────────────────────────────────────────────────────
+  const airportCoordsMap = useMemo<Record<string, [number, number]>>(() => {
+    if (!airportsData) return {};
+    const map: Record<string, [number, number]> = {};
+    airportsData.features.forEach(f => {
+      if (f.properties.code && f.geometry?.coordinates) {
+        map[f.properties.code] = f.geometry.coordinates as [number, number];
+      }
+    });
+    return map;
+  }, [airportsData]);
+
   const tripCurrentArrivalTimeUTC = useMemo(() => {
     if (!tripState?.legs?.length) return null;
     for (let i = tripState.legs.length - 1; i >= 0; i--) {
@@ -194,6 +214,27 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     }
     return null;
   }, [tripState]);
+
+  const tripEstimatedArrivalUTC = useMemo(() => {
+    if (tripCurrentArrivalTimeUTC || !tripState?.legs?.length) return null;
+    for (let i = tripState.legs.length - 1; i >= 0; i--) {
+      const leg = tripState.legs[i];
+      if ((leg as { type?: string }).type !== 'manual' && leg.flight?.scheduled_departure_utc) {
+        const from = airportCoordsMap[leg.fromAirportCode];
+        const to = airportCoordsMap[leg.toAirportCode];
+        if (!from || !to) return null;
+        const distKm = haversineKm(from[0], from[1], to[0], to[1]);
+        const blockHours = distKm / 850 + 0.5;
+        const depMs = new Date(leg.flight.scheduled_departure_utc).getTime();
+        if (isNaN(depMs)) return null;
+        return new Date(depMs + blockHours * 3600000).toISOString();
+      }
+    }
+    return null;
+  }, [tripCurrentArrivalTimeUTC, tripState, airportCoordsMap]);
+
+  const isArrivalEstimated = !tripCurrentArrivalTimeUTC && !!tripEstimatedArrivalUTC;
+  const effectiveArrivalTimeUTC = tripCurrentArrivalTimeUTC ?? tripEstimatedArrivalUTC;
 
   const manualTransferCount = useMemo(() => {
     if (!tripState?.legs?.length) return 0;
@@ -279,12 +320,12 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   const resolvedTimezone = useMemo(() => {
     // In trip mode: always pin to the arrival airport's TZ so adding transfer airports
     // doesn't auto-switch the displayed timezone.
-    if (tripCurrentArrivalTimeUTC && lastRealLeg?.toAirportCode) {
+    if (effectiveArrivalTimeUTC && lastRealLeg?.toAirportCode) {
       const arrTZ = airportTimezoneMap[lastRealLeg.toAirportCode];
       if (arrTZ) return arrTZ;
     }
     return resolveTimezone(flightAirportCodes, airportTimezoneMap, lastAddedCode);
-  }, [tripCurrentArrivalTimeUTC, lastRealLeg, flightAirportCodes, airportTimezoneMap, lastAddedCode]);
+  }, [effectiveArrivalTimeUTC, lastRealLeg, flightAirportCodes, airportTimezoneMap, lastAddedCode]);
 
   // ── "Display TZ" for country mode: active TZ → earliest group → browser ────
   const countryDisplayTZ = useMemo(() => {
@@ -470,8 +511,8 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     if (key !== prevSelectedItemKeyRef.current) {
       prevSelectedItemKeyRef.current = key;
       // selectedItem changed, reset date
-      if (tripCurrentArrivalTimeUTC) {
-        setTravelDate(new Date(tripCurrentArrivalTimeUTC).toLocaleDateString('en-CA', { timeZone: timezone }));
+      if (effectiveArrivalTimeUTC) {
+        setTravelDate(new Date(effectiveArrivalTimeUTC).toLocaleDateString('en-CA', { timeZone: timezone }));
       } else {
         setTravelDate(new Date().toLocaleDateString('en-CA', { timeZone: timezone }));
       }
@@ -487,7 +528,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     if (itemsWereRemoved && timezoneChanged && prevTimezoneRef.current) {
       // Smart date handling: check if the old timezone's "today" matches the current travelDate
       const oldTzToday = new Date().toLocaleDateString('en-CA', { timeZone: prevTimezoneRef.current });
-      
+
       if (travelDate === oldTzToday) {
         // User was viewing today in the old timezone, update to today in new timezone
         setTravelDate(new Date().toLocaleDateString('en-CA', { timeZone: timezone }));
@@ -496,8 +537,8 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
       // keep the travelDate and only change the timezone
     } else if (!itemsWereRemoved && timezoneChanged) {
       // Timezone changed but airports weren't removed - reset date to today/arrival date
-      if (tripCurrentArrivalTimeUTC) {
-        setTravelDate(new Date(tripCurrentArrivalTimeUTC).toLocaleDateString('en-CA', { timeZone: timezone }));
+      if (effectiveArrivalTimeUTC) {
+        setTravelDate(new Date(effectiveArrivalTimeUTC).toLocaleDateString('en-CA', { timeZone: timezone }));
       } else {
         setTravelDate(new Date().toLocaleDateString('en-CA', { timeZone: timezone }));
       }
@@ -505,7 +546,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
 
     prevTimezoneRef.current = timezone;
     prevExplorationItemsCountRef.current = explorationItems.length;
-  }, [selectedItem, timezone, explorationItems.length, setTravelDate, tripCurrentArrivalTimeUTC, selectedTimezoneOverride, travelDate]);
+  }, [selectedItem, timezone, explorationItems.length, setTravelDate, effectiveArrivalTimeUTC, selectedTimezoneOverride, travelDate]);
 
   // (countryDisplayTZ moved above timezone declaration)
 
@@ -531,8 +572,12 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     if (selectedItem?.type === 'airport' && selectedItem.overrideFromDatetime) {
       return selectedItem.overrideFromDatetime.substring(0, 19);
     }
+    // In trip mode with an effective arrival time (real or estimated), return null so
+    // FlightsList uses getFromDatetimeForAirport → which converts tripArrivalTimeUTC to local.
+    // This avoids loading from current time instead of the arrival time.
+    if (effectiveArrivalTimeUTC) return null;
     return airportInfo.current_local_datetime ?? null;
-  }, [airportInfo, selectedItem, flightAirportCodes.length]);
+  }, [airportInfo, selectedItem, flightAirportCodes.length, effectiveArrivalTimeUTC]);
 
   const handleManualDateChange = useCallback((newDate: string) => {
     setTravelDate(newDate);
@@ -540,13 +585,13 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   }, [setTravelDate]);
 
   const minDate = useMemo(() => {
-    if (!tripCurrentArrivalTimeUTC) return undefined;
-    const thresholdMs = new Date(tripCurrentArrivalTimeUTC).getTime()
+    if (!effectiveArrivalTimeUTC) return undefined;
+    const thresholdMs = new Date(effectiveArrivalTimeUTC).getTime()
       + (minTransferHours + manualTransferCount * minManualTransferHours) * 3600000;
     const thresholdDate = new Date(thresholdMs);
     if (timezone) return thresholdDate.toLocaleDateString('en-CA', { timeZone: timezone });
     return thresholdDate.toISOString().split('T')[0];
-  }, [tripCurrentArrivalTimeUTC, minTransferHours, manualTransferCount, minManualTransferHours, timezone]);
+  }, [effectiveArrivalTimeUTC, minTransferHours, manualTransferCount, minManualTransferHours, timezone]);
 
   useImperativeHandle(ref, () => ({
     scrollToFlight: (destCode: string) => flightsListRef.current?.scrollToFlight(destCode),
@@ -560,16 +605,16 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   }, [timezone, travelDate]);
 
   const actualArrivalDate = useMemo(() => {
-    if (!tripCurrentArrivalTimeUTC || !timezone) return null;
-    return new Date(tripCurrentArrivalTimeUTC).toLocaleDateString('en-CA', { timeZone: timezone });
-  }, [tripCurrentArrivalTimeUTC, timezone]);
+    if (!effectiveArrivalTimeUTC || !timezone) return null;
+    return new Date(effectiveArrivalTimeUTC).toLocaleDateString('en-CA', { timeZone: timezone });
+  }, [effectiveArrivalTimeUTC, timezone]);
 
   const actualArrivalLocalTime = useMemo(() => {
-    if (!tripCurrentArrivalTimeUTC || !timezone) return null;
-    return new Date(tripCurrentArrivalTimeUTC).toLocaleTimeString('en-GB', {
+    if (!effectiveArrivalTimeUTC || !timezone) return null;
+    return new Date(effectiveArrivalTimeUTC).toLocaleTimeString('en-GB', {
       timeZone: timezone, hour: '2-digit', minute: '2-digit',
     });
-  }, [tripCurrentArrivalTimeUTC, timezone]);
+  }, [effectiveArrivalTimeUTC, timezone]);
 
   useEffect(() => {
     if (!timezone) { setAirportTime(null); return; }
@@ -586,13 +631,13 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
 
   // ── Two-timezone arrival time (when TZ switched in trip mode) ─────────────
   const arrivalTwoTZ = useMemo(() => {
-    if (!tripCurrentArrivalTimeUTC || !selectedTimezoneOverride || !selectedTimezoneAirportCode) return null;
+    if (!effectiveArrivalTimeUTC || !selectedTimezoneOverride || !selectedTimezoneAirportCode) return null;
     const originalArrCode = lastRealLeg?.toAirportCode ?? null;
     if (!originalArrCode) return null;
     const originalTZ = airportTimezoneMap[originalArrCode];
     if (!originalTZ || originalTZ === selectedTimezoneOverride) return null;
 
-    const date = new Date(tripCurrentArrivalTimeUTC);
+    const date = new Date(effectiveArrivalTimeUTC);
     const selectedTime = date.toLocaleTimeString('en-GB', { timeZone: selectedTimezoneOverride, hour: '2-digit', minute: '2-digit' });
     const originalTime = date.toLocaleTimeString('en-GB', { timeZone: originalTZ, hour: '2-digit', minute: '2-digit' });
 
@@ -606,7 +651,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
 
     return { selectedCode: selectedTimezoneAirportCode, selectedTime, originalCode: originalArrCode, originalTime, diffStr };
-  }, [tripCurrentArrivalTimeUTC, selectedTimezoneOverride, selectedTimezoneAirportCode, lastRealLeg, airportTimezoneMap]);
+  }, [effectiveArrivalTimeUTC, selectedTimezoneOverride, selectedTimezoneAirportCode, lastRealLeg, airportTimezoneMap]);
 
   // ── Per-airport alt-timezone offset display ────────────────────────────────
   const getAltTimeDisplay = useCallback((airportCode: string): string | null => {
@@ -654,12 +699,12 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     if (!tz || tz === selectedTimezoneOverride) return;
     setSelectedTimezoneOverride(tz);
     setSelectedTimezoneAirportCode(airportCode);
-    if (tripCurrentArrivalTimeUTC) {
+    if (effectiveArrivalTimeUTC) {
       // Trip mode: only jump to arrival date in new TZ if currently on the arrival date.
       // If user manually changed the date, preserve it.
-      const arrivalDateInCurrentTZ = new Date(tripCurrentArrivalTimeUTC).toLocaleDateString('en-CA', { timeZone: timezone ?? 'UTC' });
+      const arrivalDateInCurrentTZ = new Date(effectiveArrivalTimeUTC).toLocaleDateString('en-CA', { timeZone: timezone ?? 'UTC' });
       if (travelDate === arrivalDateInCurrentTZ) {
-        setTravelDate(new Date(tripCurrentArrivalTimeUTC).toLocaleDateString('en-CA', { timeZone: tz }));
+        setTravelDate(new Date(effectiveArrivalTimeUTC).toLocaleDateString('en-CA', { timeZone: tz }));
       }
     } else {
       // Non-trip mode: if viewing TODAY in current TZ, jump to TODAY in new TZ
@@ -669,7 +714,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
         setTravelDate(new Date().toLocaleDateString('en-CA', { timeZone: tz }));
       }
     }
-  }, [airportTimezoneMap, selectedTimezoneOverride, setTravelDate, tripCurrentArrivalTimeUTC, timezone, travelDate]);
+  }, [airportTimezoneMap, selectedTimezoneOverride, setTravelDate, effectiveArrivalTimeUTC, timezone, travelDate]);
 
   // ── Exploration groups (airport mode) ─────────────────────────────────────
   // Compute city-groups and country-groups from explorationItems
@@ -921,7 +966,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   };
 
   const showFlightsList = flightAirportCodes.length > 0 && !!timezone &&
-    (flightAirportCodes.length > 1 || !!initialFromDatetime);
+    (flightAirportCodes.length > 1 || !!initialFromDatetime || !!effectiveArrivalTimeUTC);
 
   // ── Render exploration list (shared by airport + city mode) ───────────────
   const renderExplorationList = () => (
@@ -1173,8 +1218,8 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
               <DateInput value={travelDate} onChange={handleManualDateChange}
                 timezone={(selectedItem.type === 'country' ? (countryDisplayTZ ?? undefined) : timezone) ?? undefined}
                 minDate={minDate} />
-              {selectedItem.type === 'airport' && tripCurrentArrivalTimeUTC && travelDate === actualArrivalDate && (
-                <div className="airport-time airport-time--arrival">
+              {selectedItem.type === 'airport' && effectiveArrivalTimeUTC && travelDate === actualArrivalDate && (
+                <div className={`airport-time airport-time--arrival${isArrivalEstimated ? ' airport-time--estimated' : ''}`}>
                   {arrivalTwoTZ ? (
                     <>
                       <div>{arrivalTwoTZ.selectedCode}: {arrivalTwoTZ.selectedTime}</div>
@@ -1186,9 +1231,17 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                   ) : (
                     <div>{lastRealLeg?.toAirportCode}: {actualArrivalLocalTime}</div>
                   )}
+                  {isArrivalEstimated && (
+                    <div className="arrival-estimated-note">~ estimated</div>
+                  )}
+                  {isArrivalEstimated && (
+                    <div className="arrival-estimated-tooltip">
+                      Estimated arrival — calculated from flight distance and average aircraft speed (~850 km/h)
+                    </div>
+                  )}
                 </div>
               )}
-              {((selectedItem.type === 'airport' && !tripCurrentArrivalTimeUTC) ||
+              {((selectedItem.type === 'airport' && !effectiveArrivalTimeUTC) ||
                 (selectedItem.type === 'country' && countryTzGroups.filter(g => g.tz !== '_unknown').length <= 1)) &&
                 isToday && airportTime && (
                 <div className="airport-time">{airportTime}</div>
@@ -1304,7 +1357,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                   initialFromDatetime={initialFromDatetime ?? undefined}
                   airportTimezones={airportTimezoneMap}
                   originalAirportCode={tripState ? selectedItem.data.code : null}
-                  tripArrivalTimeUTC={tripState ? tripCurrentArrivalTimeUTC : null}
+                  tripArrivalTimeUTC={tripState ? effectiveArrivalTimeUTC : null}
                   onAddToTrip={handleAddToTripWithReset}
                 />
               </div>

@@ -39,6 +39,15 @@ const getDurationMs = (from: string | undefined, to: string | undefined): number
   return diff > 0 ? diff : null;
 };
 
+const haversineKm = (lon1: number, lat1: number, lon2: number, lat2: number): number => {
+  const R = 6371;
+  const toRad = (d: number) => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+};
+
 interface TripItineraryProps {
   onUndo?: () => void;
   onRedo?: () => void;
@@ -59,8 +68,32 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
     });
     return map;
   }, [airportsData]);
+
+  const airportCoordsMap = useMemo<Record<string, [number, number]>>(() => {
+    if (!airportsData) return {};
+    const map: Record<string, [number, number]> = {};
+    airportsData.features.forEach(f => {
+      if (f.properties.code && f.geometry?.coordinates) {
+        map[f.properties.code] = f.geometry.coordinates as [number, number];
+      }
+    });
+    return map;
+  }, [airportsData]);
+
+  const estimateArrivalUTC = (depUtc: string, fromCode: string, toCode: string): string | null => {
+    const from = airportCoordsMap[fromCode];
+    const to = airportCoordsMap[toCode];
+    if (!from || !to) return null;
+    const distKm = haversineKm(from[0], from[1], to[0], to[1]);
+    const blockHours = distKm / 850 + 0.5;
+    const depMs = new Date(depUtc).getTime();
+    if (isNaN(depMs)) return null;
+    return new Date(depMs + blockHours * 3600000).toISOString();
+  };
+
   const [hoveredFlight, setHoveredFlight] = useState<Flight | null>(null);
   const [popupPos, setPopupPos] = useState<{ top: number; left: number } | null>(null);
+  const [estimatedTooltipPos, setEstimatedTooltipPos] = useState<{ top: number; left: number } | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -181,8 +214,13 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
             const f = leg.flight;
             const depStr = f?.scheduled_departure_local || f?.scheduled_departure_utc;
             const arrStr = f?.scheduled_arrival_local || f?.scheduled_arrival_utc;
+            const estimatedArrUTC = !arrStr && !isManual && f?.scheduled_departure_utc
+              ? estimateArrivalUTC(f.scheduled_departure_utc, leg.fromAirportCode, leg.toAirportCode)
+              : null;
+            const displayArrStr = arrStr || estimatedArrUTC;
+            const isArrEstimated = !arrStr && !!estimatedArrUTC;
             const duration = !isManual
-              ? getDuration(f?.scheduled_departure_utc, f?.scheduled_arrival_utc)
+              ? getDuration(f?.scheduled_departure_utc, f?.scheduled_arrival_utc ?? estimatedArrUTC ?? undefined)
               : null;
 
             // "time available in: city" between two consecutive flight legs (no manual between them)
@@ -213,53 +251,66 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
                     ⏱ Time in {timeAvailableCity}: {formatDurationMs(timeAvailableMs)}
                   </div>
                 )}
-                <div
-                  className={`trip-leg${isManual ? ' trip-leg--manual' : ''}`}
-                  onMouseEnter={(e) => !isManual && showPopup(e, f)}
-                  onMouseLeave={scheduleHide}
-                >
-                  <div className="trip-leg-row">
-                    <div className="trip-leg-airport">
-                      <span className="trip-leg-code">{leg.fromAirportCode}</span>
-                      {!isManual && depStr && (
-                        <span className="trip-leg-datetime">
-                          <span className="trip-leg-date">{formatDate(depStr)}</span>
-                          <span className="trip-leg-time">{formatTime(depStr)}</span>
-                        </span>
-                      )}
-                    </div>
+                {isManual ? (
+                  <div className="trip-time-transfer">
+                    Transfer: {timeToTransferMs !== null ? formatDurationMs(timeToTransferMs) : '—'}
+                  </div>
+                ) : (
+                  <div
+                    className="trip-leg"
+                    onMouseEnter={(e) => showPopup(e, f)}
+                    onMouseLeave={scheduleHide}
+                  >
+                    <div className="trip-leg-row">
+                      <div className="trip-leg-airport">
+                        <span className="trip-leg-code">{leg.fromAirportCode}</span>
+                        {depStr && (
+                          <span className="trip-leg-datetime">
+                            <span className="trip-leg-date">{formatDate(depStr)}</span>
+                            <span className="trip-leg-time">{formatTime(depStr)}</span>
+                          </span>
+                        )}
+                      </div>
 
-                    <div className="trip-leg-middle">
-                      {isManual ? (
-                        <span className="trip-leg-manual-icon" title="Manual transfer">↔</span>
-                      ) : (
-                        <>
-                          <span className="trip-leg-arrow">→</span>
-                          {duration && <span className="trip-leg-duration">{duration}</span>}
-                        </>
-                      )}
-                    </div>
+                      <div className="trip-leg-middle">
+                        {duration && <span className="trip-leg-duration">{duration}</span>}
+                      </div>
 
-                    <div className="trip-leg-airport trip-leg-airport--dest">
-                      <span className="trip-leg-code">{leg.toAirportCode}</span>
-                      {!isManual && arrStr && (
-                        <span className="trip-leg-datetime">
-                          <span className="trip-leg-date">{formatDate(arrStr)}</span>
-                          <span className="trip-leg-time">{formatTime(arrStr)}</span>
-                        </span>
-                      )}
+                      <div className="trip-leg-airport trip-leg-airport--dest">
+                        <span className="trip-leg-code">{leg.toAirportCode}</span>
+                        {displayArrStr && (
+                          <span className="trip-leg-datetime">
+                            <span className="trip-leg-date">{formatDate(displayArrStr)}</span>
+                            <span
+                              className={`trip-leg-time${isArrEstimated ? ' trip-leg-time--estimated' : ''}`}
+                              onMouseEnter={isArrEstimated ? (e) => {
+                                const r = e.currentTarget.getBoundingClientRect();
+                                setEstimatedTooltipPos({ top: r.bottom + 4, left: r.left });
+                              } : undefined}
+                              onMouseLeave={isArrEstimated ? () => setEstimatedTooltipPos(null) : undefined}
+                            >
+                              {formatTime(displayArrStr)}
+                            </span>
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  {isManual && timeToTransferMs !== null && (
-                    <div className="trip-leg-transfer-time">
-                      Time to transfer: {formatDurationMs(timeToTransferMs)}
-                    </div>
-                  )}
-                </div>
+                )}
               </React.Fragment>
             );
           })}
         </div>
+      )}
+
+      {estimatedTooltipPos && createPortal(
+        <div
+          className="trip-estimated-tooltip"
+          style={{ top: estimatedTooltipPos.top, left: estimatedTooltipPos.left }}
+        >
+          Estimated arrival — calculated from flight distance and average aircraft speed (~850 km/h)
+        </div>,
+        document.body
       )}
 
       {hoveredFlight && popupPos && createPortal(

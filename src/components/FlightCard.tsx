@@ -1,8 +1,17 @@
 import React, { useState, useMemo, memo, forwardRef } from 'react';
 import type { Flight } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
-import { useFlightOffersQuery } from '../hooks/queries';
+import { useFlightOffersQuery, useAirportsQuery, useAirportInfoQuery } from '../hooks/queries';
 import './FlightCard.css';
+
+const haversineKm = (lon1: number, lat1: number, lon2: number, lat2: number): number => {
+  const R = 6371;
+  const toRad = (d: number) => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+};
 
 interface FlightCardProps {
   flight: Flight;
@@ -16,6 +25,18 @@ interface FlightCardProps {
 const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHighlight, onAddToTrip, hideAddToTrip = false, displayTimezone, airportTimezone }, ref) => {
   const { currency, travelDate } = useSettingsStore();
   const [showPrices, setShowPrices] = useState(false);
+  const { data: airportsData } = useAirportsQuery();
+
+  const airportCoordsMap = useMemo<Record<string, [number, number]>>(() => {
+    if (!airportsData) return {};
+    const map: Record<string, [number, number]> = {};
+    airportsData.features.forEach(f => {
+      if (f.properties.code && f.geometry?.coordinates) {
+        map[f.properties.code] = f.geometry.coordinates as [number, number];
+      }
+    });
+    return map;
+  }, [airportsData]);
 
   // Use the flight's actual departure date for price queries so that prices
   // shown in the TripItinerary popup match the stored flight, not the current
@@ -125,11 +146,53 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
 
   // Arrival time: always show in the destination airport's own local time.
   // scheduled_arrival_local is already stored in destination-local time.
+  const { data: destAirportInfo } = useAirportInfoQuery(flight.destination_airport_code ?? null);
+
+  const estimatedArrUTC = useMemo(() => {
+    if (flight.scheduled_arrival_local || flight.scheduled_arrival_utc) return null;
+    if (!flight.scheduled_departure_utc) return null;
+    const from = airportCoordsMap[flight.origin_airport_code ?? ''];
+    const to = airportCoordsMap[flight.destination_airport_code ?? ''];
+    if (!from || !to) return null;
+    const distKm = haversineKm(from[0], from[1], to[0], to[1]);
+    const blockHours = distKm / 850 + 0.5;
+    const depMs = new Date(flight.scheduled_departure_utc).getTime();
+    if (isNaN(depMs)) return null;
+    return new Date(depMs + blockHours * 3600000).toISOString();
+  }, [flight.scheduled_arrival_local, flight.scheduled_arrival_utc, flight.scheduled_departure_utc, flight.origin_airport_code, flight.destination_airport_code, airportCoordsMap]);
+
+  const isArrivalEstimated = !flight.scheduled_arrival_local && !flight.scheduled_arrival_utc && !!estimatedArrUTC;
+
+  const destTimezone = destAirportInfo?.time_zone ?? displayTimezone;
+
+  const estimatedArrTzDiff = useMemo(() => {
+    if (!isArrivalEstimated || !estimatedArrUTC || !airportTimezone || !destAirportInfo?.time_zone) return null;
+    if (airportTimezone === destAirportInfo.time_zone) return null;
+    const d = new Date(flight.scheduled_departure_utc ?? '');
+    if (isNaN(d.getTime())) return null;
+    try {
+      const getOff = (tz: string) => {
+        const s = d.toLocaleString('sv-SE', { timeZone: tz });
+        const [datePart, timePart] = s.split(' ');
+        const [y, mo, day] = datePart.split('-').map(Number);
+        const [h, mi, sec] = timePart.split(':').map(Number);
+        return (Date.UTC(y, mo - 1, day, h, mi, sec) - d.getTime()) / 3600000;
+      };
+      const diff = getOff(destAirportInfo.time_zone) - getOff(airportTimezone);
+      return Math.abs(diff) < 0.1 ? null : diff;
+    } catch { return null; }
+  }, [isArrivalEstimated, estimatedArrUTC, airportTimezone, destAirportInfo, flight.scheduled_departure_utc]);
+
   const arrTimeStr = (() => {
     if (flight.scheduled_arrival_local)
       return formatTime(flight.scheduled_arrival_local);
     if (flight.scheduled_arrival_utc && displayTimezone)
       return formatTime(flight.scheduled_arrival_utc, displayTimezone);
+    if (estimatedArrUTC) {
+      // Wait for destination timezone before showing to avoid flickering wrong time
+      if (!destAirportInfo) return null;
+      return formatTime(estimatedArrUTC, destTimezone);
+    }
     return null;
   })();
 
@@ -155,6 +218,10 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
       return formatDate(flight.scheduled_arrival_local);
     if (flight.scheduled_arrival_utc && displayTimezone)
       return formatDate(flight.scheduled_arrival_utc, displayTimezone);
+    if (estimatedArrUTC) {
+      if (!destAirportInfo) return null;
+      return formatDate(estimatedArrUTC, destTimezone);
+    }
     return null;
   })();
 
@@ -197,10 +264,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
           <div className="airport-name">{flight.origin_city_name || 'Origin'}</div>
         </div>
 
-        <div className="flight-path">
-          <div className="path-line">→</div>
-          {duration && <div className="duration">{duration}</div>}
-        </div>
+        <div className="flight-path"></div>
 
         <div className="airport destination">
           <div className="airport-code">{flight.destination_airport_code}</div>
@@ -215,15 +279,36 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
             <div className="time-value">{depTimeStr}</div>
             <div className="date-value">{depDateStr}</div>
           </div>
+          {duration && <div className="time-duration">{duration}</div>}
           {arrTimeStr && (
             <div className="time arrival">
               <div className="time-label">Arrival</div>
               <div className="time-value">
-                {arrTimeStr}
-                {tzLabel && (
-                  <span className={`tz-diff ${(tzDiff ?? 0) > 0 ? 'positive' : 'negative'}`}>
-                    ({tzLabel})
-                  </span>
+                {isArrivalEstimated ? (
+                  <>
+                    {estimatedArrTzDiff !== null && (
+                      <span className={`tz-diff ${estimatedArrTzDiff > 0 ? 'positive' : 'negative'}`}>
+                        ({formatTzDiff(estimatedArrTzDiff)})
+                      </span>
+                    )}
+                    <span className="arr-estimated-wrapper">
+                      <span className="arr-estimated-time">
+                        ~{arrTimeStr}
+                        <span className="arr-estimated-tooltip">
+                          Estimated arrival — calculated from flight distance and average aircraft speed (~850 km/h)
+                        </span>
+                      </span>
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    {tzLabel && (
+                      <span className={`tz-diff ${(tzDiff ?? 0) > 0 ? 'positive' : 'negative'}`}>
+                        ({tzLabel})
+                      </span>
+                    )}
+                    {arrTimeStr}
+                  </>
                 )}
               </div>
               <div className={`date-value${isDifferentDay ? ' different-day' : ''}`}>
