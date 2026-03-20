@@ -561,9 +561,9 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       return (
         <div className="flights-list">
           <div className="flights-error">
-            <div className="error-icon">⚠️</div>
+            <div className="error-icon"></div>
             <div className="error-message">{error}</div>
-            <button onClick={handleRefresh} className="retry-button">🔄 Try Again</button>
+            <button onClick={handleRefresh} className="retry-button">Try Again</button>
           </div>
         </div>
       );
@@ -574,21 +574,21 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       <div className="flights-list">
         <div className="flights-header">
           <div className="flights-info">
-            <h4>✈️ Departing Flights</h4>
+            <h4>Departing Flights</h4>
             {lastFetched && (
               <div className="last-fetched">Last updated: {formatLastFetched(lastFetched)}</div>
             )}
           </div>
           {showRefreshButton && (
             <button onClick={handleRefresh} disabled={anyLoading} className="refresh-button">
-              {anyLoading ? '⏳' : '🔄'} Refresh
+              Refresh
             </button>
           )}
         </div>
 
         {displayedFlatFlights.length === 0 && !anyLoading ? (
           <div className="no-flights">
-            <div className="no-flights-icon">✈️</div>
+            <div className="no-flights-icon"></div>
             <div className="no-flights-message">
               {isFilterActive && todayFlights.length > 0
                 ? 'No flights match the current filters'

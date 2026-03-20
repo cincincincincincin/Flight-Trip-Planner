@@ -1,310 +1,365 @@
+/* ═══════════════════════════════════════════════════════════════
+   CONTROLS PANEL — settings sidebar
+   ═══════════════════════════════════════════════════════════════ */
+
 .controls-panel {
-  width: 340px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 20px;
+  width: var(--controls-w);
+  background: var(--bg-raised);
+  border-right: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: clamp(12px, 1.8vh, 20px) clamp(12px, 1.4vw, 18px);
   display: flex;
   flex-direction: column;
+  gap: 10px;
   overflow-y: auto;
   overflow-x: visible;
-  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-panel);
+  flex-shrink: 0;
+  align-self: stretch;
+  z-index: 150;
 }
 
+/* ── Header ──────────────────────────────────────────────────── */
 .controls-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 15px;
-}
-
-.controls-panel-header h2 {
-  font-size: 1.5rem;
-  text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.3);
-  margin: 0;
-}
-
-.controls-panel-close {
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  border-radius: 6px;
-  color: white;
-  font-size: 16px;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  margin-bottom: 4px;
   flex-shrink: 0;
 }
 
-.controls-panel-close:hover {
-  background: rgba(255, 255, 255, 0.4);
-}
-/* Dodaj na początku pliku, po .controls-panel h2 */
-
-.date-picker {
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(10px);
-  border-radius: 12px;
-  padding: 15px;
-  margin-bottom: 15px;
+.controls-panel-header h2 {
+  font-size: clamp(11px, 1.1vw, 13px);
+  font-weight: 800;
+  font-family: var(--font-display);
+  color: var(--text-primary);
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
 }
 
-.date-picker label {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: white;
-}
-
-.date-picker input[type="date"] {
-  width: 100%;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.9);
-  color: #333;
-  font-size: 0.9rem;
+.controls-panel-close {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  font-size: 14px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.14s;
 }
 
-.date-picker input[type="date"]:hover {
-  background: white;
+.controls-panel-close:hover {
+  background: var(--red-dim);
+  border-color: var(--red-b);
+  color: var(--red);
 }
 
-.date-picker input[type="date"]:focus {
-  outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
-}
-
+/* ── Error ───────────────────────────────────────────────────── */
 .error-message {
-  background: rgba(255, 255, 255, 0.2);
-  border-left: 4px solid #ff6b6b;
-  padding: 10px;
-  margin-bottom: 15px;
-  border-radius: 4px;
-  font-size: 0.85rem;
+  background: var(--red-dim);
+  border-left: 3px solid var(--red);
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  font-size: 12px;
+  color: var(--red);
 }
 
+/* ── Controls card ───────────────────────────────────────────── */
 .controls {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 20px;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: clamp(10px, 1.4vh, 16px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .control-group {
   display: flex;
   flex-direction: column;
-  gap: 15px;
-  margin-bottom: 20px;
+  gap: 8px;
 }
 
+/* ── Labels ──────────────────────────────────────────────────── */
+.controls label,
+.currency-selector label,
+.switch-label,
+.map-style-selector label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  margin-bottom: 5px;
+}
+
+/* ── Checkbox ────────────────────────────────────────────────── */
 .checkbox-label {
   display: flex;
   align-items: center;
+  gap: 8px;
   cursor: pointer;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  transition: all 0.3s ease;
+  padding: 7px 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  transition: all 0.13s;
 }
 
 .checkbox-label:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--bg-hover);
+  border-color: var(--border-light);
 }
 
-.checkbox-label input {
-  margin-right: 10px;
-  width: 18px;
-  height: 18px;
+.checkbox-label input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
   cursor: pointer;
+  accent-color: var(--accent);
+  flex-shrink: 0;
 }
 
 .checkbox-label span {
-  font-size: 0.95rem;
+  font-size: 12px;
   font-weight: 500;
+  color: var(--text-primary);
 }
 
-/* Dodaj na początku pliku ControlsPanel.css, po .checkbox-label */
-
+/* ── Toggle switch row ───────────────────────────────────────── */
 .switch-container {
-  margin-bottom: 15px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-}
-
-.switch-label {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: white;
-  opacity: 0.9;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
 }
 
 .toggle-switch {
   display: flex;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 6px;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
   overflow: hidden;
 }
 
 .switch-option {
   flex: 1;
-  padding: 8px 12px;
+  padding: 6px 8px;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.9rem;
-  font-weight: 500;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-display);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.15s;
+  text-align: center;
 }
 
 .switch-option:hover {
-  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  background: var(--bg-hover);
 }
 
 .switch-option.active {
-  background: rgba(255, 255, 255, 0.9);
-  color: #764ba2;
-  font-weight: 600;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+  border-radius: calc(var(--r-sm) - 1px);
 }
 
-/* Zmień margines dla grupy kontrolnej */
-.control-group {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;  /* Zmniejszono z 15px */
-  margin-bottom: 20px;
-}
-
-.loading {
-  font-size: 0.85rem;
-  opacity: 0.8;
-  margin-left: 5px;
-}
-
-.stats {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-  padding: 15px;
-  margin-bottom: 20px;
-}
-
-.stat-item {
-  padding: 5px 0;
-  font-size: 0.9rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.stat-item:last-child {
-  border-bottom: none;
-}
-
+/* ── Currency selector ───────────────────────────────────────── */
 .currency-selector {
-  margin-bottom: 15px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-}
-
-.currency-selector label {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: white;
-  opacity: 0.9;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
 }
 
 .currency-toggle {
   display: flex;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 6px;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
   overflow: hidden;
 }
 
 .currency-option {
   flex: 1;
-  padding: 8px 4px;
+  padding: 6px 4px;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.85rem;
-  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
   cursor: pointer;
-  transition: all 0.2s ease;
-  letter-spacing: 0.03em;
+  transition: all 0.15s;
+  text-align: center;
 }
 
 .currency-option:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+  color: var(--text-secondary);
+  background: var(--bg-hover);
 }
 
 .currency-option.active {
-  background: rgba(255, 255, 255, 0.9);
-  color: #764ba2;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+  border-radius: calc(var(--r-sm) - 1px);
 }
 
+/* ── Map style select ────────────────────────────────────────── */
 .map-style-selector {
-  margin-bottom: 15px;
-}
-
-.map-style-selector label {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 0.9rem;
-  opacity: 0.9;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
 }
 
 .style-select {
   width: 100%;
-  padding: 10px;
-  border-radius: 8px;
-  border: none;
-  background: rgba(255, 255, 255, 0.9);
-  color: #333;
-  font-size: 0.9rem;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-light);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-sans);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.15s;
+  color-scheme: light;
 }
 
-.style-select:hover {
-  background: white;
+.style-select:hover { border-color: var(--accent-border); }
+.style-select:focus {
+  outline: none;
+  border-color: var(--accent-border);
+  box-shadow: var(--accent-glow);
 }
 
+/* ── Color settings toggle ───────────────────────────────────── */
 .color-settings-toggle {
   display: block;
   width: 100%;
-  margin: 8px 0 4px;
-  padding: 7px 12px;
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 6px;
-  font-size: 12px;
+  padding: 7px 10px;
+  background: var(--bg-raised);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: 11px;
   font-weight: 600;
+  font-family: var(--font-display);
   cursor: pointer;
   text-align: left;
-  transition: background 0.15s, border-color 0.15s;
+  transition: all 0.14s;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .color-settings-toggle:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.45);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-light);
 }
 
 .color-settings-toggle.active {
-  background: rgba(255, 255, 255, 0.22);
-  border-color: rgba(255, 255, 255, 0.55);
+  background: var(--accent-dim);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+/* ── Loading indicator ───────────────────────────────────────── */
+.loading {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+
+/* ── Stats ───────────────────────────────────────────────────── */
+.stats {
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 10px;
+}
+
+.stat-item {
+  padding: 4px 0;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.stat-item:last-child { border-bottom: none; }
+
+/* ── Developer section ───────────────────────────────────────── */
+.developer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
+.developer-stats {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+}
+
+/* ── Date picker ─────────────────────────────────────────────── */
+.date-picker {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+}
+
+.date-picker input[type="date"] {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-light);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all 0.15s;
+  color-scheme: light;
+}
+
+.date-picker input[type="date"]:hover { border-color: var(--accent-border); }
+.date-picker input[type="date"]:focus {
+  outline: none;
+  border-color: var(--accent-border);
+  box-shadow: var(--accent-glow);
+}
+
+/* ── Mobile ──────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .controls-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: clamp(260px, 80vw, 340px);
+    z-index: 500;
+    box-shadow: var(--shadow-xl);
+    border-right: 1px solid var(--border-light);
+  }
 }

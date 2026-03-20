@@ -1,32 +1,153 @@
+/* ═══════════════════════════════════════════════════════════════
+   GLOBAL DESIGN SYSTEM
+   Light cartographic palette inspired by demotiles.maplibre.org
+   ═══════════════════════════════════════════════════════════════ */
+
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  /* ── Surfaces ─────────────────────────────────────────────── */
+  --bg-void:     #E2EAF2;
+  --bg-base:     #EDF2F8;
+  --bg-raised:   #FFFFFF;
+  --bg-elevated: #FFFFFF;
+  --bg-hover:    rgba(0, 0, 0, 0.045);
+  --bg-active:   rgba(27, 110, 247, 0.07);
+  --bg-glass:    rgba(237, 242, 248, 0.90);
+  --bg-glass-hi: rgba(255, 255, 255, 0.96);
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  /* ── Primary accent — MapLibre blue ──────────────────────── */
+  --accent:        #1B6EF7;
+  --accent-dim:    rgba(27, 110, 247, 0.08);
+  --accent-hover:  rgba(27, 110, 247, 0.14);
+  --accent-border: rgba(27, 110, 247, 0.28);
+  --accent-glow:   0 0 0 3px rgba(27, 110, 247, 0.14);
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /* ── Demotiles cartographic palette ──────────────────────── */
+  --c-teal:     #2BA8B4;
+  --c-teal-dim: rgba(43, 168, 180, 0.10);
+  --c-teal-b:   rgba(43, 168, 180, 0.28);
+
+  --c-coral:     #D96B4A;
+  --c-coral-dim: rgba(217, 107, 74, 0.10);
+  --c-coral-b:   rgba(217, 107, 74, 0.28);
+
+  --c-sage:     #5A9C68;
+  --c-sage-dim: rgba(90, 156, 104, 0.10);
+  --c-sage-b:   rgba(90, 156, 104, 0.28);
+
+  --c-gold:     #C08A22;
+  --c-gold-dim: rgba(192, 138, 34, 0.10);
+  --c-gold-b:   rgba(192, 138, 34, 0.28);
+
+  --c-plum:     #7A58AC;
+  --c-plum-dim: rgba(122, 88, 172, 0.10);
+  --c-plum-b:   rgba(122, 88, 172, 0.28);
+
+  --c-rose:     #BF4E78;
+  --c-rose-dim: rgba(191, 78, 120, 0.10);
+  --c-rose-b:   rgba(191, 78, 120, 0.28);
+
+  /* ── Semantic ─────────────────────────────────────────────── */
+  --green:       #0B9460;
+  --green-dim:   rgba(11, 148, 96, 0.09);
+  --green-b:     rgba(11, 148, 96, 0.26);
+  --green-hover: rgba(11, 148, 96, 0.16);
+
+  --red:         #D03545;
+  --red-dim:     rgba(208, 53, 69, 0.09);
+  --red-b:       rgba(208, 53, 69, 0.26);
+  --red-hover:   rgba(208, 53, 69, 0.16);
+
+  --amber:       #C8880A;
+  --amber-dim:   rgba(200, 136, 10, 0.09);
+
+  /* ── Text ─────────────────────────────────────────────────── */
+  --text-primary:   #0C1A2C;
+  --text-secondary: #384F6A;
+  --text-muted:     #7590AC;
+  --text-accent:    #1B6EF7;
+  --text-green:     #0B9460;
+  --text-red:       #D03545;
+
+  /* ── Borders ──────────────────────────────────────────────── */
+  --border:        rgba(0, 0, 0, 0.08);
+  --border-light:  rgba(0, 0, 0, 0.13);
+  --border-strong: rgba(0, 0, 0, 0.22);
+
+  /* ── Shadows ──────────────────────────────────────────────── */
+  --shadow-xs:    0 1px 2px rgba(0,0,0,0.06);
+  --shadow-sm:    0 1px 5px rgba(0,0,0,0.08);
+  --shadow-md:    0 4px 14px rgba(0,0,0,0.10);
+  --shadow-lg:    0 8px 28px rgba(0,0,0,0.13);
+  --shadow-xl:    0 16px 48px rgba(0,0,0,0.16);
+  --shadow-panel: 4px 0 28px rgba(0,0,0,0.09);
+  --shadow-float: 0 4px 20px rgba(27, 110, 247, 0.16);
+  --shadow-up:    0 -4px 20px rgba(0,0,0,0.10);
+
+  /* ── Radii ────────────────────────────────────────────────── */
+  --r-xs:   3px;
+  --r-sm:   6px;
+  --r-md:   10px;
+  --r-lg:   14px;
+  --r-xl:   18px;
+  --r-2xl:  24px;
+  --r-pill: 9999px;
+
+  /* ── Typography ───────────────────────────────────────────── */
+  --font-sans:    system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono:    'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  --font-display: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* ── Layout ───────────────────────────────────────────────── */
+  --panel-w:    clamp(280px, 26vw, 420px);
+  --controls-w: clamp(260px, 22vw, 340px);
+
+  color-scheme: light;
+}
+
+/* ── Reset ──────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+  font-size: 14px;
 }
 
 body {
   margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
+  padding: 0;
+  font-family: var(--font-sans);
+  background: var(--bg-void);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  height: 100%;
+  overflow: hidden;
 }
 
 #root {
-  width: 100%;
-  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
+/* ── Scrollbar ───────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.14);
+  border-radius: var(--r-pill);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.26);
+}
+
+/* ── Focus ring ──────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
 }

@@ -931,7 +931,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
           const altTime = getAltTimeDisplay(item.code);
           return (
             <div key={item.itemId || idx} className="exploration-item">
-              <span className="exploration-icon">✈️</span>
+              <span className="exploration-icon"></span>
               <span className="exploration-name">{item.name}</span>
               <span className="exploration-code">({item.code})</span>
               {altTime && (
@@ -953,20 +953,20 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
             return (
               <div key={item.code} className="exploration-group">
                 <div className="exploration-item exploration-item--group">
-                  <span className="exploration-icon">🏙️</span>
+                  <span className="exploration-icon"></span>
                   <span className="exploration-name">{item.name}</span>
                   <span className="exploration-count">{item.airportCodes.length}/{total}ap</span>
                 </div>
                 {item.childCities?.[0].airports.map(ap => (
                   <div key={ap.code} className="exploration-item exploration-item--child">
-                    <span className="exploration-icon">✈️</span>
+                    <span className="exploration-icon"></span>
                     <span className="exploration-name">{ap.name}</span>
                     <span className="exploration-code">({ap.code})</span>
                   </div>
                 ))}
                 {item.missingAirports?.map(ap => (
                   <div key={ap.code} className="exploration-item exploration-item--child exploration-item--missing">
-                    <span className="exploration-icon">✈️</span>
+                    <span className="exploration-icon"></span>
                     <span className="exploration-name">{ap.name}</span>
                     <span className="exploration-code">({ap.code})</span>
                     <button className="exploration-add-btn" onClick={() => addMissingAirport(ap)}>+</button>
@@ -980,7 +980,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
           if (viewMode === 'cities') {
             return (
               <div key={item.code} className="exploration-item exploration-item--group">
-                <span className="exploration-icon">🏙️</span>
+                <span className="exploration-icon"></span>
                 <span className="exploration-name">{item.name}</span>
                 <span className="exploration-count">{item.airportCodes.length}ap</span>
                 {altTime && (
@@ -1001,7 +1001,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                   if (s.has(item.code)) s.delete(item.code); else s.add(item.code);
                   return s;
                 })}>{isExpanded ? '▾' : '▸'}</button>
-                <span className="exploration-icon">🏙️</span>
+                <span className="exploration-icon"></span>
                 <span className="exploration-name">{item.name}</span>
                 <span className="exploration-count">{item.airportCodes.length}ap</span>
                 {altTime && (
@@ -1012,7 +1012,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
               {isExpanded && item.childCities?.map(city =>
                 city.airports.map(ap => (
                   <div key={ap.code} className="exploration-item exploration-item--child">
-                    <span className="exploration-icon">✈️</span>
+                    <span className="exploration-icon"></span>
                     <span className="exploration-name">{ap.name}</span>
                     <span className="exploration-code">({ap.code})</span>
                     <button className="exploration-remove-btn" onClick={() => removeExplorationItem(ap.id)}>×</button>
@@ -1039,7 +1039,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                   if (s.has(item.code)) s.delete(item.code); else s.add(item.code);
                   return s;
                 })}>{isExpanded ? '▾' : '▸'}</button>
-                <span className="exploration-icon">🌍</span>
+                <span className="exploration-icon"></span>
                 <span className="exploration-name">{item.name}</span>
                 <span className="exploration-count">{item.airportCodes.length}ap</span>
                 {countryTzBtn && (
@@ -1061,7 +1061,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                         if (s.has(cityKey)) s.delete(cityKey); else s.add(cityKey);
                         return s;
                       })}>{isCityExpanded ? '▾' : '▸'}</button>
-                      <span className="exploration-icon">🏙️</span>
+                      <span className="exploration-icon"></span>
                       <span className="exploration-name">{city.cityName}</span>
                       <span className="exploration-count">{city.airports.length}ap</span>
                       {cityTzBtn && cityRepCode && (
@@ -1072,7 +1072,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                     </div>
                     {isCityExpanded && city.airports.map(ap => (
                       <div key={ap.code} className="exploration-item exploration-item--child">
-                        <span className="exploration-icon">✈️</span>
+                        <span className="exploration-icon"></span>
                         <span className="exploration-name">{ap.name}</span>
                         <span className="exploration-code">({ap.code})</span>
                         <button className="exploration-remove-btn" onClick={() => removeExplorationItem(ap.id)}>×</button>
@@ -1101,7 +1101,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
             const tzDisplay = getAltTimeDisplay(selectedItem.data.code);
             return (
               <div className="trip-airport-item trip-airport-item--original">
-                <span className="exploration-icon">✈️</span>
+                <span className="exploration-icon"></span>
                 <span className="exploration-name">{selectedItem.data.name}</span>
                 <span className="exploration-code">({selectedItem.data.code})</span>
                 {tzDisplay && (
@@ -1118,7 +1118,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
             const label = feat?.properties.name || code;
             return (
               <div key={code} className="trip-airport-item">
-                <span className="exploration-icon">✈️</span>
+                <span className="exploration-icon"></span>
                 <span className="exploration-name">{label}</span>
                 <span className="exploration-code">({code})</span>
                 {tzDisplay && (
@@ -1167,7 +1167,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     <div className="right-panel">
       <div className="panel-header">
         <div className="header-content">
-          <h3>Details</h3>
+          <h3>Departure date</h3>
           {(selectedItem.type === 'airport' || (selectedItem.type === 'city' && cityAirports.length > 0) || selectedItem.type === 'country') && (
             <div className="header-info">
               <DateInput value={travelDate} onChange={handleManualDateChange}
@@ -1228,7 +1228,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                               : (prev.length < MAX_AIRPORTS ? [...prev, airport.code] : prev)
                           );
                         }} />
-                      <span>✈️ {airport.name} ({airport.code})</span>
+                      <span>{airport.name} ({airport.code})</span>
                     </label>
                   );
                 };
@@ -1290,7 +1290,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                 renderTripAirportSection()
               ) : (
                 explorationItems.length > 0 ? renderExplorationList() : (
-                  <div className="simplified-details">✈️ {getSimplifiedDetails()}</div>
+                  <div className="simplified-details">{getSimplifiedDetails()}</div>
                 )
               )}
             </div>
@@ -1317,7 +1317,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
           <>
             <div className="item-info">
               {explorationItems.length > 0 ? renderExplorationList() : (
-                <div className="simplified-details">🏙️ {getSimplifiedDetails()}</div>
+                <div className="simplified-details">{getSimplifiedDetails()}</div>
               )}
               {loadingCityAirports && <div className="mode-loading">Loading airports...</div>}
               {!loadingCityAirports && cityAirports.length === 0 && explorationItems.length === 0 && (
@@ -1344,7 +1344,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
         {selectedItem.type === 'country' && (
           <>
             <div className="item-info">
-              <div className="simplified-details">🌍 {getSimplifiedDetails()}</div>
+              <div className="simplified-details">{getSimplifiedDetails()}</div>
 
               {viewMode === 'airports' && (() => {
                 const hasMixedTZ = countryTzGroups.filter(g => g.tz !== '_unknown').length > 1;
@@ -1357,7 +1357,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                       className={`country-airport-item ${isSelected ? 'selected' : ''} ${!canSelect ? 'disabled' : ''}`}>
                       <input type="checkbox" checked={isSelected} disabled={!canSelect}
                         onChange={() => handleCountryAirportToggle(airport)} />
-                      <span>✈️ {airport.name} ({airport.code})</span>
+                      <span>{airport.name} ({airport.code})</span>
                     </label>
                   );
                 };
@@ -1427,7 +1427,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                                 });
                               }}
                               disabled={wouldExceed} />
-                            <span>🏙️ {city.name} <span className="airport-count-badge">({airportCount} airport{airportCount !== 1 ? 's' : ''})</span></span>
+                            <span>{city.name} <span className="airport-count-badge">({airportCount} airport{airportCount !== 1 ? 's' : ''})</span></span>
                           </label>
                         );
                       })}

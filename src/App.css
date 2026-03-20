@@ -1,114 +1,170 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+/* ═══════════════════════════════════════════════════════════════
+   APP LAYOUT
+   Desktop: controls | map | right-panel (flex row)
+   Mobile:  map (top) + right-panel bottom-sheet
+   ═══════════════════════════════════════════════════════════════ */
 
 .app {
   display: flex;
-  height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  position: relative;
+  flex-direction: row;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  background: var(--bg-void);
+  align-items: stretch;
 }
 
+/* ── Map container ───────────────────────────────────────────── */
 .map-container {
   flex: 1;
+  min-width: 0;
   position: relative;
-  background: url('https://images.pexels.com/photos/1169754/pexels-photo-1169754.jpeg') center center / cover no-repeat;
+  overflow: hidden;
+  background:
+    url('https://images.pexels.com/photos/1169754/pexels-photo-1169754.jpeg')
+      center center / cover no-repeat,
+    #c5d9e3;
 }
 
+/* ── Floating overlay bar ────────────────────────────────────── */
 .map-search-overlay {
   position: absolute;
-  top: 16px;
-  left: 16px;
-  z-index: 10;
-  width: 300px;
+  top: clamp(8px, 1.5vh, 14px);
+  left: clamp(8px, 1.5vw, 14px);
+  z-index: 200;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  align-items: stretch;
+  gap: clamp(4px, 0.6vh, 8px);
+  width: clamp(280px, 40vw, 520px);
+  pointer-events: none;
 }
 
-.open-controls-btn {
-  width: 100%;
-  padding: 10px 16px;
-  background: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
+.map-search-overlay > * {
+  pointer-events: auto;
+}
+
+/* ── Controls row (settings + user) ──────────────────────────── */
+.overlay-controls-row {
+  display: flex;
+  align-items: center;
+  gap: clamp(5px, 0.8vw, 8px);
+}
+
+/* ── Overlay buttons (settings, sign-in) ─────────────────────── */
+.open-controls-btn,
+.sign-in-btn {
+  flex-shrink: 0;
+  height: 38px;
+  padding: 0 clamp(10px, 1.5vw, 16px);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-light);
+  background: var(--bg-glass-hi);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: clamp(11px, 1.1vw, 13px);
   font-weight: 600;
-  color: #333;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  transition: all 0.2s ease;
-  text-align: left;
+  white-space: nowrap;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
-.open-controls-btn:hover {
-  background: #f5f5f5;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+.open-controls-btn:hover,
+.sign-in-btn:hover {
+  background: var(--bg-raised);
+  border-color: var(--accent-border);
+  color: var(--accent);
+  box-shadow: var(--shadow-md);
 }
 
 .sign-in-btn {
-  width: 100%;
-  padding: 9px 16px;
-  background: rgba(30, 30, 46, 0.92);
-  border: 1px solid #555;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #c4b8ff;
-  cursor: pointer;
-  transition: background 0.15s;
-  text-align: center;
+  background: var(--accent);
+  color: #fff;
+  border-color: transparent;
 }
 
 .sign-in-btn:hover {
-  background: rgba(124, 111, 247, 0.25);
+  background: #1560e0;
+  color: #fff;
+  border-color: transparent;
 }
 
-
-.airport-info-panel {
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 350px;
-  z-index: 1000;
-  transition: transform 0.3s ease;
+/* ── Right panel ─────────────────────────────────────────────── */
+.right-panel {
+  width: var(--panel-w);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-base);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-panel);
+  align-self: stretch;
+  position: relative;
+  z-index: 100;
+  overflow: hidden;
 }
 
-/* Responsive design */
-@media (max-width: 1024px) {
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE LAYOUT  (≤ 768px)
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
   .app {
     flex-direction: column;
   }
-  
-  .controls-panel {
-    width: 100%;
-    height: auto;
-    max-height: 40vh;
-  }
-  
+
   .map-container {
-    height: 60vh;
+    flex: 1;
+    min-height: 0;
   }
-  
-  .airport-info-panel {
-    position: fixed;
-    width: 100%;
-    height: 50vh;
-    bottom: 0;
-    top: auto;
-    border-radius: 20px 20px 0 0;
+
+  /* Right panel becomes a bottom sheet */
+  .right-panel {
+    width: 100% !important;
+    height: clamp(220px, 46dvh, 460px);
+    max-height: 46dvh;
+    flex-shrink: 0;
+    border-left: none !important;
+    border-top: 1px solid var(--border-light);
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    box-shadow: var(--shadow-up) !important;
+    align-self: auto;
+  }
+
+  /* When right panel is shown, map gets less height */
+  .app:has(.right-panel) .map-container {
+    flex: none;
+    height: calc(54dvh - 0px);
+  }
+
+  /* Overlay bar adjustments */
+  .map-search-overlay {
+    top: 8px;
+    left: 8px;
+    width: calc(100vw - 16px);
+  }
+
+  .open-controls-btn,
+  .sign-in-btn {
+    height: 34px;
+    font-size: 11px;
+    padding: 0 10px;
   }
 }
 
-@media (max-width: 768px) {
-  .controls-panel h2 {
-    font-size: 1.3rem;
+@media (max-width: 480px) {
+  .right-panel {
+    height: clamp(240px, 50dvh, 420px);
+    max-height: 50dvh;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
   }
-  
-  .airport-info-panel {
-    width: 100%;
+
+  .app:has(.right-panel) .map-container {
+    height: 50dvh;
   }
 }

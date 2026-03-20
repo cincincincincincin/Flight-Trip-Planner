@@ -41,12 +41,12 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
   return (
     <div className="controls-panel">
       <div className="controls-panel-header">
-        <h2>🌍 Flight Trip Planner</h2>
+        <h2>Flight Trip Planner</h2>
         <button className="controls-panel-close" onClick={onClose}>✕</button>
       </div>
 
       {isError && (
-        <div className="error-message">⚠️ Failed to load routes</div>
+        <div className="error-message">Failed to load routes</div>
       )}
 
       <div className="controls">
@@ -67,7 +67,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
         </div>
 
         <div className="currency-selector">
-          <label>⏱️ Min. transfer time:</label>
+          <label>Min. transfer time:</label>
           <div className="currency-toggle">
             <button
               className="currency-option"
@@ -84,7 +84,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
         </div>
 
         <div className="currency-selector">
-          <label>🚶 Min. manual transfer:</label>
+          <label>Min. manual transfer:</label>
           <div className="currency-toggle">
             <button
               className="currency-option"
@@ -121,7 +121,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
           className={`color-settings-toggle ${showColorSettings ? 'active' : ''}`}
           onClick={() => setShowColorSettings(v => !v)}
         >
-          🎨 {showColorSettings ? 'Hide Styles' : 'Customize Styles'}
+          {showColorSettings ? 'Hide Styles' : 'Customize Styles'}
         </button>
 
         {/* Sekcja Customize Styles – bez suwaków (showSizes={false}) */}
@@ -145,7 +145,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
                   checked={showRefreshButton}
                   onChange={e => setShowRefreshButton(e.target.checked)}
                 />
-                <span>🔄 Show Refresh Button</span>
+                <span>Show Refresh Button</span>
               </label>
             </div>
 
@@ -156,13 +156,13 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
                   checked={showConsoleLogs}
                   onChange={e => setShowConsoleLogs(e.target.checked)}
                 />
-                <span>🖥️ Show Console Logs</span>
+                <span>Show Console Logs</span>
               </label>
             </div>
 
             <div className="developer-stats">
-              <div className="stat-item">✈️ Airports: {airportsData?.features?.length || 0}{loadingAirports ? ' (loading...)' : ''}</div>
-              <div className="stat-item">🛫 Routes: {routesData?.features?.length || 0}</div>
+              <div className="stat-item">Airports: {airportsData?.features?.length || 0}{loadingAirports ? ' (loading...)' : ''}</div>
+              <div className="stat-item">Routes: {routesData?.features?.length || 0}</div>
             </div>
 
             <div className="control-group">
@@ -173,7 +173,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
                   onChange={e => setShowRoutes(e.target.checked)}
                   disabled={loadingRoutes}
                 />
-                <span>🛫 Routes</span>
+                <span>Routes</span>
                 {loadingRoutes && <span className="loading"> (loading...)</span>}
               </label>
             </div>

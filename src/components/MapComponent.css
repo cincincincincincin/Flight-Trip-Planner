@@ -1,40 +1,72 @@
+/* ═══════════════════════════════════════════════════════════════
+   MAP COMPONENT
+   ═══════════════════════════════════════════════════════════════ */
+
 .map {
-  width: 100%;
-  height: 100%;
-  position: relative;
-}
-
-.map-container {
-  position: relative;
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
 }
 
-/* Popup styling */
+/* ── MapLibre GL overrides ────────────────────────────────────── */
+.maplibregl-ctrl-bottom-left,
+.maplibregl-ctrl-bottom-right {
+  bottom: clamp(32px, 5vh, 52px);
+}
+
+.maplibregl-ctrl-attrib {
+  font-size: 10px;
+  background: var(--bg-glass-hi) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--r-sm) !important;
+}
+
+.maplibregl-ctrl-attrib a { color: var(--text-muted) !important; }
+
 .maplibregl-popup-content {
-  width:fit-content;
-  border-radius: 10px;
-  padding: 15px;
-  font-family: inherit;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--bg-raised) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: var(--r-lg) !important;
+  box-shadow: var(--shadow-lg) !important;
+  padding: 0 !important;
+  font-family: var(--font-sans);
+  overflow: hidden;
+}
+
+.maplibregl-popup-tip {
+  border-top-color: var(--bg-raised) !important;
+  border-bottom-color: var(--bg-raised) !important;
+}
+
+.maplibregl-popup-close-button {
+  color: var(--text-muted) !important;
+  font-size: 16px !important;
+  padding: 4px 8px !important;
+  right: 2px !important;
+  top: 2px !important;
+}
+
+.maplibregl-popup-close-button:hover {
+  color: var(--red) !important;
+  background: var(--red-dim) !important;
+  border-radius: var(--r-sm) !important;
+}
+
+.maplibregl-ctrl-group {
+  background: var(--bg-glass-hi) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: var(--r-md) !important;
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-sm) !important;
 }
 
-.popup-content h4 {
-  margin-bottom: 10px;
-  color: #333;
+.maplibregl-ctrl-group button {
+  color: var(--text-secondary) !important;
 }
 
-.popup-content p {
-  margin-bottom: 5px;
-  color: #555;
-}
-
-.flight-card-popup {
-  min-width: 350px;
-  max-width: 400px;
+.maplibregl-ctrl-group button:hover {
+  background: var(--bg-hover) !important;
 }

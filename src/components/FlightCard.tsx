@@ -179,7 +179,6 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
     <div className={`flight-card${tripHighlight ? ` flight-card--trip-${tripHighlight}` : ''}`} ref={ref}>
       <div className="flight-header">
         <div className="flight-number">
-          <span className="airline">{flight.airline_code || 'N/A'}</span>
           <span className="number">{flight.flight_number}</span>
         </div>
         {flight.airline_name && <div className="airline-name">{flight.airline_name}</div>}
@@ -199,7 +198,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
         </div>
 
         <div className="flight-path">
-          <div className="path-line"><span className="plane-icon">✈️</span></div>
+          <div className="path-line">→</div>
           {duration && <div className="duration">{duration}</div>}
         </div>
 
@@ -255,14 +254,14 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
             rel="noopener noreferrer"
             className="search-online-button"
           >
-            🔍 Search online
+            Search online
           </a>
           <button
             className={`price-button ${showPrices ? 'active' : ''}`}
             onClick={() => setShowPrices(prev => !prev)}
             disabled={priceLoading}
           >
-            {priceLoading ? '⏳ Loading...' : showPrices ? '🔼 Hide Prices' : '💰 Show Prices'}
+            {priceLoading ? 'Loading...' : showPrices ? 'Hide prices' : 'Show prices'}
           </button>
         </div>
       </div>
@@ -299,7 +298,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
                   rel="noopener noreferrer"
                   className="book-button"
                 >
-                  🎫 Book Ticket
+                  Book ticket
                 </a>
               )}
             </div>

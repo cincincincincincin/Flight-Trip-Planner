@@ -1,21 +1,29 @@
+/* ═══════════════════════════════════════════════════════════════
+   SAVE TRIP BUTTON
+   ═══════════════════════════════════════════════════════════════ */
+
 .save-trip-btn {
-  background: rgba(30, 30, 46, 0.9);
-  border: 1px solid #7c6ff7;
-  border-radius: 8px;
-  color: #c4b8ff;
-  font-size: 13px;
-  padding: 7px 14px;
+  padding: 6px clamp(10px, 1.2vw, 14px);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--r-md);
+  color: var(--accent);
+  font-size: clamp(11px, 1vw, 12px);
+  font-weight: 700;
+  font-family: var(--font-display);
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s, color 0.15s;
+  transition: all 0.15s;
+  letter-spacing: 0.03em;
 }
 
 .save-trip-btn:hover:not(:disabled) {
-  background: rgba(124, 111, 247, 0.2);
+  background: var(--accent);
   color: #fff;
+  box-shadow: var(--shadow-float);
 }
 
 .save-trip-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: not-allowed;
 }

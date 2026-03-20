@@ -453,7 +453,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
                   {query.trim().length === 3 && exactAirport && (
                     <div className="search-section">
                       <div className="section-header">
-                        <h4>✈️ Airport code</h4>
+                        <h4>Airport code</h4>
                       </div>
                       <div className="section-content">
                         <div
@@ -461,18 +461,18 @@ const Search = ({ onSelectItem }: SearchProps) => {
                           onClick={() => handleItemClick(exactAirport)}
                         >
                           <div className="item-main">
-                            <span className="item-icon">✈️</span>
+                            <span className="item-icon"></span>
                             <span className="item-name"><b>{exactAirport.name}</b></span>
                             <span className="item-code">({exactAirport.code})</span>
-                            {exactAirport.flightable && <span className="item-badge">🛫</span>}
+                            {exactAirport.flightable && <span className="item-badge"></span>}
                           </div>
                         </div>
                       </div>
                     </div>
                   )}
-                  {renderPhaseSection(1, "Countries", "🌍", renderPhase1Country)}
-                  {renderPhaseSection(2, "Cities", "🏙️", renderPhase2Country)}
-                  {renderPhaseSection(3, "Airports", "✈️", renderPhase3Country)}
+                  {renderPhaseSection(1, "Countries", "", renderPhase1Country)}
+                  {renderPhaseSection(2, "Cities", "", renderPhase2Country)}
+                  {renderPhaseSection(3, "Airports", "", renderPhase3Country)}
 
                   {searchMode === 'contains' && hasResults && (
                     <div className="debug-info" style={{
@@ -483,7 +483,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
                       fontSize: '12px',
                       marginTop: '10px'
                     }}>
-                      ℹ️ Showing results containing "{query}" (prefix search returned no results)
+                      Showing results containing "{query}" (prefix search returned no results)
                     </div>
                   )}
                 </>

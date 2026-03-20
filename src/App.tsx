@@ -590,18 +590,20 @@ function App() {
       <div className="map-container">
         <div className="map-search-overlay">
           {!tripState && <Search onSelectItem={handleSelectItem} />}
-          <button
-            className="open-controls-btn"
-            onClick={() => setControlsPanelOpen(!controlsPanelOpen)}
-          >
-            {controlsPanelOpen ? '✕ Close settings' : '⚙️ Settings'}
-          </button>
-          {!user && (
-            <button className="sign-in-btn" onClick={() => setShowAuthModal(true)}>
-              Sign In
+          <div className="overlay-controls-row">
+            <button
+              className="open-controls-btn"
+              onClick={() => setControlsPanelOpen(!controlsPanelOpen)}
+            >
+              {controlsPanelOpen ? '✕ Close settings' : 'Settings'}
             </button>
-          )}
-          {user && <UserMenu onOpenSavedTrips={() => setShowSavedTrips(true)} />}
+            {!user && (
+              <button className="sign-in-btn" onClick={() => setShowAuthModal(true)}>
+                Sign In
+              </button>
+            )}
+            {user && <UserMenu onOpenSavedTrips={() => setShowSavedTrips(true)} />}
+          </div>
           <TripItinerary
             onUndo={handleUndoRedo}
             onRedo={handleUndoRedo}

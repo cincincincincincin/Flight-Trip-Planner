@@ -1,26 +1,33 @@
+/* ═══════════════════════════════════════════════════════════════
+   TRIP ITINERARY — floating bar over the map
+   ═══════════════════════════════════════════════════════════════ */
+
 .trip-itinerary-wrapper {
-  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
   width: 100%;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
+/* ── Actions bar ─────────────────────────────────────────────── */
 .trip-itinerary-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 4px 8px;
-  background: white;
-  border-radius: 8px; /* standalone — rounded all around */
-  gap: 4px;
-  min-height: 40px;
+  gap: 6px;
+  background: var(--bg-glass-hi);
+  border: 1px solid var(--border-light);
+  border-radius: var(--r-xl);
+  padding: 5px 8px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-md);
+  order: 1;
 }
 
-/* When a scrollable list follows below, flatten the bottom edge */
 .trip-itinerary-actions--has-list {
-  border-radius: 0;
-  border-bottom: 1px solid #e0e0e0;
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  border-bottom-color: transparent;
 }
 
 .trip-itinerary-middle {
@@ -29,180 +36,179 @@
   justify-content: center;
 }
 
+/* ── Action buttons ──────────────────────────────────────────── */
+.trip-action-btn {
+  padding: 5px clamp(8px, 1vw, 14px);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-secondary);
+  font-size: clamp(10px, 1vw, 12px);
+  font-weight: 600;
+  font-family: var(--font-display);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.13s;
+}
+
+.trip-action-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.trip-action-btn:not(:disabled):hover {
+  background: var(--bg-hover);
+  border-color: var(--border-light);
+}
+
+.trip-action-btn--undo:not(:disabled):hover,
+.trip-action-btn--redo:not(:disabled):hover {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-color: var(--accent-border);
+}
+
+.trip-action-btn--close:not(:disabled):hover {
+  color: var(--red);
+  background: var(--red-dim);
+  border-color: var(--red-b);
+}
+
+.trip-action-btn--edit:not(:disabled):hover {
+  color: var(--c-gold);
+  background: var(--c-gold-dim);
+  border-color: var(--c-gold-b);
+}
+
+/* ── Itinerary legs ──────────────────────────────────────────── */
 .trip-itinerary {
-  background: white;
-  max-height: 40vh;
+  background: var(--bg-glass-hi);
+  border: 1px solid var(--border-light);
+  border-radius: 0 0 var(--r-xl) var(--r-xl);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-md);
+  max-height: clamp(160px, 40vh, 380px);
   overflow-y: auto;
-  width: 100%;
+  order: 2;
 }
 
 .trip-leg {
-  padding: 7px 10px;
-  border-bottom: 1px solid #f0f0f0;
-  transition: background-color 0.1s;
+  padding: 7px clamp(10px, 1.5vw, 16px);
+  border-bottom: 1px solid var(--border);
+  cursor: default;
+  transition: background 0.12s;
 }
 
-.trip-leg:last-child {
-  border-bottom: none;
-}
+.trip-leg:last-child { border-bottom: none; }
 
-.trip-leg:not(.trip-leg--manual):hover {
-  background-color: #f0f4ff;
-  cursor: pointer;
-}
+.trip-leg:hover { background: var(--bg-hover); }
 
 .trip-leg--manual {
-  background-color: #fafafa;
-  opacity: 0.7;
+  background: var(--c-plum-dim);
 }
 
-.trip-leg-transfer-time {
-  font-size: 10px;
-  color: #888;
-  padding: 2px 0 0 4px;
-  font-style: italic;
-}
-
-.trip-time-available {
-  font-size: 10px;
-  color: #5c6bc0;
-  padding: 2px 10px;
-  background: #f3f4fd;
-  border-bottom: 1px solid #e8eaf6;
-  text-align: center;
-}
+.trip-leg--manual:hover { background: var(--c-plum-dim); opacity: 0.85; }
 
 .trip-leg-row {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: clamp(6px, 1vw, 14px);
 }
 
 .trip-leg-airport {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+  min-width: 0;
 }
 
 .trip-leg-airport--dest {
   align-items: flex-end;
-  text-align: right;
 }
 
 .trip-leg-code {
-  font-size: 14px;
+  font-family: var(--font-mono);
+  font-size: clamp(12px, 1.2vw, 14px);
   font-weight: 700;
-  color: #333;
-  letter-spacing: 0.04em;
+  color: var(--text-primary);
 }
 
 .trip-leg-datetime {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
 }
 
 .trip-leg-date {
-  font-size: 10px;
-  color: #999;
-  line-height: 1.2;
+  font-size: 9px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
 }
 
 .trip-leg-time {
-  font-size: 12px;
+  font-size: 11px;
+  font-family: var(--font-mono);
   font-weight: 600;
-  color: #555;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
+  color: var(--text-secondary);
 }
 
 .trip-leg-middle {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  min-width: 50px;
+  gap: 1px;
 }
 
-.trip-leg-arrow {
-  font-size: 13px;
-}
-
-.trip-leg-duration {
-  font-size: 10px;
-  color: #999;
-  white-space: nowrap;
-}
+.trip-leg-arrow { font-size: 14px; }
 
 .trip-leg-manual-icon {
   font-size: 14px;
 }
 
-/* Popup: FlightCard shown on hover, positioned fixed */
+.trip-leg-duration {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.trip-leg-transfer-time {
+  font-size: 10px;
+  color: var(--c-plum);
+  font-family: var(--font-mono);
+  text-align: center;
+  margin-top: 3px;
+}
+
+/* ── Time available connector ────────────────────────────────── */
+.trip-time-available {
+  padding: 4px clamp(10px, 1.5vw, 16px);
+  font-size: 10px;
+  color: var(--c-sage);
+  background: var(--c-sage-dim);
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* ── Flight popup (portal) ───────────────────────────────────── */
 .trip-leg-popup {
   position: fixed;
-  z-index: 500;
-  width: 320px;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
-  max-height: 80vh;
-  overflow-y: auto;
-  pointer-events: auto;
+  z-index: 9999;
+  width: clamp(300px, 30vw, 380px);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-light);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
 }
 
-.trip-leg-popup .flight-card {
-  margin-bottom: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.trip-leg-popup .flight-card:hover {
-  transform: none;
-  box-shadow: none;
-}
-
-.trip-action-btn {
-  background: none;
-  border: none;
-  color: #5c6bc0;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: all 0.2s;
-}
-
-.trip-action-btn:hover:not(:disabled) {
-  background: #f0f4ff;
-}
-
-.trip-action-btn:disabled {
-  color: #ccc;
-  cursor: not-allowed;
-}
-
-.trip-action-btn--edit {
-  color: #7c6ff7;
-}
-
-.trip-action-btn--edit:hover:not(:disabled) {
-  background: rgba(124, 111, 247, 0.1);
-}
-
-.trip-action-btn--close {
-  color: #e57373;
-}
-
-.trip-action-btn--close:hover:not(:disabled) {
-  background: rgba(229, 115, 115, 0.1);
-}
-
-/* SaveTripButton rendered inside the compact actions bar */
-.trip-itinerary-middle .save-trip-btn {
-  font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 6px;
+/* ── Mobile ──────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .trip-itinerary {
+    max-height: 28vh;
+  }
 }

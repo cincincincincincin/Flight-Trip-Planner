@@ -27,15 +27,15 @@ const UserMenu: React.FC<UserMenuProps> = ({ onOpenSavedTrips }) => {
   return (
     <div className="user-menu" ref={ref}>
       <button className="user-menu__trigger" onClick={() => setOpen(o => !o)}>
-        👤 {label} ▾
+        {label} ▾
       </button>
       {open && (
         <div className="user-menu__dropdown">
           <button onClick={() => { onOpenSavedTrips(); setOpen(false); }}>
-            🗺️ Saved Trips
+            Saved Trips
           </button>
           <button onClick={() => { signOut(); setOpen(false); }}>
-            🚪 Sign Out
+            Sign Out
           </button>
         </div>
       )}

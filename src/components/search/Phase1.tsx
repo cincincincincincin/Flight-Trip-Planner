@@ -85,10 +85,10 @@ const Phase1 = React.memo(({
             className="item-main"
             onClick={() => handleItemClick(city)}
           >
-            <span className="item-icon">🏙️</span>
+            <span className="item-icon"></span>
             <span className="item-name">{city.name}</span>
             <span className="item-code">({city.code})</span>
-            {city.has_flightable_airport && <span className="item-badge">🛫</span>}
+            {city.has_flightable_airport && <span className="item-badge"></span>}
           </div>
 
           <button
@@ -113,9 +113,6 @@ const Phase1 = React.memo(({
             />
             {cachedAirports.length > 0 ? (
               <>
-                <div className="debug-info" style={{ fontSize: '9px', color: '#666', padding: '3px 16px' }}>
-                  Showing {cachedAirports.length} airports for {city.name}
-                </div>
                 {cachedAirports.map(airport => (
                   <div
                     key={`phase1-airport-${airport.code}`}
@@ -123,10 +120,10 @@ const Phase1 = React.memo(({
                     onClick={() => handleItemClick(airport)}
                   >
                     <div className="item-main">
-                      <span className="item-icon">✈️</span>
+                      <span className="item-icon"></span>
                       <span className="item-name">{airport.name}</span>
                       <span className="item-code">({airport.code})</span>
-                      {airport.flightable && <span className="item-badge">🛫</span>}
+                      {airport.flightable && <span className="item-badge"></span>}
                     </div>
                   </div>
                 ))}
@@ -152,7 +149,7 @@ const Phase1 = React.memo(({
         className="item-main"
         onClick={() => handleItemClick(country)}
       >
-        <span className="item-icon">🌍</span>
+        <span className="item-icon"></span>
         <span className="item-name">
           {highlightText(country.name, query, searchMode)}
         </span>
@@ -185,7 +182,7 @@ const Phase1 = React.memo(({
             <div className="no-items">No cities available</div>
           ) : (
             <>
-              <div className="debug-info" style={{ fontSize: '10px', color: '#999', padding: '5px 16px' }}>
+              <div className="debug-info" style={{ display: 'none' }}>
                 Showing {cachedCities.length} cities for {country.name}
                 {citiesPagination?.total ? ` (${citiesPagination.total} total)` : ''}
                 {citiesPagination?.hasMore ?

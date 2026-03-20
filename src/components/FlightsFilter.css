@@ -1,214 +1,252 @@
+/* ═══════════════════════════════════════════════════════════════
+   FLIGHTS FILTER
+   ═══════════════════════════════════════════════════════════════ */
+
 .flights-filter {
-  border-top: 1px solid #e0e0e0;
-  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex-shrink: 0;
 }
 
+/* ── Header ──────────────────────────────────────────────────── */
 .ff-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 6px;
 }
 
 .ff-toggle-btn {
-  flex: 1;
-  text-align: left;
-  background: none;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  padding: 5px 10px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #444;
+  width: 100%;
+  padding: 6px clamp(10px, 1.2vw, 14px);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-light);
+  border-radius: var(--r-sm);
+  color: var(--text-secondary);
+  font-size: clamp(10px, 1vw, 12px);
+  font-weight: 600;
+  font-family: var(--font-display);
   cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.13s;
+  letter-spacing: 0.02em;
+  text-align: left;
 }
 
 .ff-toggle-btn:hover {
-  background: #f0f0f0;
+  background: var(--bg-hover);
+  border-color: var(--accent-border);
+  color: var(--accent);
 }
 
 .ff-clear-btn {
+  padding: 5px 10px;
+  background: var(--red-dim);
+  border: 1px solid var(--red-b);
+  border-radius: var(--r-sm);
+  color: var(--red);
   font-size: 11px;
-  color: #e53935;
-  background: none;
-  border: none;
+  font-weight: 600;
+  font-family: var(--font-display);
   cursor: pointer;
-  padding: 2px 6px;
   white-space: nowrap;
+  transition: all 0.13s;
 }
 
+.ff-clear-btn:hover {
+  background: var(--red);
+  color: #fff;
+}
+
+/* ── Body ────────────────────────────────────────────────────── */
 .ff-body {
-  padding: 8px 12px 12px;
-  border-top: 1px solid #eee;
-  max-height: 350px;
-  overflow-y: auto;
-  background: #fafafa;
-  color: #333;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
 }
 
+/* ── Chips ───────────────────────────────────────────────────── */
 .ff-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-bottom: 8px;
 }
 
 .ff-chip {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 2px 6px 2px 8px;
-  background: #e3f2fd;
-  border: 1px solid #90caf9;
-  border-radius: 12px;
+  gap: 4px;
+  padding: 3px 7px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--r-pill);
   font-size: 11px;
-  color: #1565c0;
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-weight: 600;
 }
 
 .ff-chip button {
-  background: none;
   border: none;
+  background: none;
+  color: inherit;
   cursor: pointer;
-  color: #1565c0;
   padding: 0;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1;
+  opacity: 0.7;
+  transition: opacity 0.1s;
 }
 
+.ff-chip button:hover { opacity: 1; }
+
+/* ── Section title ───────────────────────────────────────────── */
 .ff-section-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: #555;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 4px;
+  letter-spacing: 0.10em;
+  margin-bottom: 5px;
+}
+
+/* ── Destination section ─────────────────────────────────────── */
+.ff-dest-section {
+  position: relative;
 }
 
 .ff-search-input {
   width: 100%;
-  padding: 6px 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  padding: 7px 10px;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--r-sm);
   font-size: 12px;
+  outline: none;
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  color-scheme: light;
+  -webkit-text-fill-color: var(--text-primary);
+  transition: border-color 0.13s;
   box-sizing: border-box;
-  margin-bottom: 6px;
-  color: #333;
-  background-color: #ffffff;
-  -webkit-text-fill-color: #333;
 }
 
 .ff-search-input::placeholder {
-  color: #aaa;
-  -webkit-text-fill-color: #aaa;
+  color: var(--text-muted);
+  -webkit-text-fill-color: var(--text-muted);
 }
 
 .ff-search-input:focus {
-  outline: none;
-  border-color: #90caf9;
+  border-color: var(--accent);
+  box-shadow: var(--accent-glow);
 }
 
+/* ── Results dropdown ────────────────────────────────────────── */
 .ff-results {
-  max-height: 160px;
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  right: 0;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-light);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 800;
+  max-height: clamp(200px, 35vh, 320px);
   overflow-y: auto;
-  border: 1px solid #eee;
-  border-radius: 4px;
-  background: #fff;
-  color: #333;
 }
 
-.ff-section {
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.ff-section:last-child {
-  border-bottom: none;
-}
+/* ── Section inside results ──────────────────────────────────── */
+.ff-section { padding: 4px 0; }
 
 .ff-section-label {
-  font-size: 10px;
-  font-weight: 600;
-  color: #888;
-  padding: 4px 8px 2px;
+  padding: 4px 10px 2px;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--text-muted);
   text-transform: uppercase;
-  background: #f8f8f8;
+  letter-spacing: 0.10em;
 }
 
+/* ── Items ───────────────────────────────────────────────────── */
 .ff-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 5px 8px;
-  font-size: 12px;
+  padding: 5px 10px;
   cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+  transition: background 0.10s;
   gap: 4px;
-  color: #333;
 }
 
-.ff-item:hover {
-  background: #f5f5f5;
-}
+.ff-item:hover { background: var(--bg-hover); }
 
-.ff-item.ff-selected {
-  background: #e8f5e9;
-  color: #2e7d32;
-}
+.ff-item.ff-selected { background: var(--green-dim); }
 
 .ff-item-left {
   display: flex;
   align-items: center;
   gap: 4px;
   flex: 1;
-  cursor: pointer;
-}
-
-.ff-country-wrapper {
-  border-bottom: 1px solid #f5f5f5;
-}
-
-.ff-city-wrapper {
-  padding-left: 8px;
-}
-
-.ff-nested {
-  padding-left: 8px;
-  border-left: 2px solid #f0f0f0;
+  min-width: 0;
 }
 
 .ff-expand-btn {
-  background: none;
   border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 9px;
   cursor: pointer;
-  font-size: 10px;
-  color: #888;
-  padding: 2px 4px;
+  padding: 0 4px;
   flex-shrink: 0;
 }
 
-.ff-check {
-  color: #2e7d32;
-  font-weight: bold;
-  font-size: 11px;
-}
-
 .ff-code {
-  color: #888;
+  font-family: var(--font-mono);
   font-size: 10px;
+  color: var(--text-muted);
 }
 
-.ff-dest-section {
-  margin-bottom: 10px;
+.ff-check {
+  color: var(--c-sage);
+  font-weight: 700;
+  font-size: 11px;
+  flex-shrink: 0;
 }
 
-.ff-airline-section {
-  border-top: 1px solid #eee;
-  padding-top: 8px;
+/* ── Nested items ────────────────────────────────────────────── */
+.ff-country-wrapper { border-bottom: 1px solid var(--border); }
+.ff-country-wrapper:last-child { border-bottom: none; }
+
+.ff-country { font-weight: 600; }
+
+.ff-nested {
+  margin-left: 14px;
+  border-left: 2px solid var(--c-coral-b);
 }
+
+.ff-city {
+  font-size: 11px;
+  padding-left: 8px;
+}
+
+.ff-airport {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding-left: 4px;
+}
+
+/* ── Airlines section ────────────────────────────────────────── */
+.ff-airline-section { padding-top: 4px; }
 
 .ff-airlines {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  max-height: 100px;
+  gap: 2px;
+  max-height: clamp(120px, 18vh, 200px);
   overflow-y: auto;
 }
 
@@ -216,12 +254,25 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  color: #333;
+  padding: 5px 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
   cursor: pointer;
-  padding: 2px 0;
+  font-size: 11px;
+  color: var(--text-primary);
+  transition: all 0.12s;
 }
 
-.ff-airline-item input {
+.ff-airline-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-border);
+}
+
+.ff-airline-item input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 13px;
+  height: 13px;
   cursor: pointer;
+  flex-shrink: 0;
 }

@@ -1,209 +1,164 @@
+/* ═══════════════════════════════════════════════════════════════
+   FLIGHTS LIST
+   ═══════════════════════════════════════════════════════════════ */
+
 .flights-list {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
+/* ── List header ─────────────────────────────────────────────── */
 .flights-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 16px;
-  background: #f8f9fa;
-  border-bottom: 1px solid #e0e0e0;
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  justify-content: space-between;
+  gap: 8px;
+  padding: clamp(6px, 1vh, 10px) clamp(10px, 1.2vw, 16px);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+  flex-shrink: 0;
+}
+
+.flights-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 .flights-info h4 {
-  margin: 0 0 4px 0;
-  font-size: 16px;
-  color: #333;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .last-fetched {
-  font-size: 11px;
-  color: #666;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
 }
 
 .refresh-button {
-  padding: 8px 16px;
-  background: #1976d2;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
+  flex-shrink: 0;
+  padding: 5px 10px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-light);
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s ease;
+  white-space: nowrap;
+  transition: all 0.13s;
 }
 
-.refresh-button:hover:not(:disabled) {
-  background: #1565c0;
-  transform: translateY(-1px);
+.refresh-button:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent-border);
+  color: var(--accent);
 }
 
 .refresh-button:disabled {
-  opacity: 0.6;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-.flights-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-}
-
+/* ── Virtuoso wrapper ────────────────────────────────────────── */
 .flights-virtuoso-wrapper {
-  height: 500px;
+  flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .flights-virtuoso-wrapper > div {
-  padding: 0 16px;
+  height: 100%;
 }
 
-.flights-error,
+/* ── Loading footer ──────────────────────────────────────────── */
+.loading-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px;
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-direction: column;
+}
+
+/* ── Spinner ─────────────────────────────────────────────────── */
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-light);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Empty / error states ────────────────────────────────────── */
 .no-flights {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 48px 24px;
+  gap: 6px;
+  padding: clamp(24px, 5vh, 48px) 20px;
   text-align: center;
 }
 
-.error-icon,
 .no-flights-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-.error-message,
-.no-flights-message {
-  font-size: 16px;
-  color: #d32f2f;
-  margin-bottom: 16px;
+  font-size: 28px;
+  opacity: 0.35;
 }
 
 .no-flights-message {
-  color: #666;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .no-flights-hint {
-  font-size: 13px;
-  color: #999;
-  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
-.retry-button {
-  padding: 10px 24px;
-  background: #d32f2f;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.retry-button:hover {
-  background: #c62828;
-  transform: translateY(-1px);
-}
-
-.loading-more {
+.flights-error {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 24px;
-  color: #666;
-  font-size: 14px;
-}
-
-.spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid #f3f3f3;
-  border-top: 3px solid #1976d2;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 12px;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.end-of-list {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 32px 24px;
-  color: #999;
-  font-size: 14px;
+  gap: 10px;
+  padding: clamp(24px, 5vh, 48px) 20px;
   text-align: center;
 }
 
-.end-icon {
-  font-size: 32px;
-  margin-bottom: 8px;
+.error-icon { font-size: 24px; }
+
+.flights-error .error-message {
+  font-size: 12px;
+  color: var(--red);
+  background: var(--red-dim);
+  border: 1px solid var(--red-b);
+  border-radius: var(--r-sm);
+  padding: 8px 12px;
 }
 
-/* Scrollbar styling */
-.flights-container::-webkit-scrollbar,
-.flights-virtuoso-wrapper [data-virtuoso-scroller]::-webkit-scrollbar {
-  width: 8px;
+.retry-button {
+  padding: 7px 16px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-md);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.13s;
 }
 
-.flights-container::-webkit-scrollbar-track,
-.flights-virtuoso-wrapper [data-virtuoso-scroller]::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 4px;
-}
-
-.flights-container::-webkit-scrollbar-thumb,
-.flights-virtuoso-wrapper [data-virtuoso-scroller]::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 4px;
-}
-
-.flights-container::-webkit-scrollbar-thumb:hover,
-.flights-virtuoso-wrapper [data-virtuoso-scroller]::-webkit-scrollbar-thumb:hover {
-  background: #555;
-}
-
-/* Date section styling */
-.date-section {
-  margin-bottom: 24px;
-}
-
-.date-separator {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 8px;
-  background: white;
-}
-
-.date-separator-line {
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, #ddd, transparent);
-}
-
-.date-separator-text {
-  font-size: 14px;
-  font-weight: 700;
-  color: #667eea;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  white-space: nowrap;
-  padding: 4px 12px;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
-  border-radius: 12px;
-}
+.retry-button:hover { background: #1560e0; }

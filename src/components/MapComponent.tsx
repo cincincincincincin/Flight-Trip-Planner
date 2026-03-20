@@ -2368,7 +2368,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
         fontFamily: 'Arial, sans-serif', padding: '20px', textAlign: 'center'
       }}>
         <div>
-          <h3 style={{ marginBottom: '10px', color: '#dc3545' }}>⚠️ Map could not be loaded</h3>
+          <h3 style={{ marginBottom: '10px', color: '#dc3545' }}>Map could not be loaded</h3>
           <p>WebGL is not supported in your browser. Please update or try a different browser.</p>
         </div>
       </div>

@@ -161,7 +161,7 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
             className="trip-action-btn trip-action-btn--edit"
             title={tripEnded ? 'Trip has already ended' : 'Edit this trip'}
           >
-            ✏️ Edit
+            Edit
           </button>
         ) : (
           <button
@@ -231,10 +231,10 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
 
                     <div className="trip-leg-middle">
                       {isManual ? (
-                        <span className="trip-leg-manual-icon" title="Manual transfer">🚶</span>
+                        <span className="trip-leg-manual-icon" title="Manual transfer">↔</span>
                       ) : (
                         <>
-                          <span className="trip-leg-arrow">✈️</span>
+                          <span className="trip-leg-arrow">→</span>
                           {duration && <span className="trip-leg-duration">{duration}</span>}
                         </>
                       )}

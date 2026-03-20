@@ -297,7 +297,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
     return (
       <div key={ap.code} className={`ff-item ff-airport ${selected ? 'ff-selected' : ''}`}
         onClick={() => selectItem('airport', ap.code, ap.cityCode, ap.countryCode)}>
-        <span>✈️ {ap.name} <span className="ff-code">({ap.code})</span></span>
+        <span>{ap.name} <span className="ff-code">({ap.code})</span></span>
         {selected && <span className="ff-check">✓</span>}
       </div>
     );
@@ -312,7 +312,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
             <button className="ff-expand-btn" onClick={onCityToggle}>{expanded ? '▼' : '▶'}</button>
           )}
           <div className="ff-item-left" onClick={() => selectItem('city', ci.code, undefined, ci.countryCode)}>
-            <span>🏙️ {ci.name || ci.code} {ci.code !== '__nocity__' && <span className="ff-code">({ci.code})</span>}</span>
+            <span>{ci.name || ci.code} {ci.code !== '__nocity__' && <span className="ff-code">({ci.code})</span>}</span>
             {selected && <span className="ff-check">✓</span>}
           </div>
         </div>
@@ -344,7 +344,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
             </button>
           )}
           <div className="ff-item-left" onClick={() => selectItem('country', country.code)}>
-            <span>🌍 {country.name} <span className="ff-code">({country.code})</span></span>
+            <span>{country.name} <span className="ff-code">({country.code})</span></span>
             {isCountrySelected && <span className="ff-check">✓</span>}
           </div>
         </div>
@@ -403,20 +403,20 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
               {/* Change 6: Show full names in chips */}
               {destinationFilter.countries.map(code => {
                 const country = destData.find(c => c.code === code);
-                return <span key={`c-${code}`} className="ff-chip">🌍 {country?.name || code} <button onClick={() => selectItem('country', code)}>×</button></span>;
+                return <span key={`c-${code}`} className="ff-chip">{country?.name || code} <button onClick={() => selectItem('country', code)}>×</button></span>;
               })}
               {destinationFilter.cities.map(code => {
                 const city = destData.flatMap(c => c.cities).find(ci => ci.code === code);
-                return <span key={`ci-${code}`} className="ff-chip">🏙️ {city?.name || code} <button onClick={() => selectItem('city', code, undefined, city?.countryCode)}>×</button></span>;
+                return <span key={`ci-${code}`} className="ff-chip">{city?.name || code} <button onClick={() => selectItem('city', code, undefined, city?.countryCode)}>×</button></span>;
               })}
               {destinationFilter.airports.map(code => {
                 const apName = airportNameMap[code] || code;
                 const ap = destData.flatMap(c => c.cities).flatMap(ci => ci.airports).find(a => a.code === code);
-                return <span key={`a-${code}`} className="ff-chip">✈️ {apName} ({code}) <button onClick={() => selectItem('airport', code, ap?.cityCode, ap?.countryCode)}>×</button></span>;
+                return <span key={`a-${code}`} className="ff-chip">{apName} ({code}) <button onClick={() => selectItem('airport', code, ap?.cityCode, ap?.countryCode)}>×</button></span>;
               })}
               {airlineFilter.map(code => {
                 const a = airlines.find(al => al.code === code);
-                return <span key={`al-${code}`} className="ff-chip">🛩️ {a?.name || code} <button onClick={() => toggleAirline(code)}>×</button></span>;
+                return <span key={`al-${code}`} className="ff-chip">{a?.name || code} <button onClick={() => toggleAirline(code)}>×</button></span>;
               })}
             </div>
           )}
@@ -439,7 +439,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
                 {/* Exact airport code */}
                 {exactAirport && (
                   <div className="ff-section">
-                    <div className="ff-section-label">✈️ Airport code</div>
+                    <div className="ff-section-label">Airport code</div>
                     {renderAirport(exactAirport)}
                   </div>
                 )}

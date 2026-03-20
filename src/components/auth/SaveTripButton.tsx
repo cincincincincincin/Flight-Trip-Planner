@@ -71,7 +71,7 @@ const SaveTripButton: React.FC = () => {
         disabled={isPending}
         title={isUpdate ? 'Update existing trip' : 'Save current trip'}
       >
-        {isPending ? '💾 Saving...' : isUpdate ? '💾 Update Trip' : '💾 Save Trip'}
+        {isPending ? 'Saving...' : isUpdate ? 'Update Trip' : 'Save Trip'}
       </button>
 
       {showNameModal && (

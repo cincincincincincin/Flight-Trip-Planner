@@ -50,7 +50,7 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
       if (!firstDep && leg.flight.scheduled_departure_utc) firstDep = leg.flight.scheduled_departure_utc;
       if (leg.flight.scheduled_arrival_utc) lastArr = leg.flight.scheduled_arrival_utc;
     }
-    const fmt = (s: string) => new Date(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' });
+    const fmt = (s: string) => new Date(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
     const dateRange = firstDep && lastArr ? `${fmt(firstDep)} – ${fmt(lastArr)}` : null;
     return { countriesCount: countries.size, dateRange };
   };

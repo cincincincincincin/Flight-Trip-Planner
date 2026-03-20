@@ -320,9 +320,9 @@ const AirportTransferPicker = ({
         </>
       ) : (
         <div className="atp-display" onClick={handleOpen} title="Click to add airports to search">
-          <span className="atp-icon">✈️</span>
+          <span className="atp-icon"></span>
           <span className="atp-name">{displayName}</span>
-          <span className="atp-hint">🔍</span>
+          <span className="atp-hint">▾</span>
         </div>
       )}
     </div>

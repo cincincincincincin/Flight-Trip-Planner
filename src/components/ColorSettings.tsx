@@ -423,7 +423,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ color, onChange, title }) => 
         title={'EyeDropper' in window ? 'Pick color from screen' : 'Not supported in this browser'}
         disabled={!('EyeDropper' in window)}
       >
-        🔍 Eyedropper
+        Eyedropper
       </button>
       <div className="cp-canvases">
         <canvas
@@ -599,7 +599,7 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
       {!showOnlySizes && (
         <>
           <div className="color-settings-header">
-            <span className="color-settings-title">🎨 Colors</span>
+            <span className="color-settings-title">Colors</span>
             <button className="color-settings-reset" onClick={resetColors}>Reset all</button>
           </div>
 

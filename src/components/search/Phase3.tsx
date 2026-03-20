@@ -70,7 +70,7 @@ const Phase3 = React.memo(({
         className="item-main"
         onClick={() => handleItemClick(country)}
       >
-        <span className="item-icon">🌍</span>
+        <span className="item-icon"></span>
         <span className="item-name">{country.name}</span>
         <span className="item-code">({country.code})</span>
       </div>
@@ -93,9 +93,6 @@ const Phase3 = React.memo(({
             style={{ height: '1px', width: '1px', position: 'absolute', top: '0', left: '0', opacity: '0' }}
           />
 
-          <div className="debug-info" style={{ fontSize: '10px', color: '#999', padding: '5px 16px' }}>
-            Showing {cities.length} cities with MATCHING airports for {country.name} (from API)
-          </div>
           {cities.map((city: City) => {
             const isCityExpanded = expandedCities.has(city.code);
             const airports = city.airports || [];
@@ -107,10 +104,10 @@ const Phase3 = React.memo(({
                     className="item-main"
                     onClick={() => handleItemClick(city)}
                   >
-                    <span className="item-icon">🏙️</span>
+                    <span className="item-icon"></span>
                     <span className="item-name">{city.name}</span>
                     <span className="item-code">({city.code})</span>
-                    {city.has_flightable_airport && <span className="item-badge">🛫</span>}
+                    {city.has_flightable_airport && <span className="item-badge"></span>}
                   </div>
 
                   {airports.length > 0 && (
@@ -131,9 +128,6 @@ const Phase3 = React.memo(({
                       data-city-code={city.code}
                       style={{ height: '1px', width: '1px', position: 'absolute', top: '0', left: '0', opacity: '0' }}
                     />
-                    <div className="debug-info" style={{ fontSize: '9px', color: '#666', padding: '3px 16px' }}>
-                      Showing {airports.length} MATCHING airports for {city.name} (from API)
-                    </div>
                     {airports.map((airport: Airport) => (
                       <div
                         key={`phase3-airport-${airport.code}`}
@@ -141,12 +135,12 @@ const Phase3 = React.memo(({
                         onClick={() => handleItemClick(airport)}
                       >
                         <div className="item-main">
-                          <span className="item-icon">✈️</span>
+                          <span className="item-icon"></span>
                           <span className="item-name">
                             {highlightText(airport.name, query, searchMode)}
                           </span>
                           <span className="item-code">({airport.code})</span>
-                          {airport.flightable && <span className="item-badge">🛫</span>}
+                          {airport.flightable && <span className="item-badge"></span>}
                         </div>
                       </div>
                     ))}
