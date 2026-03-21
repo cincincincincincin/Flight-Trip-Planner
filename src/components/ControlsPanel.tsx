@@ -20,6 +20,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
   const {
     showRoutes, setShowRoutes,
     mapStyle, setMapStyle,
+    globeMode, setGlobeMode,
   } = useMapStore();
 
   const {
@@ -104,16 +105,24 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
           <label>Map Style:</label>
           <select onChange={e => setMapStyle(e.target.value)} className="style-select" value={mapStyle}>
             <option value="https://demotiles.maplibre.org/style.json">Light (default)</option>
-            <option value="https://demotiles.maplibre.org/globe.json">Globe</option>
             <option value="https://tiles.basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json">Dark Matter</option>
             <option value="https://tiles.basemaps.cartocdn.com/gl/positron-gl-style/style.json">Positron</option>
             <option value="https://tiles.basemaps.cartocdn.com/gl/voyager-gl-style/style.json">Voyager</option>
             <option value="arcgis:satellite">Satellite</option>
-            <option value="arcgis:satellite-globe">Satellite Globe</option>
             <option value="arcgis:imagery">ArcGIS Imagery</option>
             <option value="arcgis:charted-territory">ArcGIS Charted Territory</option>
             <option value="arcgis:community">ArcGIS Community</option>
           </select>
+          <div className="globe-toggle-row">
+            <span className="globe-toggle-label">Globe</span>
+            <button
+              className={`globe-toggle-btn ${globeMode ? 'active' : ''}`}
+              onClick={() => setGlobeMode(!globeMode)}
+              title={globeMode ? 'Switch to flat map' : 'Switch to globe'}
+            >
+              <span className="globe-toggle-thumb" />
+            </button>
+          </div>
         </div>
 
         {/* Przycisk Customize Styles */}

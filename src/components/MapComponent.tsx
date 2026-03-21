@@ -60,13 +60,15 @@ function arcGISTransformRequest(url: string, _resourceType?: string): { url: str
   return { url };
 }
 
-function resolveMapStyle(style: string): string | maplibregl.StyleSpecification {
+function resolveMapStyle(style: string, globeMode = false): string | maplibregl.StyleSpecification {
+  const projection = globeMode ? { type: 'globe' } : undefined;
   switch (style) {
     case 'arcgis:satellite':
       return {
         version: 8,
         name: 'Satellite Map',
         glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
+        ...(projection && { projection } as any),
         sources: {
           satellite: {
             type: 'raster',
@@ -103,55 +105,16 @@ function resolveMapStyle(style: string): string | maplibregl.StyleSpecification 
           } as maplibregl.SymbolLayerSpecification,
         ],
       };
-    case 'arcgis:satellite-globe':
-      return {
-        version: 8,
-        name: 'Satellite Globe',
-        glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
-        projection: { type: 'globe' } as any,
-        sources: {
-          satellite: {
-            type: 'raster',
-            tiles: [`https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=${ARCGIS_API_KEY}`],
-            tileSize: 256,
-            attribution: 'Powered by <a href="https://www.esri.com/" target="_blank" rel="noopener noreferrer">Esri</a> | <a href="https://maplibre.org/" target="_blank" rel="noopener noreferrer">MapLibre</a> | Sources: Esri, TomTom, Garmin, FAO, NOAA, USGS, \u00a9 OpenStreetMap contributors, and the GIS User Community | Source: Esri, Vantor, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community',
-          },
-          world: {
-            type: 'vector',
-            url: 'https://demotiles.maplibre.org/tiles/tiles.json',
-            attribution: '',
-          },
-        },
-        layers: [
-          { id: 'satellite', type: 'raster', source: 'satellite' } as maplibregl.RasterLayerSpecification,
-          {
-            id: 'country-borders',
-            type: 'line',
-            source: 'world',
-            'source-layer': 'countries',
-            paint: { 'line-color': '#ffffff', 'line-width': 1.5 },
-          } as maplibregl.LineLayerSpecification,
-          {
-            id: 'country-labels',
-            type: 'symbol',
-            source: 'world',
-            'source-layer': 'centroids',
-            layout: {
-              'text-field': ['get', 'NAME'],
-              'text-font': ['Open Sans Regular'],
-              'text-size': ['interpolate', ['linear'], ['zoom'], 0, 14, 5, 18, 8, 22],
-            },
-            paint: { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 },
-          } as maplibregl.SymbolLayerSpecification,
-        ],
-      };
     case 'arcgis:imagery':
     case 'arcgis:charted-territory':
     case 'arcgis:community':
       // Plugin styles: map is initialised with a blank spec; BasemapStyle.applyStyle
       // fetches and applies the real style after the map's 'load' event fires.
+      // Globe projection for plugin styles is applied via setProjection in onMapReady.
       return { version: 8, sources: {}, layers: [] } as maplibregl.StyleSpecification;
     default:
+      // URL-based styles (carto, demotiles): return the URL as-is.
+      // Globe projection is applied via setProjection after load.
       return style;
   }
 }
@@ -168,7 +131,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   rightPanelRef,
 }, ref) => {
   // Stores
-  const { showAirports, showCities, showRoutes, mapStyle, flyToZoom, setFlyToZoom } = useMapStore();
+  const { showAirports, showCities, showRoutes, mapStyle, globeMode, flyToZoom, setFlyToZoom } = useMapStore();
   const { highlightedAirports, selectedAirportCode, selectedAirportCodes, highlightedCities, flightsData, displayedFlights, explorationItems } = useSelectionStore();
   const { tripState, tripRoutes, previewAirportCode, manualTransferAirportCodes } = useTripStore();
   const { travelDate, timezone } = useSettingsStore();
@@ -475,6 +438,8 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     },
   }));
 
+  const initMapId = useRef(0);
+
   const initMap = useCallback(() => {
     if (!webglSupported || !mapContainer.current) return;
 
@@ -489,96 +454,113 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     }
 
     isMapLoading.current = true;
+    const initId = ++initMapId.current;
 
-    try {
-      const isPlugin = isArcGISPluginStyle(mapStyle);
+    const currentGlobeMode = useMapStore.getState().globeMode;
+    const isPlugin = isArcGISPluginStyle(mapStyle);
+    const resolvedStyle = resolveMapStyle(mapStyle, currentGlobeMode);
 
-      // Always provide a style to the Map constructor so that map.style is never null.
-      // Plugin styles start with a blank spec; BasemapStyle.applyStyle is called once
-      // the blank style fires its 'load' event (at which point isStyleLoaded() is true).
-      map.current = new maplibregl.Map({
-        container: mapContainer.current,
-        style: resolveMapStyle(mapStyle), // blank spec for plugins, real spec/URL for others
-        center: [19.0, 52.0],
-        zoom: 4,
-        attributionControl: false,
-        antialias: true,
-        preserveDrawingBuffer: true,
-        failIfMajorPerformanceCaveat: false,
-        desynchronized: false,
-        dragRotate: false,
-        transformRequest: arcGISTransformRequest,
-      } as maplibregl.MapOptions);
+    const doCreateMap = (style: string | maplibregl.StyleSpecification) => {
+      if (initId !== initMapId.current || !mapContainer.current) return;
+      try {
+        map.current = new maplibregl.Map({
+          container: mapContainer.current,
+          style,
+          center: [19.0, 52.0],
+          zoom: 4,
+          attributionControl: false,
+          antialias: true,
+          preserveDrawingBuffer: true,
+          failIfMajorPerformanceCaveat: false,
+          desynchronized: false,
+          dragRotate: false,
+          transformRequest: arcGISTransformRequest,
+        } as maplibregl.MapOptions);
 
-      const onMapReady = () => {
-        isMapLoading.current = false;
-        setMapLoaded(true);
-        addControls();
-        addLayers();
-        const { zoomRangeMin, zoomRangeMax } = useColorStore.getState();
-        const minZ = Math.max(1, Math.min(zoomRangeMin, zoomRangeMax));
-        const maxZ = Math.min(12, Math.max(zoomRangeMin, zoomRangeMax));
-        map.current?.setMinZoom(minZ);
-        map.current?.setMaxZoom(maxZ);
-      };
+        const onMapReady = () => {
+          isMapLoading.current = false;
+          setMapLoaded(true);
+          addControls();
+          addLayers();
+          const { zoomRangeMin, zoomRangeMax } = useColorStore.getState();
+          const minZ = Math.max(1, Math.min(zoomRangeMin, zoomRangeMax));
+          const maxZ = Math.min(12, Math.max(zoomRangeMin, zoomRangeMax));
+          map.current?.setMinZoom(minZ);
+          map.current?.setMaxZoom(maxZ);
+        };
 
-      map.current.on('load', () => {
-        if (isPlugin) {
-          // Blank style is now loaded → isStyleLoaded() is true → safe to call applyStyle.
-          const bs = BasemapStyle.applyStyle(map.current!, {
-            map: map.current!,
-            style: toPluginStyleName(mapStyle),
-            token: ARCGIS_API_KEY,
-          });
-          bs.on('BasemapStyleLoad', () => {
-            console.log('ArcGIS plugin style loaded:', mapStyle);
-            onMapReady();
-            // The plugin injects its own attribution control at bottom-right.
-            // Move it to bottom-left and clean up the text to match other styles.
-            requestAnimationFrame(() => {
-              if (!map.current) return;
-              const c = map.current.getContainer();
-              const attrib = c.querySelector<HTMLElement>('.maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib');
-              const bottomLeft = c.querySelector('.maplibregl-ctrl-bottom-left');
-              if (attrib && bottomLeft) {
-                bottomLeft.appendChild(attrib);
-              }
-              const inner = c.querySelector('.maplibregl-ctrl-attrib-inner');
-              if (inner) {
-                inner.innerHTML = '© <a href="https://www.esri.com/" target="_blank" rel="noopener noreferrer">Esri</a> and contributors';
-              }
+        map.current.on('load', () => {
+          if (isPlugin) {
+            // Blank style is now loaded → isStyleLoaded() is true → safe to call applyStyle.
+            const bs = BasemapStyle.applyStyle(map.current!, {
+              map: map.current!,
+              style: toPluginStyleName(mapStyle),
+              token: ARCGIS_API_KEY,
             });
-          });
-          bs.on('BasemapStyleError', (err: Error) => {
-            console.error('ArcGIS basemap style error:', err);
-            isMapLoading.current = false;
-          });
-        } else {
-          console.log('Map loaded successfully');
-          onMapReady();
-        }
-      });
-
-      map.current.on('move', () => {
-        if (!map.current || !onViewportChange) return;
-        const center = map.current.getCenter();
-        const zoom = map.current.getZoom();
-        const pitch = map.current.getPitch();
-        const bearing = map.current.getBearing();
-        onViewportChange({
-          center: [center.lng, center.lat],
-          zoom,
-          pitch,
-          bearing
+            bs.on('BasemapStyleLoad', () => {
+              console.log('ArcGIS plugin style loaded:', mapStyle);
+              onMapReady();
+              // The plugin injects its own attribution control at bottom-right.
+              // Move it to bottom-left and clean up the text to match other styles.
+              requestAnimationFrame(() => {
+                if (!map.current) return;
+                const c = map.current.getContainer();
+                const attrib = c.querySelector<HTMLElement>('.maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib');
+                const bottomLeft = c.querySelector('.maplibregl-ctrl-bottom-left');
+                if (attrib && bottomLeft) {
+                  bottomLeft.appendChild(attrib);
+                }
+                const inner = c.querySelector('.maplibregl-ctrl-attrib-inner');
+                if (inner) {
+                  inner.innerHTML = '© <a href="https://www.esri.com/" target="_blank" rel="noopener noreferrer">Esri</a> and contributors';
+                }
+              });
+            });
+            bs.on('BasemapStyleError', (err: Error) => {
+              console.error('ArcGIS basemap style error:', err);
+              isMapLoading.current = false;
+            });
+          } else {
+            console.log('Map loaded successfully');
+            onMapReady();
+          }
         });
-      });
 
-      map.current.on('error', (e) => {
-        console.error('Map error:', e.error?.message || e);
-      });
-    } catch (error) {
-      console.error('Error initializing map:', error);
-      isMapLoading.current = false;
+        map.current.on('move', () => {
+          if (!map.current || !onViewportChange) return;
+          const center = map.current.getCenter();
+          const zoom = map.current.getZoom();
+          const pitch = map.current.getPitch();
+          const bearing = map.current.getBearing();
+          onViewportChange({
+            center: [center.lng, center.lat],
+            zoom,
+            pitch,
+            bearing
+          });
+        });
+
+        map.current.on('error', (e) => {
+          console.error('Map error:', e.error?.message || e);
+        });
+      } catch (error) {
+        console.error('Error initializing map:', error);
+        isMapLoading.current = false;
+      }
+    };
+
+    // For URL-based styles in globe mode: fetch the style JSON, inject projection,
+    // and pass the modified spec so the map starts as a globe immediately.
+    if (currentGlobeMode && typeof resolvedStyle === 'string') {
+      fetch(resolvedStyle)
+        .then(r => r.json())
+        .then((json: maplibregl.StyleSpecification) => {
+          (json as any).projection = { type: 'globe' };
+          doCreateMap(json);
+        })
+        .catch(() => doCreateMap(resolvedStyle));
+    } else {
+      doCreateMap(resolvedStyle);
     }
   }, [mapStyle, onViewportChange, webglSupported]);
 
@@ -618,9 +600,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
         unit: 'metric'
       }), 'bottom-right');
       if (!isArcGISPluginStyle(mapStyle)) {
-        const isDemotiles =
-          mapStyle === 'https://demotiles.maplibre.org/style.json' ||
-          mapStyle === 'https://demotiles.maplibre.org/globe.json';
+        const isDemotiles = mapStyle === 'https://demotiles.maplibre.org/style.json';
         const customAttribution = isDemotiles
           ? '© <a href="https://maplibre.org/">MapLibre</a> | © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           : undefined;
@@ -1278,11 +1258,11 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
 
     // Airport and city layers on top of all route lines
     if (airportsData && showAirports) {
-      addAirportsLayer(map.current, airportsData, mapStyle, { onSelectItemRef });
+      addAirportsLayer(map.current, airportsData, mapStyle);
     }
 
     if (citiesData && showCities) {
-      addCitiesLayer(map.current, citiesData, mapStyle, onSelectItemRef);
+      addCitiesLayer(map.current, citiesData, mapStyle, onSelectItemRef, hoveredAirportCodeRef);
     }
 
     // Ensure hover layers are always on top of routes and city labels.
@@ -2382,27 +2362,16 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     useColorStore.setState(updates);
   }, [mapLoaded, mapStyle]);
 
-  // After style change, restore completed routes to map immediately (without animation)
+  // Apply globe/flat projection whenever globeMode or map changes
   useEffect(() => {
-    if (!map.current || !mapLoaded || !map.current.isStyleLoaded()) return;
-    const source = map.current.getSource('selected-routes') as maplibregl.GeoJSONSource | undefined;
-    if (!source) return;
-
-    const completedPaths = completedPathsRef.current;
-    const currentAnimating = currentAnimatingRef.current;
-    
-    // If we have any rendered routes (completed or currently animating), restore them
-    if (completedPaths.length > 0 || currentAnimating.length > 0) {
-      const allPaths = [...completedPaths, ...currentAnimating];
-      const features = allPaths.map((d, i) => ({
-        type: 'Feature' as const,
-        id: i,
-        geometry: { type: 'LineString' as const, coordinates: d.gcCoords },
-        properties: { destCode: d.destCode, srcIdx: d.srcIdx },
-      }));
-      source.setData({ type: 'FeatureCollection', features });
+    if (!map.current || !mapLoaded) return;
+    try {
+      (map.current as any).setProjection(globeMode ? { type: 'globe' } : { type: 'mercator' });
+    } catch (e) {
+      console.warn('setProjection failed:', e);
     }
-  }, [mapLoaded, mapStyle]);
+  }, [mapLoaded, globeMode]);
+
 
   // Toggle layer visibility
   useEffect(() => {
@@ -2497,18 +2466,18 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     const newPaths = allWantedPaths.filter(p => !renderedPairs.has(`${p.srcCode}:${p.destCode}`));
 
     if (newPaths.length === 0) {
-      if (hasRemovals || hasStale) {
-        const src = map.current.getSource('selected-routes') as import('maplibre-gl').GeoJSONSource | undefined;
-        if (src) {
-          src.setData({
-            type: 'FeatureCollection',
-            features: completedPathsRef.current.map((d, i) => ({
-              type: 'Feature' as const, id: i,
-              geometry: { type: 'LineString' as const, coordinates: d.gcCoords },
-              properties: { destCode: d.destCode, srcIdx: d.srcIdx },
-            })),
-          });
-        }
+      // Always sync source with completedPathsRef — handles style change (source recreated empty),
+      // removals, stale cleanup, and toggling globe mode.
+      const src = map.current.getSource('selected-routes') as import('maplibre-gl').GeoJSONSource | undefined;
+      if (src) {
+        src.setData({
+          type: 'FeatureCollection',
+          features: completedPathsRef.current.map((d, i) => ({
+            type: 'Feature' as const, id: i,
+            geometry: { type: 'LineString' as const, coordinates: d.gcCoords },
+            properties: { destCode: d.destCode, srcIdx: d.srcIdx },
+          })),
+        });
       }
       return;
     }

@@ -9,6 +9,7 @@ export function addCitiesLayer(
   data: FeatureCollection<Point, CityFeatureProps>,
   currentMapStyle: string,
   onSelectItemRef: { current: ((item: SelectedItem) => void) | undefined },
+  hoveredAirportCodeRef: { current: string | null },
 ) {
   const labelPaint = getLabelPaint(currentMapStyle);
   const strokeColor = labelPaint.haloColor;
@@ -80,6 +81,8 @@ export function addCitiesLayer(
 
   map.on('click', 'cities-circles', async (e: any) => {
     if (!e.features || e.features.length === 0) return;
+    // Skip city click when an airport is actively hovered — the canvas click handler will handle it
+    if (hoveredAirportCodeRef.current) return;
     const feature = e.features[0];
     const props = feature.properties as CityFeatureProps;
     try {

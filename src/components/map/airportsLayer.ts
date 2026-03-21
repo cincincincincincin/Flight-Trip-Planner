@@ -1,18 +1,12 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { FeatureCollection, Point } from 'geojson';
-import type { AirportFeatureProps, SelectedItem } from '../../types';
-import { getAirport } from '../../api/search';
+import type { AirportFeatureProps } from '../../types';
 import { getLabelPaint } from './utils';
-
-interface AirportsLayerOptions {
-  onSelectItemRef: { current: ((item: SelectedItem) => void) | undefined };
-}
 
 export function addAirportsLayer(
   map: MapLibreMap,
   data: FeatureCollection<Point, AirportFeatureProps>,
   currentMapStyle: string,
-  { onSelectItemRef }: AirportsLayerOptions,
 ) {
   const labelPaint = getLabelPaint(currentMapStyle);
   const strokeColor = labelPaint.haloColor;
@@ -245,29 +239,11 @@ export function addAirportsLayer(
   });
 
   // Hover circle + label are handled by a map-level mousemove in MapComponent (more responsive).
-  // Here we only handle click and cursor style.
-  const clickLayers = ['airports-hover', 'airports-circles', 'airports-trip', 'airports-highlighted', 'airports-selected'];
+  // Click is handled by canvas click in MapComponent (uses hoveredAirportCodeRef to fire only once).
+  // Here we only handle cursor style.
+  const cursorLayers = ['airports-hover', 'airports-circles', 'airports-trip', 'airports-highlighted', 'airports-selected'];
 
-  clickLayers.forEach(layerId => {
-    map.on('click', layerId, async (e: any) => {
-      if (!e.features || e.features.length === 0) return;
-      const feature = e.features[0];
-      const props = feature.properties as AirportFeatureProps;
-      const isHighlighted = layerId === 'airports-highlighted';
-      try {
-        const data = await getAirport(props.code);
-        onSelectItemRef.current?.({ type: 'airport', data, isHighlighted, fromMap: true });
-        // On mobile, tap triggers synthetic mousemove before click, leaving hover filters active.
-        // Clear them after selecting so highlighted and hover labels don't show simultaneously.
-        if (map.getLayer('airports-labels-hover')) map.setFilter('airports-labels-hover', ['==', 'code', '']);
-        if (map.getLayer('airports-labels-hover-general')) map.setFilter('airports-labels-hover-general', ['==', 'code', '']);
-        if (map.getLayer('airports-route-hover')) map.setFilter('airports-route-hover', ['==', 'code', '']);
-        if (map.getLayer('airports-hover')) map.setFilter('airports-hover', ['==', 'code', '']);
-      } catch (error) {
-        console.error('Error fetching airport details:', error);
-      }
-    });
-
+  cursorLayers.forEach(layerId => {
     map.on('mouseenter', layerId, () => {
       map.getCanvas().style.cursor = 'pointer';
     });

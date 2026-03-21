@@ -614,7 +614,11 @@ function App() {
     // Resolve name: prefer passed countryName, fall back to country_name from GeoJSON, then code
     const resolvedName = (countryName && countryName !== countryCode)
       ? countryName
-      : (airportsData.features.find(f => f.properties.country_code === countryCode)?.properties.country_name ?? countryCode);
+      : (() => {
+          const fromGeo = airportsData.features.find(f => f.properties.country_code === countryCode)?.properties.country_name;
+          if (fromGeo && fromGeo !== countryCode) return fromGeo;
+          try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(countryCode) || countryCode; } catch { return countryCode; }
+        })();
     clearExploration();
     addExplorationItem({ type: 'country', code: countryCode, name: resolvedName, airportCodes: codes }, viewMode);
     const firstFeat = airportsData.features.find(f => f.properties.code === codes[0]);

@@ -247,6 +247,56 @@
   box-shadow: var(--accent-glow);
 }
 
+/* ── Globe toggle ────────────────────────────────────────────── */
+.globe-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+.globe-toggle-label {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.globe-toggle-btn {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  border: none;
+  background: var(--border);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.globe-toggle-btn.active {
+  background: var(--accent);
+}
+
+.globe-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+  display: block;
+}
+
+.globe-toggle-btn.active .globe-toggle-thumb {
+  transform: translateX(16px);
+}
+
 /* ── Color settings toggle ───────────────────────────────────── */
 .color-settings-toggle {
   display: block;

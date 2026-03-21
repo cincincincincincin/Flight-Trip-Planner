@@ -436,9 +436,9 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
               value={destQuery}
               onChange={e => setDestQuery(e.target.value)}
               onFocus={() => setInputFocused(true)}
-              onBlur={() => setTimeout(() => setInputFocused(false), 200)}
+              onBlur={() => setTimeout(() => setInputFocused(false), 50)}
             />
-            {(inputFocused || destQuery.length > 0) && (
+            {inputFocused && (
               <div className="ff-results" onMouseDown={e => e.preventDefault()}>
                 {/* Exact airport code */}
                 {exactAirport && (

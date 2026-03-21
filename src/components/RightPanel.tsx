@@ -112,11 +112,12 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   const [loadingCountry, setLoadingCountry] = useState(false);
   const [selectedFlatAirports, setSelectedFlatAirports] = useState<CountryAirport[]>([]);
   const [selectedCities, setSelectedCities] = useState<City[]>([]);
-  const [loadingConfirm, setLoadingConfirm] = useState(false);
+  const [loadingConfirm] = useState(false);
 
   // ── Country TZ mode state ───────────────────────────────────────────────────
   const [countryActiveTZ, setCountryActiveTZ] = useState<string | null>(null);
   const [pendingSelectedAirports, setPendingSelectedAirports] = useState<string[]>([]);
+  const [countryNameCache, setCountryNameCache] = useState<Record<string, string>>({});
 
   // ── Trip mode: manual transfer airports ────────────────────────────────────
   const [transferAirports, setTransferAirports] = useState<string[]>([]);
@@ -141,23 +142,6 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   const [expandedInnerCities, setExpandedInnerCities] = useState<Set<string>>(new Set());
 
   // ── Airport grouping maps ──────────────────────────────────────────────────
-  const airportCityMap = useMemo<Record<string, string>>(() => {
-    if (!airportsData) return {};
-    const map: Record<string, string> = {};
-    airportsData.features.forEach(f => {
-      if (f.properties.code && f.properties.city_code) map[f.properties.code] = f.properties.city_code;
-    });
-    return map;
-  }, [airportsData]);
-
-  const airportCountryMap2 = useMemo<Record<string, string>>(() => {
-    if (!airportsData) return {};
-    const map: Record<string, string> = {};
-    airportsData.features.forEach(f => {
-      if (f.properties.code && f.properties.country_code) map[f.properties.code] = f.properties.country_code;
-    });
-    return map;
-  }, [airportsData]);
 
   const cityInfoMap = useMemo<Record<string, { name: string; country_code: string; airportCount: number }>>(() => {
     if (!airportsData) return {};
@@ -365,6 +349,9 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   // ── Reset pendingSelectedAirports when pendingCountryPicker changes ────────
   useEffect(() => {
     setPendingSelectedAirports([]);
+    if (pendingCountryPicker?.code && pendingCountryPicker.name && pendingCountryPicker.name !== pendingCountryPicker.code) {
+      setCountryNameCache(prev => prev[pendingCountryPicker.code] ? prev : { ...prev, [pendingCountryPicker.code]: pendingCountryPicker.name });
+    }
   }, [pendingCountryPicker]);
 
   // ── Close panel when exploration items become empty (non-trip mode) ────────
@@ -903,7 +890,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
       byCountry.get(cc)!.add(cityCode);
     }
     const completeCountryCodes = new Set<string>();
-    for (const [cc, citiesInCountry] of byCountry.entries()) {
+    for (const [cc] of byCountry.entries()) {
       if (!cc) continue;
       const totalCountryAirports = countryInfoMap[cc]?.airportCount ?? 0;
       const coveredAirports = allAirportItems.filter(ap => ap.countryCode === cc).length;
@@ -933,7 +920,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
       result.push({
         kind: 'country-group',
         code: cc,
-        name: countryInfoMap[cc]?.name || cc,
+        name: (() => { const n = countryInfoMap[cc]?.name; return (n && n !== cc) ? n : (countryNameCache[cc] || cc); })(),
         airportCodes: allAirportItems.filter(ap => ap.countryCode === cc).map(ap => ap.code),
         isExpanded: expandedCityGroups.has(cc),
         childCities,
@@ -974,7 +961,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     }
 
     return result;
-  }, [explorationItems, airportsData, viewMode, cityInfoMap, countryInfoMap, expandedCityGroups]);
+  }, [explorationItems, airportsData, viewMode, cityInfoMap, countryInfoMap, countryNameCache, expandedCityGroups]);
 
   // ── Helper: remove all exploration items for a set of airport codes ────────
   const addMissingAirport = useCallback((ap: { code: string; name: string }) => {

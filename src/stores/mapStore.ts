@@ -6,6 +6,7 @@ interface MapState {
   showCities: boolean;
   showRoutes: boolean;
   mapStyle: string;
+  globeMode: boolean;
   viewport: Viewport;
   controlsPanelOpen: boolean;
   viewMode: 'airports' | 'cities';
@@ -14,6 +15,7 @@ interface MapState {
   setShowCities: (v: boolean) => void;
   setShowRoutes: (v: boolean) => void;
   setMapStyle: (v: string) => void;
+  setGlobeMode: (v: boolean) => void;
   setViewport: (v: Viewport) => void;
   setControlsPanelOpen: (v: boolean) => void;
   setViewMode: (v: 'airports' | 'cities') => void;
@@ -25,6 +27,7 @@ export const useMapStore = create<MapState>(set => ({
   showCities: false,
   showRoutes: false,
   mapStyle: 'https://demotiles.maplibre.org/style.json',
+  globeMode: false,
   viewport: { center: [19.0, 52.0], zoom: 4, pitch: 0, bearing: 0 },
   controlsPanelOpen: false,
   viewMode: 'airports',
@@ -34,6 +37,7 @@ export const useMapStore = create<MapState>(set => ({
   setShowCities: v => set({ showCities: v }),
   setShowRoutes: v => set({ showRoutes: v }),
   setMapStyle: v => set({ mapStyle: v }),
+  setGlobeMode: v => set({ globeMode: v }),
   setViewport: v => set({ viewport: v }),
   setControlsPanelOpen: v => set({ controlsPanelOpen: v }),
   setViewMode: v => set({ viewMode: v }),
