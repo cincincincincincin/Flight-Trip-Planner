@@ -110,6 +110,11 @@
   overflow: hidden;
 }
 
+/* ── Mobile sheet — transparent on desktop ───────────────────── */
+.mobile-sheet {
+  display: contents; /* children rendered as direct children of .app */
+}
+
 /* ═══════════════════════════════════════════════════════════════
    MOBILE LAYOUT  (≤ 768px)
    ═══════════════════════════════════════════════════════════════ */
@@ -118,28 +123,49 @@
     flex-direction: column;
   }
 
+  /* Map always fills the full screen — sheet is position:fixed */
   .map-container {
-    flex: 1;
+    flex: 1 !important;
+    height: 100% !important;
     min-height: 0;
   }
-
-  /* Right panel becomes a bottom sheet */
-  .right-panel {
-    width: 100% !important;
-    height: clamp(220px, 46dvh, 460px);
-    max-height: 46dvh;
-    flex-shrink: 0;
-    border-left: none !important;
-    border-top: 1px solid var(--border-light);
-    border-radius: var(--r-xl) var(--r-xl) 0 0;
-    box-shadow: var(--shadow-up) !important;
-    align-self: auto;
+  .app:has(.right-panel) .map-container {
+    flex: 1 !important;
+    height: 100% !important;
   }
 
-  /* When right panel is shown, map gets less height */
-  .app:has(.right-panel) .map-container {
-    flex: none;
-    height: calc(54dvh - 0px);
+  /* ── Draggable bottom sheet ──────────────────────────────────── */
+  .mobile-sheet {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 100dvh;
+    z-index: 300;
+    /* peek: only the header (100px) is visible at the bottom */
+    transform: translateY(calc(100% - 100px));
+    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+    /* prevent content behind sheet from bleeding through during transition */
+    will-change: transform;
+  }
+
+  .mobile-sheet--expanded {
+    transform: translateY(0);
+  }
+
+  /* right-panel inside the sheet fills the container */
+  .mobile-sheet .right-panel {
+    flex: 1;
+    min-height: 0;
+    width: 100% !important;
+    height: 100% !important;
+    max-height: none !important;
+    border-left: none !important;
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    border-top: 1px solid var(--border-light);
+    box-shadow: 0 -4px 32px rgba(0, 0, 0, 0.18) !important;
   }
 
   /* Overlay bar adjustments */
@@ -158,13 +184,7 @@
 }
 
 @media (max-width: 480px) {
-  .right-panel {
-    height: clamp(240px, 50dvh, 420px);
-    max-height: 50dvh;
+  .mobile-sheet .right-panel {
     border-radius: var(--r-lg) var(--r-lg) 0 0;
-  }
-
-  .app:has(.right-panel) .map-container {
-    height: 50dvh;
   }
 }

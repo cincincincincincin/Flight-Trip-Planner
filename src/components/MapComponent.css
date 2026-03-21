@@ -21,6 +21,14 @@
   bottom: 0;
 }
 
+/* ── Mobile: push top controls below the search overlay ─────── */
+@media (max-width: 768px) {
+  .maplibregl-ctrl-top-left,
+  .maplibregl-ctrl-top-right {
+    top: 60px !important;
+  }
+}
+
 .maplibregl-ctrl-bottom-left {
   max-width: calc(100% - 140px); /* leave room for scale on the right */
 }

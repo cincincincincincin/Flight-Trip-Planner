@@ -60,6 +60,13 @@ function App() {
   const rightPanelRef = useRef<any>(null);
   const handleAddToTripRef = useRef<((flight: any) => Promise<void>) | null>(null);
 
+  // ── Mobile bottom sheet (state + refs only — effects are after store declarations) ──
+  const PEEK_H = 100; // px visible in peek state (header height)
+  const [mobileSheetExpanded, setMobileSheetExpanded] = useState(false);
+  const mobileSheetRef = useRef<HTMLDivElement>(null);
+  const sheetExpandedRef = useRef(false);
+  useEffect(() => { sheetExpandedRef.current = mobileSheetExpanded; }, [mobileSheetExpanded]);
+
   const {
     showAirports, setShowAirports,
     showCities, setShowCities,
@@ -80,6 +87,62 @@ function App() {
     addExplorationItem,
     clearExploration,
   } = useSelectionStore();
+
+  // Reset sheet to peek when a new item is selected
+  useEffect(() => { setMobileSheetExpanded(false); }, [selectedItem]);
+
+  // Non-passive touch drag handler (needs passive:false so preventDefault works)
+  useEffect(() => {
+    const sheet = mobileSheetRef.current;
+    if (!sheet) return;
+
+    let dragging = false;
+    let startY = 0;
+    let startTranslate = 0;
+    let currentTranslate = 0;
+
+    const onStart = (e: TouchEvent) => {
+      const rect = sheet.getBoundingClientRect();
+      const fromTop = e.touches[0].clientY - rect.top;
+      if (fromTop > PEEK_H + 20) return; // only drag from header area
+      dragging = true;
+      startY = e.touches[0].clientY;
+      startTranslate = sheetExpandedRef.current ? 0 : window.innerHeight - PEEK_H;
+      currentTranslate = startTranslate;
+      sheet.style.transition = 'none';
+    };
+
+    const onMove = (e: TouchEvent) => {
+      if (!dragging) return;
+      e.preventDefault();
+      const dy = e.touches[0].clientY - startY;
+      const maxT = window.innerHeight - PEEK_H;
+      currentTranslate = Math.max(0, Math.min(maxT, startTranslate + dy));
+      sheet.style.transform = `translateY(${currentTranslate}px)`;
+    };
+
+    const onEnd = () => {
+      if (!dragging) return;
+      dragging = false;
+      const totalDrag = currentTranslate - startTranslate;
+      const THRESHOLD = 60;
+      const wasExpanded = sheetExpandedRef.current;
+      const nextExpanded = wasExpanded ? totalDrag < THRESHOLD : totalDrag < -THRESHOLD;
+      sheet.style.transition = '';
+      sheet.style.transform = '';
+      setMobileSheetExpanded(nextExpanded);
+    };
+
+    sheet.addEventListener('touchstart', onStart, { passive: true });
+    sheet.addEventListener('touchmove', onMove, { passive: false });
+    sheet.addEventListener('touchend', onEnd);
+    return () => {
+      sheet.removeEventListener('touchstart', onStart);
+      sheet.removeEventListener('touchmove', onMove);
+      sheet.removeEventListener('touchend', onEnd);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!selectedItem]); // re-runs when sheet mounts/unmounts
 
   const {
     tripState, setTripState,
@@ -655,18 +718,23 @@ function App() {
       {showSavedTrips && <SavedTripsPanel onClose={() => setShowSavedTrips(false)} onTripLoaded={() => { clearSelection(); clearExploration(); }} />}
 
       {selectedItem && (
-        <RightPanel
-          ref={rightPanelRef}
-          onClose={handleClosePanel}
-          onAddToTrip={handleAddToTrip}
-          onPreviewAirport={setPreviewAirportCode}
-          onClearPreview={() => setPreviewAirportCode(null)}
-          pendingCountryPicker={pendingCountryPicker}
-          onClearCountryPicker={() => setPendingCountryPicker(null)}
-          onFitBounds={fitBoundsToAirportCodes}
-          onCountryAirportsConfirmed={handleCountryAirportsConfirmed}
-          onSwitchToCountryView={handleSwitchToCountryView}
-        />
+        <div
+          ref={mobileSheetRef}
+          className={`mobile-sheet${mobileSheetExpanded ? ' mobile-sheet--expanded' : ''}`}
+        >
+          <RightPanel
+            ref={rightPanelRef}
+            onClose={handleClosePanel}
+            onAddToTrip={handleAddToTrip}
+            onPreviewAirport={setPreviewAirportCode}
+            onClearPreview={() => setPreviewAirportCode(null)}
+            pendingCountryPicker={pendingCountryPicker}
+            onClearCountryPicker={() => setPendingCountryPicker(null)}
+            onFitBounds={fitBoundsToAirportCodes}
+            onCountryAirportsConfirmed={handleCountryAirportsConfirmed}
+            onSwitchToCountryView={handleSwitchToCountryView}
+          />
+        </div>
       )}
     </div>
   );
