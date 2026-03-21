@@ -257,6 +257,12 @@ export function addAirportsLayer(
       try {
         const data = await getAirport(props.code);
         onSelectItemRef.current?.({ type: 'airport', data, isHighlighted, fromMap: true });
+        // On mobile, tap triggers synthetic mousemove before click, leaving hover filters active.
+        // Clear them after selecting so highlighted and hover labels don't show simultaneously.
+        if (map.getLayer('airports-labels-hover')) map.setFilter('airports-labels-hover', ['==', 'code', '']);
+        if (map.getLayer('airports-labels-hover-general')) map.setFilter('airports-labels-hover-general', ['==', 'code', '']);
+        if (map.getLayer('airports-route-hover')) map.setFilter('airports-route-hover', ['==', 'code', '']);
+        if (map.getLayer('airports-hover')) map.setFilter('airports-hover', ['==', 'code', '']);
       } catch (error) {
         console.error('Error fetching airport details:', error);
       }

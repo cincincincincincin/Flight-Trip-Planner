@@ -16,6 +16,8 @@ interface SelectionState {
   highlightedAirports: string[];
   highlightedCities: string[];
   flightsData: Flight[];
+  /** Flights currently visible in the RightPanel list (today's window, filtered by TZ). */
+  displayedFlights: Flight[];
   explorationItems: ExplorationItem[];
   setSelectedItem: (v: SelectedItem | null) => void;
   setSelectedAirportCode: (v: string | null) => void;
@@ -23,6 +25,7 @@ interface SelectionState {
   setHighlightedAirports: (v: string[]) => void;
   setHighlightedCities: (v: string[]) => void;
   setFlightsData: (v: Flight[]) => void;
+  setDisplayedFlights: (v: Flight[]) => void;
   appendFlights: (newFlights: Flight[]) => void;
   clearSelection: () => void;
   addExplorationItem: (item: Omit<ExplorationItem, 'id'>, viewMode: 'airports' | 'cities') => void;
@@ -37,6 +40,7 @@ export const useSelectionStore = create<SelectionState>(set => ({
   highlightedAirports: [],
   highlightedCities: [],
   flightsData: [],
+  displayedFlights: [],
   explorationItems: [],
 
   setSelectedItem: v => set({ selectedItem: v }),
@@ -45,6 +49,7 @@ export const useSelectionStore = create<SelectionState>(set => ({
   setHighlightedAirports: v => set({ highlightedAirports: v }),
   setHighlightedCities: v => set({ highlightedCities: v }),
   setFlightsData: v => set({ flightsData: v }),
+  setDisplayedFlights: v => set({ displayedFlights: v }),
   appendFlights: newFlights => set(state => {
     const existingIds = new Set(state.flightsData.map(f => f.id));
     const unique = newFlights.filter(f => !existingIds.has(f.id));
@@ -57,6 +62,7 @@ export const useSelectionStore = create<SelectionState>(set => ({
     highlightedAirports: [],
     highlightedCities: [],
     flightsData: [],
+    displayedFlights: [],
     explorationItems: [],
   }),
 

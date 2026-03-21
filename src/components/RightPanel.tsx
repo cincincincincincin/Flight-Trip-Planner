@@ -746,8 +746,16 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     if (!hasMatch) {
       setSelectedTimezoneOverride(null);
       setSelectedTimezoneAirportCode(null);
+      // Update travelDate to today in the restored timezone if the user was viewing today.
+      // (The main travelDate effect won't catch this because resolvedTimezone didn't change.)
+      if (resolvedTimezone) {
+        const todayInOverrideTZ = new Date().toLocaleDateString('en-CA', { timeZone: selectedTimezoneOverride });
+        if (travelDate === todayInOverrideTZ) {
+          setTravelDate(new Date().toLocaleDateString('en-CA', { timeZone: resolvedTimezone }));
+        }
+      }
     }
-  }, [explorationItems, transferAirports, selectedTimezoneOverride, airportTimezoneMap]);
+  }, [explorationItems, transferAirports, selectedTimezoneOverride, airportTimezoneMap, resolvedTimezone, travelDate, setTravelDate]);
 
   // ── Exploration groups (airport mode) ─────────────────────────────────────
   // Compute city-groups and country-groups from explorationItems

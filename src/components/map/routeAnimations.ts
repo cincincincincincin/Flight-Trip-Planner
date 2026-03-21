@@ -8,6 +8,7 @@ const GC_POINTS = 64;
 export interface GCPath {
   srcCoords: [number, number];
   destCode: string;
+  srcCode: string;
   srcIdx: number;
   gcCoords: [number, number][];
 }
@@ -27,27 +28,29 @@ export function buildGCPaths(
 
   let sourceToDestsMap: Map<string, Set<string>>;
 
-  if (sourceCodes.length === 1) {
-    // Single source: all destinations go to it
-    sourceToDestsMap = new Map([[sourceCodes[0], new Set(newDestCodes)]]);
-  } else if (flightsData.length > 0) {
-    // Multiple sources: use flight data to map each destination to its correct origin
+  if (flightsData.length > 0) {
+    // Always verify against flight data when available — prevents stale sourceCodes
+    // (e.g. a single-element list from a previous render) from drawing wrong routes.
     sourceToDestsMap = new Map();
     const destSet = new Set(newDestCodes);
+    const srcSet = new Set(sourceCodes);
     flightsData.forEach(f => {
       const src = f.origin_airport_code;
       const dst = f.destination_airport_code;
-      if (src && dst && sourceCodes.includes(src) && destSet.has(dst)) {
+      if (src && dst && srcSet.has(src) && destSet.has(dst)) {
         if (!sourceToDestsMap.has(src)) sourceToDestsMap.set(src, new Set());
         sourceToDestsMap.get(src)!.add(dst);
       }
     });
-    // If no mappings found (stale flight data), return nothing — the animation effect
-    // will retry once flightsData updates and those airports are still un-rendered.
+    // No mappings found — stale data or source airports don't fly to these dests.
+    // Return nothing; the animation effect will retry when deps update.
     if (sourceToDestsMap.size === 0) return [];
+  } else if (sourceCodes.length === 1) {
+    // No flight data yet but only one source — optimistically assign all dests to it.
+    // Safe because highlightedAirports was derived from that single airport's flights.
+    sourceToDestsMap = new Map([[sourceCodes[0], new Set(newDestCodes)]]);
   } else {
-    // Multiple sources but no flight data yet — can't determine routing, skip.
-    // Retry happens when flightsData arrives and the animation effect re-runs.
+    // Multiple sources, no flight data yet — can't determine routing safely.
     return [];
   }
 
@@ -63,6 +66,7 @@ export function buildGCPaths(
       paths.push({
         srcCoords,
         destCode,
+        srcCode,
         srcIdx,
         gcCoords: generateGreatCircle(srcCoords, destFeat.geometry.coordinates as [number, number], GC_POINTS),
       });

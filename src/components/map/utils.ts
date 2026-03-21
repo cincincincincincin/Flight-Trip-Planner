@@ -100,7 +100,11 @@ export const getLabelPaint = (styleUrl: string | undefined): LabelPaint => {
   };
 
   if (!styleUrl) return lightScheme;
-  if (styleUrl.includes('dark-matter') || styleUrl.includes('satelite')) {
+  if (
+    styleUrl.includes('dark-matter') ||
+    styleUrl.includes('satellite') ||
+    styleUrl.includes('arcgis:imagery')
+  ) {
     return darkScheme;
   }
   return lightScheme;

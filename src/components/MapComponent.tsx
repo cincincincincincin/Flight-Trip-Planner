@@ -70,7 +70,7 @@ function resolveMapStyle(style: string): string | maplibregl.StyleSpecification 
         sources: {
           satellite: {
             type: 'raster',
-            tiles: ['https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+            tiles: [`https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=${ARCGIS_API_KEY}`],
             tileSize: 256,
             attribution: 'Powered by <a href="https://www.esri.com/" target="_blank" rel="noopener noreferrer">Esri</a> | <a href="https://maplibre.org/" target="_blank" rel="noopener noreferrer">MapLibre</a> | Sources: Esri, TomTom, Garmin, FAO, NOAA, USGS, \u00a9 OpenStreetMap contributors, and the GIS User Community | Source: Esri, Vantor, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community',
           },
@@ -112,7 +112,7 @@ function resolveMapStyle(style: string): string | maplibregl.StyleSpecification 
         sources: {
           satellite: {
             type: 'raster',
-            tiles: ['https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+            tiles: [`https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=${ARCGIS_API_KEY}`],
             tileSize: 256,
             attribution: 'Powered by <a href="https://www.esri.com/" target="_blank" rel="noopener noreferrer">Esri</a> | <a href="https://maplibre.org/" target="_blank" rel="noopener noreferrer">MapLibre</a> | Sources: Esri, TomTom, Garmin, FAO, NOAA, USGS, \u00a9 OpenStreetMap contributors, and the GIS User Community | Source: Esri, Vantor, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community',
           },
@@ -169,7 +169,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
 }, ref) => {
   // Stores
   const { showAirports, showCities, showRoutes, mapStyle, flyToZoom, setFlyToZoom } = useMapStore();
-  const { highlightedAirports, selectedAirportCode, selectedAirportCodes, highlightedCities, flightsData, explorationItems } = useSelectionStore();
+  const { highlightedAirports, selectedAirportCode, selectedAirportCodes, highlightedCities, flightsData, displayedFlights, explorationItems } = useSelectionStore();
   const { tripState, tripRoutes, previewAirportCode, manualTransferAirportCodes } = useTripStore();
   const { travelDate, timezone } = useSettingsStore();
   const { destinationFilter, airlineFilter } = useFilterStore();
@@ -429,21 +429,23 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     matchesFilterRef.current = matchesFilter;
   }, [matchesFilter]);
 
-  // Keep a ref for flightsData so the route animation can access latest flights
-  // without restarting the animation on every new flight batch
+  // Keep a ref for flightsData (all accumulated flights) for backward-compat uses.
   const flightsDataRef = useRef<Flight[]>(flightsData);
+  useEffect(() => { flightsDataRef.current = flightsData; }, [flightsData]);
+
+  // displayedFlights = only the flights currently visible in the RightPanel list
+  // (today's TZ window, respecting filters). Used for route drawing and popup.
+  const displayedFlightsRef = useRef<Flight[]>(displayedFlights);
   useEffect(() => {
-    flightsDataRef.current = flightsData;
+    displayedFlightsRef.current = displayedFlights;
     const map: Record<string, Flight[]> = {};
-    flightsData.forEach(flight => {
+    displayedFlights.forEach(flight => {
       const destCode = flight.destination_airport_code;
-      if (!map[destCode]) {
-        map[destCode] = [];
-      }
+      if (!map[destCode]) map[destCode] = [];
       map[destCode].push(flight);
     });
     flightDetailsMap.current = map;
-  }, [flightsData]);
+  }, [displayedFlights]);
 
   useEffect(() => {
     const canvas = document.createElement('canvas');
@@ -1464,37 +1466,42 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
           : (selectedAirportCodeRef.current ? [selectedAirportCodeRef.current] : []);
       const srcCode = startCodes[srcIdx] ?? startCodes[0] ?? '';
 
-      const allFlightsForRoute = (flightDetailsMap.current[destCode] || [])
+      // flightDetailsMap is built from displayedFlights (already date/TZ/filter aware).
+      // Only filter here by source airport.
+      const displayFlights = (flightDetailsMap.current[destCode] || [])
         .filter(f => !srcCode || f.origin_airport_code === srcCode);
-      const currentDate = travelDateRef.current;
-      const currentTimezone = timezoneRef.current;
-      
-      // Filter by date using timezone conversion (same as FlightsList)
-      const filteredByDate = currentDate
-        ? allFlightsForRoute.filter(f => {
-            let dateStr: string;
-            if (f.scheduled_departure_utc && currentTimezone) {
-              dateStr = new Date(f.scheduled_departure_utc)
-                .toLocaleDateString('en-CA', { timeZone: currentTimezone });
-            } else {
-              dateStr = f.scheduled_departure_local?.split('T')[0] || '';
-            }
-            return dateStr === currentDate;
-          })
-        : allFlightsForRoute;
-      
-      // Apply the same filters as FlightsList (destination + airline filters)
-      const filterFn = matchesFilterRef.current;
-      const filteredByDestAndAirline = filterFn 
-        ? filteredByDate.filter(f => filterFn(f))
-        : filteredByDate;
-      
-      // Show only flights from current date (no fallback to all flights)
-      const displayFlights = filteredByDestAndAirline.length > 0 ? filteredByDestAndAirline : filteredByDate;
 
       const MAX_POPUP_FLIGHTS = 6;
       const shownFlights = displayFlights.slice(0, MAX_POPUP_FLIGHTS);
       const extraCount = displayFlights.length - shownFlights.length;
+
+      // Group shown flights by departure airport local date (for multi-day windows)
+      const dateGroups = new Map<string, typeof shownFlights>();
+      for (const f of shownFlights) {
+        const key = f.scheduled_departure_local?.split('T')[0] ?? '';
+        if (!dateGroups.has(key)) dateGroups.set(key, []);
+        dateGroups.get(key)!.push(f);
+      }
+      // Check if source airports have flights on different calendar days
+      const sourceDates = new Set<string>();
+      for (const src of startCodes) {
+        for (const flights of Object.values(flightDetailsMap.current)) {
+          const flight = flights.find(f => f.origin_airport_code === src);
+          if (flight?.scheduled_departure_local) {
+            sourceDates.add(flight.scheduled_departure_local.split('T')[0]);
+            break;
+          }
+        }
+      }
+      const sourcesHaveDifferentDays = sourceDates.size > 1;
+      const showDateHeaders = dateGroups.size > 1 || sourcesHaveDifferentDays;
+      const formatGroupDateLabel = (dateStr: string): string => {
+        if (!dateStr) return '';
+        try {
+          const d = new Date(dateStr + 'T12:00:00Z');
+          return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' });
+        } catch { return dateStr; }
+      };
 
       const srcAirportName = airportNamesMap.current[srcCode] || srcCode || 'Unknown';
       const destAirportName = airportNamesMap.current[destCode] || destCode;
@@ -1529,10 +1536,10 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       const GOLD_BORDER = 'rgba(200,158,50,0.3)';
       const GOLD_TEXT = 'rgba(190,140,30,0.95)';
 
-      // Derive UTC offsets from flights that have both local + UTC times
+      // Derive UTC offsets from displayed flights for arrival-time estimation
       let destUTCOffset: number | null = null;
       let srcUTCOffset: number | null = null;
-      for (const f of allFlightsForRoute) {
+      for (const f of displayFlights) {
         if (destUTCOffset === null) {
           const off = getUTCOffH(f.scheduled_arrival_local, f.scheduled_arrival_utc);
           if (off !== null) destUTCOffset = off;
@@ -1544,7 +1551,8 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
         if (destUTCOffset !== null && srcUTCOffset !== null) break;
       }
 
-      const flightRows = shownFlights.map(f => {
+      // Build a single flight row (shared by all date groups)
+      const buildFlightRow = (f: Flight) => {
         const airlineCode = f.airline_code || '';
         const rawFlightNum = f.flight_number || '';
         const cleanFlightCode = airlineCode && !rawFlightNum.toUpperCase().startsWith(airlineCode.toUpperCase())
@@ -1553,7 +1561,6 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
         const airlineName = f.airline_name || airlineCode;
         const centerLabel = [airlineName, cleanFlightCode].filter(Boolean).join('  ');
 
-        // Arrival time + TZ indicator
         let arrHtml = '';
         const hasArrival = !!(f.scheduled_arrival_local || f.scheduled_arrival_utc);
         if (hasArrival) {
@@ -1567,14 +1574,12 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
             : '';
           arrHtml = `${tzHtml}<span style="font-family:monospace;font-weight:600;">${arrStr}</span>`;
         } else if (f.scheduled_departure_utc) {
-          // Estimated arrival
           const srcC = airportCoordsMapRef.current[f.origin_airport_code || ''];
           const dstC = airportCoordsMapRef.current[f.destination_airport_code || ''];
           if (srcC && dstC) {
             const distKm = popupHaversineKm(srcC[0], srcC[1], dstC[0], dstC[1]);
             const blockMs = (distKm / 850 + 0.5) * 3600000;
             const estArrUtc = new Date(new Date(f.scheduled_departure_utc).getTime() + blockMs);
-            // Format in destination local time if we know the offset
             let estStr: string;
             if (destUTCOffset !== null) {
               const destLocalMs = estArrUtc.getTime() + destUTCOffset * 3600000;
@@ -1583,7 +1588,6 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
             } else {
               estStr = formatTime(estArrUtc.toISOString());
             }
-            // TZ label for estimated arrival
             const estTzDiff = (srcUTCOffset !== null && destUTCOffset !== null) ? destUTCOffset - srcUTCOffset : null;
             const estTzLabel = estTzDiff !== null ? formatTzLabel(estTzDiff) : null;
             const estTzHtml = estTzLabel
@@ -1599,6 +1603,14 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
             <div style="flex:1;text-align:center;color:#555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${centerLabel}</div>
             <div style="flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;">${arrHtml}</div>
           </div>`;
+      };
+
+      // Render flight rows, grouped by departure local date when the window spans multiple days
+      const flightRows = [...dateGroups.entries()].map(([dateStr, groupFlights]) => {
+        const header = showDateHeaders
+          ? `<div style="font-size:11px;color:#999;font-weight:600;padding:6px 0 2px;border-bottom:1px solid #e8e8e8;margin-bottom:2px;letter-spacing:0.3px;">${formatGroupDateLabel(dateStr)}</div>`
+          : '';
+        return header + groupFlights.map(buildFlightRow).join('');
       }).join('');
 
       const popupHtml = `
@@ -2422,8 +2434,8 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     setLayerVisibility('selected-routes', showAirports || showCities);
   }, [showAirports, showCities, showRoutes, mapLoaded]);
 
-  // Additive route animation — only draws NEW destination airports, keeps existing routes intact.
-  // When airports are removed (e.g. by filter), their routes are immediately hidden.
+  // Route animation — draws routes for all displayed flights, handles additions/removals/timezone changes.
+  // Uses src:dest pairs (not dest-only) so new sources for existing destinations are drawn correctly.
   useEffect(() => {
     if (!map.current || !mapLoaded || !airportsData) return;
 
@@ -2435,30 +2447,57 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
 
     const currentSet = new Set(highlightedAirports);
 
-    // Detect removals (airports that were rendered but are no longer highlighted — e.g. filtered out)
+    // Step 1: Handle highlighted airport removals (dest no longer in highlighted set)
     const hasRemovals = [...renderedHighlightedRef.current].some(a => !currentSet.has(a));
-
     if (hasRemovals) {
-      // Cancel running animation and absorb in-progress paths as completed (at full extent)
-      if (animationRef.current !== null) {
-        cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
-      }
+      if (animationRef.current !== null) { cancelAnimationFrame(animationRef.current); animationRef.current = null; }
       if (currentAnimatingRef.current.length > 0) {
         completedPathsRef.current = [...completedPathsRef.current, ...currentAnimatingRef.current];
         currentAnimatingRef.current = [];
       }
-      // Remove routes whose destination is no longer highlighted
       completedPathsRef.current = completedPathsRef.current.filter(p => currentSet.has(p.destCode));
       renderedHighlightedRef.current = new Set([...renderedHighlightedRef.current].filter(a => currentSet.has(a)));
     }
 
-    // Animate new airports not yet rendered
-    const newAirports = highlightedAirports.filter(a => !renderedHighlightedRef.current.has(a));
+    // Step 2: Remove stale src:dest paths no longer present in displayedFlights
+    let hasStale = false;
+    if (displayedFlights.length > 0 && (completedPathsRef.current.length > 0 || currentAnimatingRef.current.length > 0)) {
+      const srcCodesSet = new Set<string>([...selectedAirportCodes, ...(selectedAirportCode ? [selectedAirportCode] : [])]);
+      const wantedPairs = new Set(
+        displayedFlights
+          .filter(f => f.origin_airport_code && f.destination_airport_code &&
+                       srcCodesSet.has(f.origin_airport_code) &&
+                       currentSet.has(f.destination_airport_code))
+          .map(f => `${f.origin_airport_code}:${f.destination_airport_code}`)
+      );
+      hasStale = [...completedPathsRef.current, ...currentAnimatingRef.current]
+        .some(p => !wantedPairs.has(`${p.srcCode}:${p.destCode}`));
+      if (hasStale) {
+        if (animationRef.current !== null) { cancelAnimationFrame(animationRef.current); animationRef.current = null; }
+        if (currentAnimatingRef.current.length > 0) {
+          completedPathsRef.current = [...completedPathsRef.current, ...currentAnimatingRef.current];
+          currentAnimatingRef.current = [];
+        }
+        completedPathsRef.current = completedPathsRef.current.filter(p => wantedPairs.has(`${p.srcCode}:${p.destCode}`));
+        const remainingDests = new Set(completedPathsRef.current.map(p => p.destCode));
+        renderedHighlightedRef.current = new Set([...renderedHighlightedRef.current].filter(a => remainingDests.has(a)));
+      }
+    }
 
-    if (newAirports.length === 0) {
-      // Only removals happened — update source immediately without animation
-      if (hasRemovals) {
+    // Step 3: Build all desired paths, animate only truly new src:dest pairs
+    const sourceSet = new Set<string>(selectedAirportCodes);
+    if (selectedAirportCode) sourceSet.add(selectedAirportCode);
+    const sourceCodes = [...sourceSet];
+    if (sourceCodes.length === 0) return;
+
+    const allWantedPaths = buildGCPaths(sourceCodes, highlightedAirports, airportsData, displayedFlightsRef.current);
+    const renderedPairs = new Set(
+      [...completedPathsRef.current, ...currentAnimatingRef.current].map(p => `${p.srcCode}:${p.destCode}`)
+    );
+    const newPaths = allWantedPaths.filter(p => !renderedPairs.has(`${p.srcCode}:${p.destCode}`));
+
+    if (newPaths.length === 0) {
+      if (hasRemovals || hasStale) {
         const src = map.current.getSource('selected-routes') as import('maplibre-gl').GeoJSONSource | undefined;
         if (src) {
           src.setData({
@@ -2474,21 +2513,9 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       return;
     }
 
-    const sourceCodes = selectedAirportCodes.length > 0
-      ? selectedAirportCodes
-      : selectedAirportCode ? [selectedAirportCode] : [];
-    if (sourceCodes.length === 0) return;
-
-    const newPaths = buildGCPaths(sourceCodes, newAirports, airportsData, flightsDataRef.current);
-    if (newPaths.length === 0) return;
-
-    // Only mark airports as rendered if they actually got paths — airports without paths
-    // remain un-rendered so they are retried when flightsData updates (added to deps below).
-    const mappedDests = new Set(newPaths.map(p => p.destCode));
-    newAirports.forEach(a => { if (mappedDests.has(a)) renderedHighlightedRef.current.add(a); });
-
+    newPaths.forEach(p => renderedHighlightedRef.current.add(p.destCode));
     addRoutesToAnimation(map.current, animationRef, completedPathsRef, currentAnimatingRef, newPaths);
-  }, [highlightedAirports, mapLoaded, airportsData, selectedAirportCode, selectedAirportCodes, flightsData]);
+  }, [highlightedAirports, mapLoaded, airportsData, selectedAirportCode, selectedAirportCodes, displayedFlights]);
 
   // Re-apply all colors when colorStore values or selected airports change
   useEffect(() => {

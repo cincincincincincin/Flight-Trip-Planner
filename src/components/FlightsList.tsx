@@ -33,7 +33,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
   ({ airportCodes, timezone, initialFromDatetime, airportTimezones, originalAirportCode, tripArrivalTimeUTC, onAddToTrip }, ref) => {
     // ── Stores ────────────────────────────────────────────────────────────────
     const { travelDate, minTransferHours, minManualTransferHours, showRefreshButton } = useSettingsStore();
-    const { setHighlightedAirports, setHighlightedCities, appendFlights } = useSelectionStore();
+    const { setHighlightedAirports, setHighlightedCities, setDisplayedFlights, appendFlights } = useSelectionStore();
     const { tripState } = useTripStore();
     const { data: airportsData } = useAirportsQuery();
     const { destinationFilter, airlineFilter } = useFilterStore();
@@ -346,6 +346,10 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
     useEffect(() => {
       const sourceFlights = isFilterActive ? displayedFlatFlights : todayFlights;
 
+      // Keep the store in sync with exactly what the list currently shows.
+      // MapComponent uses displayedFlights for route drawing and popup content.
+      setDisplayedFlights(sourceFlights);
+
       const newAirports = new Set<string>(
         sourceFlights.map(f => f.destination_airport_code).filter(Boolean) as string[]
       );
@@ -363,7 +367,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
         prevHighlightedCitiesRef.current = newCities;
         setHighlightedCities(Array.from(newCities));
       }
-    }, [displayedFlatFlights, todayFlights, isFilterActive, setHighlightedAirports, setHighlightedCities]);
+    }, [displayedFlatFlights, todayFlights, isFilterActive, setHighlightedAirports, setHighlightedCities, setDisplayedFlights]);
 
     // ── Sync dateOrderRef ─────────────────────────────────────────────────────
     useEffect(() => { dateOrderRef.current = dateOrder; }, [dateOrder]);
@@ -430,8 +434,14 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
             });
 
             if (timezone) {
-              addedCodes.forEach(code => {
+              // Load all airports that have no loaded windows — this covers:
+              // a) newly added airports (addedCodes, as before)
+              // b) existing airports whose windows were cleared by a simultaneous timezone change
+              //    (prevTimezoneRef effect fires before this one, wiping loadedWindowsRef)
+              airportCodes.forEach(code => {
                 if (airportCodes.length > 1 && !airportTimezones?.[code]) return;
+                const hasAnyWindow = Array.from(loadedWindowsRef.current).some(k => k.startsWith(`${code}:`));
+                if (hasAnyWindow) return; // already loaded in current timezone
                 const fromDatetime = getFromDatetimeForAirport(travelDate, code);
                 if (!loadedWindowsRef.current.has(`${code}:${fromDatetime}`)) {
                   loadFlightsFromDatetime(code, fromDatetime);
@@ -441,13 +451,13 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
         }
       } else if (!isNewAirportSet && timezone) {
         // Same airports: triggered when airportTimezones loads (enabling correct per-airport from-datetime)
-        // or when a previously unloaded date is needed. Skip if we already have data and the
-        // current travelDate is covered — prevents spurious reloads on timezone switch.
+        // or when travelDate / timezone changes. The loadedWindowsRef.has() check below is the
+        // correct per-airport+per-datetime deduplication gate — no extra early-return needed.
+        // (A global dateOrderRef check would falsely skip airports whose loaded window is for the
+        // wrong date, e.g. when travelDate updates after a timezone change in a separate render.)
         airportCodes.forEach(code => {
           if (!perAirportLoadingRef.current.get(code)) {
             if (airportCodes.length > 1 && !airportTimezones?.[code]) return;
-            const hasAnyWindow = Array.from(loadedWindowsRef.current).some(k => k.startsWith(`${code}:`));
-            if (hasAnyWindow && dateOrderRef.current.includes(travelDate)) return;
             const fromDatetime = initialFromDatetime ?? getFromDatetimeForAirport(travelDate, code);
             if (!loadedWindowsRef.current.has(`${code}:${fromDatetime}`)) {
               loadFlightsFromDatetime(code, fromDatetime);
