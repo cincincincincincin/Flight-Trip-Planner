@@ -163,6 +163,15 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
 
   const isArrivalEstimated = !flight.scheduled_arrival_local && !flight.scheduled_arrival_utc && !!estimatedArrUTC;
 
+  const estimatedDuration = useMemo(() => {
+    if (!isArrivalEstimated || !estimatedArrUTC || !flight.scheduled_departure_utc) return null;
+    const diff = new Date(estimatedArrUTC).getTime() - new Date(flight.scheduled_departure_utc).getTime();
+    if (diff <= 0) return null;
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    return `~${h}h ${m}m`;
+  }, [isArrivalEstimated, estimatedArrUTC, flight.scheduled_departure_utc]);
+
   const destTimezone = destAirportInfo?.time_zone ?? displayTimezone;
 
   const estimatedArrTzDiff = useMemo(() => {
@@ -280,6 +289,16 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
             <div className="date-value">{depDateStr}</div>
           </div>
           {duration && <div className="time-duration">{duration}</div>}
+          {!duration && estimatedDuration && (
+            <div className="time-duration" style={{ position: 'relative', display: 'inline-flex' }}>
+              <span className="arr-estimated-time">
+                {estimatedDuration}
+                <span className="arr-estimated-tooltip">
+                  Estimated flight time — calculated from flight distance and average aircraft speed (~850 km/h)
+                </span>
+              </span>
+            </div>
+          )}
           {arrTimeStr && (
             <div className="time arrival">
               <div className="time-label">Arrival</div>

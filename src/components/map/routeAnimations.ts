@@ -27,7 +27,11 @@ export function buildGCPaths(
 
   let sourceToDestsMap: Map<string, Set<string>>;
 
-  if (flightsData.length > 0 && sourceCodes.length > 1) {
+  if (sourceCodes.length === 1) {
+    // Single source: all destinations go to it
+    sourceToDestsMap = new Map([[sourceCodes[0], new Set(newDestCodes)]]);
+  } else if (flightsData.length > 0) {
+    // Multiple sources: use flight data to map each destination to its correct origin
     sourceToDestsMap = new Map();
     const destSet = new Set(newDestCodes);
     flightsData.forEach(f => {
@@ -38,11 +42,13 @@ export function buildGCPaths(
         sourceToDestsMap.get(src)!.add(dst);
       }
     });
-    if (sourceToDestsMap.size === 0) {
-      sourceToDestsMap = new Map([[sourceCodes[0], new Set(newDestCodes)]]);
-    }
+    // If no mappings found (stale flight data), return nothing — the animation effect
+    // will retry once flightsData updates and those airports are still un-rendered.
+    if (sourceToDestsMap.size === 0) return [];
   } else {
-    sourceToDestsMap = new Map([[sourceCodes[0], new Set(newDestCodes)]]);
+    // Multiple sources but no flight data yet — can't determine routing, skip.
+    // Retry happens when flightsData arrives and the animation effect re-runs.
+    return [];
   }
 
   const paths: GCPath[] = [];

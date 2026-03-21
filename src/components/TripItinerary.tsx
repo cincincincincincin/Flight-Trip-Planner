@@ -4,7 +4,7 @@ import FlightCard from './FlightCard';
 import SaveTripButton from './auth/SaveTripButton';
 import type { Flight } from '../types';
 import { useTripStore } from '../stores/tripStore';
-import { useAirportsQuery } from '../hooks/queries';
+import { useAirportsQuery, useAirportInfosQuery } from '../hooks/queries';
 import './TripItinerary.css';
 
 const formatTime = (str: string | null | undefined): string => {
@@ -37,6 +37,39 @@ const getDurationMs = (from: string | undefined, to: string | undefined): number
   if (!from || !to) return null;
   const diff = new Date(to).getTime() - new Date(from).getTime();
   return diff > 0 ? diff : null;
+};
+
+const formatTimeInTz = (str: string, tz?: string): string => {
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', ...(tz ? { timeZone: tz } : {}) });
+};
+
+const formatDateInTz = (str: string, tz?: string): string => {
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', ...(tz ? { timeZone: tz } : {}) });
+};
+
+const computeTzDiff = (depUtc: string, depTz: string, destTz: string): number | null => {
+  if (depTz === destTz) return null;
+  const d = new Date(depUtc);
+  if (isNaN(d.getTime())) return null;
+  const getOff = (tz: string) => {
+    const s = d.toLocaleString('sv-SE', { timeZone: tz });
+    const u = d.toLocaleString('sv-SE', { timeZone: 'UTC' });
+    return (new Date(s).getTime() - new Date(u).getTime()) / 3600000;
+  };
+  const diff = getOff(destTz) - getOff(depTz);
+  return diff === 0 ? null : diff;
+};
+
+const formatTzDiff = (diff: number): string => {
+  const sign = diff > 0 ? '+' : '';
+  if (Number.isInteger(diff)) return `${sign}${diff}h`;
+  const h = Math.trunc(diff);
+  const m = Math.round(Math.abs(diff - h) * 60);
+  return `${sign}${h}h${m > 0 ? `${m}m` : ''}`;
 };
 
 const haversineKm = (lon1: number, lat1: number, lon2: number, lat2: number): number => {
@@ -79,6 +112,29 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
     });
     return map;
   }, [airportsData]);
+
+  const allLegCodes = useMemo(() => {
+    const legs = tripState?.legs ?? [];
+    const codes = new Set<string>();
+    legs.forEach(l => {
+      if ((l as { type?: string }).type !== 'manual') {
+        if (l.fromAirportCode) codes.add(l.fromAirportCode);
+        if (l.toAirportCode) codes.add(l.toAirportCode);
+      }
+    });
+    return Array.from(codes);
+  }, [tripState]);
+
+  const airportInfosResults = useAirportInfosQuery(allLegCodes);
+
+  const airportTimezoneMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    allLegCodes.forEach((code, i) => {
+      const tz = airportInfosResults[i]?.data?.time_zone;
+      if (tz) map[code] = tz;
+    });
+    return map;
+  }, [allLegCodes, airportInfosResults]);
 
   const estimateArrivalUTC = (depUtc: string, fromCode: string, toCode: string): string | null => {
     const from = airportCoordsMap[fromCode];
@@ -217,8 +273,12 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
             const estimatedArrUTC = !arrStr && !isManual && f?.scheduled_departure_utc
               ? estimateArrivalUTC(f.scheduled_departure_utc, leg.fromAirportCode, leg.toAirportCode)
               : null;
-            const displayArrStr = arrStr || estimatedArrUTC;
             const isArrEstimated = !arrStr && !!estimatedArrUTC;
+            const depTz = airportTimezoneMap[leg.fromAirportCode];
+            const destTz = airportTimezoneMap[leg.toAirportCode];
+            const tzDiff = (depTz && destTz && f?.scheduled_departure_utc)
+              ? computeTzDiff(f.scheduled_departure_utc, depTz, destTz)
+              : null;
             const duration = !isManual
               ? getDuration(f?.scheduled_departure_utc, f?.scheduled_arrival_utc ?? estimatedArrUTC ?? undefined)
               : null;
@@ -278,18 +338,33 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
 
                       <div className="trip-leg-airport trip-leg-airport--dest">
                         <span className="trip-leg-code">{leg.toAirportCode}</span>
-                        {displayArrStr && (
+                        {(arrStr || (isArrEstimated && estimatedArrUTC && destTz)) && (
                           <span className="trip-leg-datetime">
-                            <span className="trip-leg-date">{formatDate(displayArrStr)}</span>
-                            <span
-                              className={`trip-leg-time${isArrEstimated ? ' trip-leg-time--estimated' : ''}`}
-                              onMouseEnter={isArrEstimated ? (e) => {
-                                const r = e.currentTarget.getBoundingClientRect();
-                                setEstimatedTooltipPos({ top: r.bottom + 4, left: r.left });
-                              } : undefined}
-                              onMouseLeave={isArrEstimated ? () => setEstimatedTooltipPos(null) : undefined}
-                            >
-                              {formatTime(displayArrStr)}
+                            <span className="trip-leg-date">
+                              {arrStr
+                                ? formatDate(arrStr)
+                                : formatDateInTz(estimatedArrUTC!, destTz!)}
+                            </span>
+                            <span className="trip-leg-time-row">
+                              {tzDiff !== null && (
+                                <span className={`trip-leg-tz-diff ${tzDiff > 0 ? 'positive' : 'negative'}`}>
+                                  ({formatTzDiff(tzDiff)})
+                                </span>
+                              )}
+                              {isArrEstimated ? (
+                                <span
+                                  className="trip-leg-time trip-leg-time--estimated"
+                                  onMouseEnter={(e) => {
+                                    const r = e.currentTarget.getBoundingClientRect();
+                                    setEstimatedTooltipPos({ top: r.bottom + 4, left: r.left });
+                                  }}
+                                  onMouseLeave={() => setEstimatedTooltipPos(null)}
+                                >
+                                  ~{formatTimeInTz(estimatedArrUTC!, destTz!)}
+                                </span>
+                              ) : (
+                                <span className="trip-leg-time">{formatTime(arrStr!)}</span>
+                              )}
                             </span>
                           </span>
                         )}
@@ -324,6 +399,7 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
             key={hoveredFlight.flight_number}
             flight={hoveredFlight}
             hideAddToTrip={true}
+            airportTimezone={airportTimezoneMap[hoveredFlight.origin_airport_code ?? '']}
           />
         </div>,
         document.body

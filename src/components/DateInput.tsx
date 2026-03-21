@@ -440,7 +440,6 @@ const DateInput = ({ value, onChange, timezone, minDate: minDateProp }: DateInpu
   return (
     <div className="date-input-container" ref={containerRef}>
       <div className="date-input-display" onClick={handleInputClick}>
-        <span className="date-icon">📅</span>
         <input
           ref={inputRef}
           type="text"

@@ -1101,14 +1101,48 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   }, []); // stable – reads from store via getState() and from refs
 
   // Popup helper functions
-  const formatTime = (dateString: string | null | undefined) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const formatTime = (dateString: string | null | undefined, tz?: string) => {
+    if (!dateString) return '';
+    try {
+      return new Date(dateString).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', ...(tz ? { timeZone: tz } : {}) });
+    } catch { return ''; }
   };
 
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+  };
+
+  const popupHaversineKm = (lon1: number, lat1: number, lon2: number, lat2: number) => {
+    const R = 6371;
+    const toRad = (d: number) => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1); const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(a));
+  };
+
+  const popupFormatDuration = (minutes: number, estimated: boolean) => {
+    const h = Math.floor(minutes / 60);
+    const m = String(minutes % 60).padStart(2, '0');
+    return estimated ? `~${h}h ${m}m` : `${h}h ${m}m`;
+  };
+
+  // Compute UTC offset of a local timestamp string relative to a UTC string
+  const getUTCOffH = (localStr: string | null | undefined, utcStr: string | null | undefined): number | null => {
+    if (!localStr || !utcStr) return null;
+    const localAsUTC = new Date(localStr + 'Z');
+    const utcDate = new Date(utcStr);
+    if (isNaN(localAsUTC.getTime()) || isNaN(utcDate.getTime())) return null;
+    return (localAsUTC.getTime() - utcDate.getTime()) / 3600000;
+  };
+
+  const formatTzLabel = (diff: number): string | null => {
+    if (Math.abs(diff) < 0.1) return null;
+    const sign = diff > 0 ? '+' : '-';
+    const abs = Math.abs(diff);
+    const h = Math.floor(abs);
+    const m = Math.round((abs - h) * 60);
+    return m > 0 ? `(${sign}${h}.${m}h)` : `(${sign}${h}h)`;
   };
 
   const calculateDuration = (departure: string | null | undefined, arrival: string | null | undefined) => {
@@ -1333,6 +1367,16 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       // Immediately mark route hover as active to block any concurrent updates
       isRouteHoveredRef.current = true;
 
+      // Searched route takes priority — clear any active trip/transfer route hover
+      if (hoveredTripRouteId.current !== null) {
+        m.setFeatureState({ source: 'trip-permanent-routes', id: hoveredTripRouteId.current }, { hover: false });
+        hoveredTripRouteId.current = null;
+      }
+      if (hoveredTransferRouteId.current !== null) {
+        m.setFeatureState({ source: 'manual-transfer-preview', id: hoveredTransferRouteId.current }, { hover: false });
+        hoveredTransferRouteId.current = null;
+      }
+
       if (hoveredAirportCodeRef.current) {
         clearRouteHover({ keepLabels: true });
         return;
@@ -1457,27 +1501,117 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       const srcCityName = displayFlights[0]?.origin_city_name || srcAirportName;
       const destCityName = displayFlights[0]?.destination_city_name || destAirportName;
 
+      // ── Route duration for header ─────────────────────────────────────────────
+      let headerDurationStr = '';
+      let headerDurationEstimated = false;
+      const firstWithTimes = displayFlights.find(f => f.scheduled_departure_utc && f.scheduled_arrival_utc);
+      if (firstWithTimes) {
+        const min = Math.round((new Date(firstWithTimes.scheduled_arrival_utc!).getTime() - new Date(firstWithTimes.scheduled_departure_utc!).getTime()) / 60000);
+        if (min > 0) headerDurationStr = popupFormatDuration(min, false);
+      } else {
+        const srcC = airportCoordsMapRef.current[srcCode];
+        const dstC = airportCoordsMapRef.current[destCode];
+        if (srcC && dstC) {
+          const distKm = popupHaversineKm(srcC[0], srcC[1], dstC[0], dstC[1]);
+          const min = Math.round((distKm / 850 + 0.5) * 60);
+          headerDurationStr = popupFormatDuration(min, true);
+          headerDurationEstimated = true;
+        }
+      }
+      const headerDurationHtml = headerDurationStr
+        ? headerDurationEstimated
+          ? `<div style="background:rgba(200,158,50,0.12);color:rgba(190,140,30,0.95);border:1px solid rgba(200,158,50,0.3);border-radius:4px;padding:1px 7px;font-size:12px;font-weight:500;white-space:nowrap;">${headerDurationStr}</div>`
+          : `<div style="color:#999;font-size:12px;font-weight:400;white-space:nowrap;">${headerDurationStr}</div>`
+        : `<div style="color:#ccc;font-size:13px;">→</div>`;
+
+      // ── Per-flight rows ───────────────────────────────────────────────────────
+      const GOLD = 'rgba(200,158,50,0.12)';
+      const GOLD_BORDER = 'rgba(200,158,50,0.3)';
+      const GOLD_TEXT = 'rgba(190,140,30,0.95)';
+
+      // Derive UTC offsets from flights that have both local + UTC times
+      let destUTCOffset: number | null = null;
+      let srcUTCOffset: number | null = null;
+      for (const f of allFlightsForRoute) {
+        if (destUTCOffset === null) {
+          const off = getUTCOffH(f.scheduled_arrival_local, f.scheduled_arrival_utc);
+          if (off !== null) destUTCOffset = off;
+        }
+        if (srcUTCOffset === null) {
+          const off = getUTCOffH(f.scheduled_departure_local, f.scheduled_departure_utc);
+          if (off !== null) srcUTCOffset = off;
+        }
+        if (destUTCOffset !== null && srcUTCOffset !== null) break;
+      }
+
       const flightRows = shownFlights.map(f => {
-        const airline = f.airline_name || f.airline_code || '';
-        const flightCode = `${f.airline_code || ''} ${f.flight_number || ''}`.trim();
+        const airlineCode = f.airline_code || '';
+        const rawFlightNum = f.flight_number || '';
+        const cleanFlightCode = airlineCode && !rawFlightNum.toUpperCase().startsWith(airlineCode.toUpperCase())
+          ? `${airlineCode}${rawFlightNum}`
+          : rawFlightNum;
+        const airlineName = f.airline_name || airlineCode;
+        const centerLabel = [airlineName, cleanFlightCode].filter(Boolean).join('  ');
+
+        // Arrival time + TZ indicator
+        let arrHtml = '';
+        const hasArrival = !!(f.scheduled_arrival_local || f.scheduled_arrival_utc);
+        if (hasArrival) {
+          const arrStr = formatTime(f.scheduled_arrival_local || f.scheduled_arrival_utc);
+          const depOff = getUTCOffH(f.scheduled_departure_local, f.scheduled_departure_utc);
+          const arrOff = getUTCOffH(f.scheduled_arrival_local, f.scheduled_arrival_utc);
+          const tzDiff = (depOff !== null && arrOff !== null) ? arrOff - depOff : null;
+          const tzLabel = tzDiff !== null ? formatTzLabel(tzDiff) : null;
+          const tzHtml = tzLabel
+            ? `<span style="font-size:10px;color:${tzDiff! > 0 ? '#10b981' : '#ef4444'};margin-right:3px;">${tzLabel}</span>`
+            : '';
+          arrHtml = `${tzHtml}<span style="font-family:monospace;font-weight:600;">${arrStr}</span>`;
+        } else if (f.scheduled_departure_utc) {
+          // Estimated arrival
+          const srcC = airportCoordsMapRef.current[f.origin_airport_code || ''];
+          const dstC = airportCoordsMapRef.current[f.destination_airport_code || ''];
+          if (srcC && dstC) {
+            const distKm = popupHaversineKm(srcC[0], srcC[1], dstC[0], dstC[1]);
+            const blockMs = (distKm / 850 + 0.5) * 3600000;
+            const estArrUtc = new Date(new Date(f.scheduled_departure_utc).getTime() + blockMs);
+            // Format in destination local time if we know the offset
+            let estStr: string;
+            if (destUTCOffset !== null) {
+              const destLocalMs = estArrUtc.getTime() + destUTCOffset * 3600000;
+              const d = new Date(destLocalMs);
+              estStr = `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+            } else {
+              estStr = formatTime(estArrUtc.toISOString());
+            }
+            // TZ label for estimated arrival
+            const estTzDiff = (srcUTCOffset !== null && destUTCOffset !== null) ? destUTCOffset - srcUTCOffset : null;
+            const estTzLabel = estTzDiff !== null ? formatTzLabel(estTzDiff) : null;
+            const estTzHtml = estTzLabel
+              ? `<span style="font-size:10px;color:${estTzDiff! > 0 ? '#10b981' : '#ef4444'};margin-right:3px;">${estTzLabel}</span>`
+              : '';
+            arrHtml = `${estTzHtml}<span style="background:${GOLD};color:${GOLD_TEXT};border:1px solid ${GOLD_BORDER};border-radius:3px;padding:1px 5px 1px 5px;font-family:monospace;font-weight:600;font-size:inherit;margin-right:-5px;">~${estStr}</span>`;
+          }
+        }
+
         return `
-          <div style="display:flex;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid #f5f5f5;font-size:13px;color:#333;">
-            <div style="font-weight:600;min-width:72px;">${flightCode}</div>
-            <div style="min-width:48px;">${formatTime(f.scheduled_departure_local || f.scheduled_departure_utc)}</div>
-            <div style="color:#777;min-width:90px;flex:1;">${airline}</div>
-            <div style="min-width:48px;text-align:right;">${formatTime(f.scheduled_arrival_local || f.scheduled_arrival_utc)}</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid #f5f5f5;font-size:13px;color:#333;">
+            <div style="font-family:monospace;font-weight:600;min-width:38px;flex-shrink:0;">${formatTime(f.scheduled_departure_local || f.scheduled_departure_utc)}</div>
+            <div style="flex:1;text-align:center;color:#555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${centerLabel}</div>
+            <div style="flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;">${arrHtml}</div>
           </div>`;
       }).join('');
 
       const popupHtml = `
-        <div style="margin:0;padding:10px 12px;min-width:320px;max-width:420px;font-family:system-ui,sans-serif;">
-          <div style="display:flex;justify-content:space-between;gap:10px;font-weight:700;font-size:14px;color:#1a1a1a;">
-            <div>${srcCityName}</div>
-            <div>${destCityName}</div>
+        <div style="margin:0;padding:12px 16px;min-width:420px;max-width:580px;font-family:system-ui,sans-serif;">
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;font-weight:700;font-size:15px;color:#1a1a1a;margin-bottom:2px;">
+            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${srcCityName}</div>
+            ${headerDurationHtml}
+            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;">${destCityName}</div>
           </div>
-          <div style="display:flex;justify-content:space-between;gap:10px;font-size:11px;color:#666;margin-top:2px;margin-bottom:8px;">
-            <div>${srcAirportName}</div>
-            <div style="text-align:right;">${destAirportName}</div>
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;font-size:12px;color:#888;margin-bottom:10px;">
+            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${srcAirportName}</div>
+            <div></div>
+            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;">${destAirportName}</div>
           </div>
           <div>
             ${shownFlights.length > 0 ? flightRows : '<div style="color:#aaa;font-size:12px;padding:6px 0;">No flights for selected date</div>'}
@@ -1532,6 +1666,14 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       hoverRef: { current: string | number | null }
     ) => {
       map.current?.on('mousemove', layerId, (e) => {
+        // Searched flight route has priority — suppress trip/transfer hover
+        if (isRouteHoveredRef.current) {
+          if (hoverRef.current !== null) {
+            map.current?.setFeatureState({ source: sourceId, id: hoverRef.current }, { hover: false });
+            hoverRef.current = null;
+          }
+          return;
+        }
         if (!e.features || e.features.length === 0) return;
         const featureId = e.features[0].id;
         if (featureId == null) return;
@@ -2337,14 +2479,16 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       : selectedAirportCode ? [selectedAirportCode] : [];
     if (sourceCodes.length === 0) return;
 
-    // Mark as rendered before animating to prevent duplicates on rapid updates
-    newAirports.forEach(a => renderedHighlightedRef.current.add(a));
-
     const newPaths = buildGCPaths(sourceCodes, newAirports, airportsData, flightsDataRef.current);
     if (newPaths.length === 0) return;
 
+    // Only mark airports as rendered if they actually got paths — airports without paths
+    // remain un-rendered so they are retried when flightsData updates (added to deps below).
+    const mappedDests = new Set(newPaths.map(p => p.destCode));
+    newAirports.forEach(a => { if (mappedDests.has(a)) renderedHighlightedRef.current.add(a); });
+
     addRoutesToAnimation(map.current, animationRef, completedPathsRef, currentAnimatingRef, newPaths);
-  }, [highlightedAirports, mapLoaded, airportsData, selectedAirportCode, selectedAirportCodes]);
+  }, [highlightedAirports, mapLoaded, airportsData, selectedAirportCode, selectedAirportCodes, flightsData]);
 
   // Re-apply all colors when colorStore values or selected airports change
   useEffect(() => {

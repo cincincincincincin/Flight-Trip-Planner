@@ -114,6 +114,12 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
     const virtuosoRef = useRef<VirtuosoHandle | null>(null);
     const flightRefsMap = useRef(new Map());
 
+    // Refs so loadFlightsFromDatetime can read current values without stale closures
+    const airportTimezonesRef = useRef(airportTimezones);
+    useEffect(() => { airportTimezonesRef.current = airportTimezones; }, [airportTimezones]);
+    const travelDateRef = useRef(travelDate);
+    useEffect(() => { travelDateRef.current = travelDate; }, [travelDate]);
+
     // ── Derived loading / hasMore (combined) ──────────────────────────────────
     // These are computed from the per-airport maps; we also keep the React state
     // versions in sync so the UI re-renders correctly.
@@ -280,10 +286,37 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
 
             // If the API window ended within the same day, auto-load the next window
             // immediately so we always show the full day without waiting for scroll-to-end.
-            if (rangeEnd && rangeEnd.split('T')[0] === normalizedDatetime.split('T')[0]) {
-              autoLoadNext = rangeEnd;
-              perAirportHasMoreRef.current.set(airportCode, true);
-              perAirportNextWindowRef.current.set(airportCode, rangeEnd);
+            // Also auto-load when crossing midnight into the next local day but the display
+            // timezone's travelDate still overlaps that next local day (cross-timezone case:
+            // e.g. Warsaw display day spans JFK March 20 23:55 – March 21 17:59).
+            if (rangeEnd) {
+              const sameLocalDay = rangeEnd.split('T')[0] === normalizedDatetime.split('T')[0];
+              let shouldContinue = sameLocalDay;
+              if (!sameLocalDay && timezone) {
+                const airportTZ = airportTimezonesRef.current?.[airportCode] ?? timezone;
+                if (airportTZ && airportTZ !== timezone) {
+                  // Check whether the start of the next local day falls within travelDate in display TZ.
+                  // Use noon-anchor to find UTC of midnight for the next local date.
+                  try {
+                    const nextLocalDate = rangeEnd.split('T')[0];
+                    const noonUTC = new Date(`${nextLocalDate}T12:00:00Z`);
+                    const localNoon = noonUTC.toLocaleString('sv-SE', { timeZone: airportTZ });
+                    const [, ltStr] = localNoon.split(' ');
+                    const [hh, mm, ss] = ltStr.split(':').map(Number);
+                    const utcMidnight = new Date(noonUTC.getTime() - hh * 3600000 - mm * 60000 - ss * 1000);
+                    const displayDate = utcMidnight.toLocaleDateString('en-CA', { timeZone: timezone });
+                    if (displayDate === travelDateRef.current) shouldContinue = true;
+                  } catch { /* ignore */ }
+                }
+              }
+              if (shouldContinue) {
+                autoLoadNext = rangeEnd;
+                perAirportHasMoreRef.current.set(airportCode, true);
+                perAirportNextWindowRef.current.set(airportCode, rangeEnd);
+              } else {
+                perAirportHasMoreRef.current.set(airportCode, false);
+                perAirportNextWindowRef.current.set(airportCode, null);
+              }
             } else {
               perAirportHasMoreRef.current.set(airportCode, false);
               perAirportNextWindowRef.current.set(airportCode, null);

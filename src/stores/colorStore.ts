@@ -36,6 +36,16 @@ export interface ColorState {
   tripLabelColor: string;           // text color for trip airport labels
   tripLabelHoverColor: string;      // hover text color for trip airport labels
 
+  // Flight card highlight colors (trip mode)
+  fcHighlightAirportBg: string;
+  fcHighlightAirportBorder: string;
+  fcHighlightCityBg: string;
+  fcHighlightCityBorder: string;
+  fcHighlightCountryBg: string;
+  fcHighlightCountryBorder: string;
+  fcHighlightSoonBg: string;
+  fcHighlightSoonBorder: string;
+
   // City colors (kept for backward compat, not shown in settings)
   highlightedCity: string;
   generalCity: string;
@@ -98,7 +108,15 @@ export type ColorKey =
   | 'tripLabelColor'
   | 'tripLabelHoverColor'
   | 'highlightedCity'
-  | 'generalCity';
+  | 'generalCity'
+  | 'fcHighlightAirportBg'
+  | 'fcHighlightAirportBorder'
+  | 'fcHighlightCityBg'
+  | 'fcHighlightCityBorder'
+  | 'fcHighlightCountryBg'
+  | 'fcHighlightCountryBorder'
+  | 'fcHighlightSoonBg'
+  | 'fcHighlightSoonBorder';
 
 export type SizeKey =
   | 'routeLineWidthMin'
@@ -156,6 +174,15 @@ const DEFAULT_COLORS = {
   destinationLabelHoverColor: '#000000',
   tripLabelColor:          '#000000',
   tripLabelHoverColor:     '#000000',
+  // Flight card highlight colors
+  fcHighlightAirportBg:     'rgba(43, 168, 180, 0.10)',
+  fcHighlightAirportBorder: 'rgba(43, 168, 180, 0.28)',
+  fcHighlightCityBg:        'rgba(106, 153, 85, 0.10)',
+  fcHighlightCityBorder:    'rgba(106, 153, 85, 0.28)',
+  fcHighlightCountryBg:     'rgba(200, 158, 50, 0.10)',
+  fcHighlightCountryBorder: 'rgba(200, 158, 50, 0.28)',
+  fcHighlightSoonBg:        'rgba(220, 38, 38, 0.10)',
+  fcHighlightSoonBorder:    'rgba(220, 38, 38, 0.30)',
   // city colors (kept for backward compat)
   highlightedCity: '#4CAF50',
   generalCity: '#4ECDC4',

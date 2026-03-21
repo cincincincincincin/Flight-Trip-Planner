@@ -252,6 +252,10 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   const [selectedTimezoneOverride, setSelectedTimezoneOverride] = useState<string | null>(null);
   const [selectedTimezoneAirportCode, setSelectedTimezoneAirportCode] = useState<string | null>(null);
   const [, setNowTick] = useState(0);
+  // Track previous resolved timezone to sync travelDate when it auto-switches
+  const prevResolvedTZRef = useRef<string | null | undefined>(undefined);
+  const travelDateForTZRef = useRef(travelDate);
+  useEffect(() => { travelDateForTZRef.current = travelDate; }, [travelDate]);
 
   // ── Airport info for timezone ──────────────────────────────────────────────
   const primaryAirportCode = useMemo(() => {
@@ -355,6 +359,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     setSelectedTimezoneOverride(null);
     setSelectedTimezoneAirportCode(null);
     setCountryActiveTZ(null);
+    prevResolvedTZRef.current = undefined; // reset so next auto-TZ change is treated as initial
   }, [selectedItem, clearFilters]);
 
   // ── Reset pendingSelectedAirports when pendingCountryPicker changes ────────
@@ -550,6 +555,20 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
 
   // (countryDisplayTZ moved above timezone declaration)
 
+  // ── Sync travelDate when resolvedTimezone auto-switches (e.g. Melbourne added) ──
+  useEffect(() => {
+    if (selectedItem?.type === 'country') return; // country mode has its own logic
+    if (selectedTimezoneOverride) return; // user explicitly chose a TZ, don't interfere
+    const prevTZ = prevResolvedTZRef.current;
+    prevResolvedTZRef.current = resolvedTimezone;
+    if (prevTZ === undefined || resolvedTimezone === prevTZ || !resolvedTimezone) return;
+    // Only update travelDate if it was "today" in the previous timezone
+    const todayInPrevTZ = prevTZ ? new Date().toLocaleDateString('en-CA', { timeZone: prevTZ }) : null;
+    if (!todayInPrevTZ || travelDateForTZRef.current === todayInPrevTZ) {
+      setTravelDate(new Date().toLocaleDateString('en-CA', { timeZone: resolvedTimezone }));
+    }
+  }, [resolvedTimezone, selectedTimezoneOverride, selectedItem?.type, setTravelDate]);
+
   // ── Set travelDate when country display TZ changes ─────────────────────────
   const prevCountryDisplayTZRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
@@ -715,6 +734,20 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
       }
     }
   }, [airportTimezoneMap, selectedTimezoneOverride, setTravelDate, effectiveArrivalTimeUTC, timezone, travelDate]);
+
+  // ── Reset timezone override if the airport it was set for is removed ──────
+  useEffect(() => {
+    if (!selectedTimezoneOverride) return;
+    const allCodes = [
+      ...explorationItems.flatMap(i => i.airportCodes),
+      ...transferAirports,
+    ];
+    const hasMatch = allCodes.some(c => airportTimezoneMap[c] === selectedTimezoneOverride);
+    if (!hasMatch) {
+      setSelectedTimezoneOverride(null);
+      setSelectedTimezoneAirportCode(null);
+    }
+  }, [explorationItems, transferAirports, selectedTimezoneOverride, airportTimezoneMap]);
 
   // ── Exploration groups (airport mode) ─────────────────────────────────────
   // Compute city-groups and country-groups from explorationItems
@@ -1242,6 +1275,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                 </div>
               )}
               {((selectedItem.type === 'airport' && !effectiveArrivalTimeUTC) ||
+                selectedItem.type === 'city' ||
                 (selectedItem.type === 'country' && countryTzGroups.filter(g => g.tz !== '_unknown').length <= 1)) &&
                 isToday && airportTime && (
                 <div className="airport-time">{airportTime}</div>

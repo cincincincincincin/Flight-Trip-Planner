@@ -122,6 +122,10 @@
   align-items: flex-end;
 }
 
+.trip-leg-airport--dest .trip-leg-datetime {
+  align-items: flex-end;
+}
+
 .trip-leg-code {
   font-family: var(--font-mono);
   font-size: clamp(12px, 1.2vw, 14px);
@@ -187,12 +191,40 @@
   font-weight: 600;
 }
 
+/* ── Time row (arrival time + tz badge) ─────────────────────── */
+.trip-leg-time-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.trip-leg-tz-diff {
+  font-size: 9px;
+  font-weight: 600;
+  border-radius: var(--r-pill);
+  padding: 1px 4px;
+  white-space: nowrap;
+}
+
+.trip-leg-tz-diff.positive {
+  color: var(--green);
+  background: var(--green-dim, rgba(16, 185, 129, 0.12));
+}
+
+.trip-leg-tz-diff.negative {
+  color: var(--red);
+  background: var(--red-dim);
+}
+
 /* ── Estimated arrival ───────────────────────────────────────── */
 .trip-leg-time--estimated {
   background: var(--c-gold-dim);
   color: var(--c-gold);
   border-radius: 3px;
   padding: 0 3px;
+  transform: translateX(3px);
+  margin-left: -3px;
   cursor: default;
 }
 

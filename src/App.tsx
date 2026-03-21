@@ -15,6 +15,7 @@ import { useTripStore } from './stores/tripStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { useAuthStore } from './stores/authStore';
 import { useFilterStore } from './stores/filterStore';
+import { useColorStore } from './stores/colorStore'; // for flight card highlight CSS vars
 import './App.css';
 
 const _origLog = console.log;
@@ -92,6 +93,28 @@ function App() {
   } = useTripStore();
 
   const { travelDate, showConsoleLogs } = useSettingsStore();
+
+  const fcHighlightAirportBg     = useColorStore(s => s.fcHighlightAirportBg);
+  const fcHighlightAirportBorder = useColorStore(s => s.fcHighlightAirportBorder);
+  const fcHighlightCityBg        = useColorStore(s => s.fcHighlightCityBg);
+  const fcHighlightCityBorder    = useColorStore(s => s.fcHighlightCityBorder);
+  const fcHighlightCountryBg     = useColorStore(s => s.fcHighlightCountryBg);
+  const fcHighlightCountryBorder = useColorStore(s => s.fcHighlightCountryBorder);
+  const fcHighlightSoonBg        = useColorStore(s => s.fcHighlightSoonBg);
+  const fcHighlightSoonBorder    = useColorStore(s => s.fcHighlightSoonBorder);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--fc-highlight-airport-bg',     fcHighlightAirportBg);
+    root.style.setProperty('--fc-highlight-airport-border', fcHighlightAirportBorder);
+    root.style.setProperty('--fc-highlight-city-bg',        fcHighlightCityBg);
+    root.style.setProperty('--fc-highlight-city-border',    fcHighlightCityBorder);
+    root.style.setProperty('--fc-highlight-country-bg',     fcHighlightCountryBg);
+    root.style.setProperty('--fc-highlight-country-border', fcHighlightCountryBorder);
+    root.style.setProperty('--fc-highlight-soon-bg',        fcHighlightSoonBg);
+    root.style.setProperty('--fc-highlight-soon-border',    fcHighlightSoonBorder);
+  }, [fcHighlightAirportBg, fcHighlightAirportBorder, fcHighlightCityBg, fcHighlightCityBorder,
+      fcHighlightCountryBg, fcHighlightCountryBorder, fcHighlightSoonBg, fcHighlightSoonBorder]);
 
   useEffect(() => {
     if (showConsoleLogs) {
@@ -394,9 +417,12 @@ function App() {
     clearExploration();
     rightPanelRef.current?.clearTransferAirports();
 
-    // Set destination code BEFORE the async fetch so flightAirportCodes in RightPanel
-    // switches immediately and FlightsList doesn't load from old airports.
+    // Switch selectedItem immediately (minimal data) so flightAirportCodes in RightPanel
+    // points to destCode right away — before the async getAirport resolves.
+    // Without this, selectedItem.data.code stays on the old airport during the async gap,
+    // causing FlightsList to fetch and append flights from the wrong airport.
     setSelectedAirportCode(destCode);
+    setSelectedItem({ type: 'airport', data: { code: destCode, name: destCode } as any });
 
     try {
       const destData = await getAirport(destCode);

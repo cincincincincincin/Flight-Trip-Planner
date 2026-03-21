@@ -26,6 +26,13 @@ const MAP_AIRPORT_ROWS: { key: ColorKey; label: string; hoverKey: ColorKey; labe
   { key: 'tripAirport',        label: 'Trip airports',        hoverKey: 'tripAirportHover',        labelKey: 'tripLabelColor',         labelHoverKey: 'tripLabelHoverColor' },
 ];
 
+const FC_HIGHLIGHT_ROWS: { bgKey: ColorKey; borderKey: ColorKey; label: string }[] = [
+  { bgKey: 'fcHighlightAirportBg',  borderKey: 'fcHighlightAirportBorder',  label: 'Same airport' },
+  { bgKey: 'fcHighlightCityBg',     borderKey: 'fcHighlightCityBorder',     label: 'Same city' },
+  { bgKey: 'fcHighlightCountryBg',  borderKey: 'fcHighlightCountryBorder',  label: 'Same country' },
+  { bgKey: 'fcHighlightSoonBg',     borderKey: 'fcHighlightSoonBorder',     label: 'Departs too soon' },
+];
+
 const MAP_ROUTE_ROWS: { key: ColorKey; label: string; hoverKey?: ColorKey; hint?: string }[] = [
   { key: 'tripRoute',      label: 'Trip route',      hoverKey: 'tripRouteHover' },
   { key: 'transferRoute',  label: 'Transfer route',  hoverKey: 'transferRouteHover' },
@@ -693,6 +700,20 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
           )}
         </div>
       ))}
+
+          <div className="color-subsection-label">Flight card highlights</div>
+          <div className="color-settings-col-headers color-settings-col-headers--elem2">
+            <span className="color-col-label" style={{textAlign:'left'}}></span>
+            {helpBtn("Background color")}
+            {helpBtn("Border color")}
+          </div>
+          {FC_HIGHLIGHT_ROWS.map(({ bgKey, borderKey, label }) => (
+            <div key={bgKey} className="color-row color-row--elem2">
+              <span className="color-row-label">{label}</span>
+              <ColorPicker color={colorValues[bgKey]} onChange={c => setColor(bgKey, c)} title={`${label} background`} />
+              <ColorPicker color={colorValues[borderKey]} onChange={c => setColor(borderKey, c)} title={`${label} border`} />
+            </div>
+          ))}
 
           <hr className="color-divider" />
         </>

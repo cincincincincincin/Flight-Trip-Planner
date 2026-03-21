@@ -18,23 +18,23 @@
 
 /* ── Trip highlight states ───────────────────────────────────── */
 .flight-card--trip-airport {
-  border-color: var(--c-teal-b);
-  background: var(--c-teal-dim);
+  border-color: var(--fc-highlight-airport-border, var(--c-teal-b));
+  background: var(--fc-highlight-airport-bg, var(--c-teal-dim));
 }
 
 .flight-card--trip-city {
-  border-color: var(--c-sage-b);
-  background: var(--c-sage-dim);
+  border-color: var(--fc-highlight-city-border, var(--c-sage-b));
+  background: var(--fc-highlight-city-bg, var(--c-sage-dim));
 }
 
 .flight-card--trip-country {
-  border-color: var(--c-gold-b);
-  background: var(--c-gold-dim);
+  border-color: var(--fc-highlight-country-border, var(--c-gold-b));
+  background: var(--fc-highlight-country-bg, var(--c-gold-dim));
 }
 
 .flight-card--trip-soon {
-  border-color: var(--red-b);
-  background: var(--red-dim);
+  border-color: var(--fc-highlight-soon-border, var(--red-b));
+  background: var(--fc-highlight-soon-bg, var(--red-dim));
   opacity: 0.75;
 }
 
@@ -208,14 +208,14 @@
   color: var(--text-primary);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .tz-diff {
   font-size: 10px;
   font-weight: 600;
   border-radius: var(--r-pill);
-  padding: 1px 5px;
+  padding: 1px 2px;
 }
 
 .tz-diff.positive { color: var(--green); background: var(--green-dim, rgba(16, 185, 129, 0.12)); }
@@ -236,6 +236,8 @@
 .arr-estimated-wrapper {
   position: relative;
   display: inline-flex;
+  transform: translateX(6px);
+  margin-left: -6px;
 }
 
 .arr-estimated-time {
