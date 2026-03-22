@@ -2,6 +2,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { FeatureCollection, LineString } from 'geojson';
 import type { RouteFeatureProps, SelectedItem } from '../../types';
 import { getRoute } from '../../api/geo';
+import { THEME_COLORS } from '../../constants/theme';
 
 export function addRoutesLayer(
   map: MapLibreMap,
@@ -14,7 +15,7 @@ export function addRoutesLayer(
     type: 'line',
     source: 'routes',
     paint: {
-      'line-color': ['case', ['==', ['get', 'codeshare'], true], '#FFA726', '#1E88E5'],
+      'line-color': ['case', ['==', ['get', 'codeshare'], true], THEME_COLORS.cCoral, THEME_COLORS.accent],
       'line-width': 1,
       'line-opacity': 0.6
     }

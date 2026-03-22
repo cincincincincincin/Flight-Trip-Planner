@@ -1,3 +1,5 @@
+import { THEME_COLORS } from '../../constants/theme';
+import { CONFIG } from '../../constants/config';
 interface LabelPaint {
   textColor: string;
   haloColor: string;
@@ -35,7 +37,7 @@ export const generateGreatCircle = (
 
   // Unwrap longitudes so consecutive points never jump by more than 180°.
   // This prevents antimeridian artifacts on both flat and globe projections –
-  // MapLibre handles extended coordinates (e.g. 203° = -157°) correctly.
+  // MapLibre handles extended coordinates (e.g. CONFIG.COLOR_THRESHOLDS.BLACK_RGB3° = -157°) correctly.
   for (let i = 1; i < points.length; i++) {
     const diff = points[i][0] - points[i - 1][0];
     if (diff > 180) points[i][0] -= 360;
@@ -51,15 +53,15 @@ export const isBlackOrWhiteColor = (colorHex: string): boolean => {
   const r = parseInt(colorHex.slice(1, 3), 16);
   const g = parseInt(colorHex.slice(3, 5), 16);
   const b = parseInt(colorHex.slice(5, 7), 16);
-  const isBlack = r < 20 && g < 20 && b < 20;
-  const isWhite = r > 235 && g > 235 && b > 235;
+  const isBlack = r < CONFIG.COLOR_THRESHOLDS.BLACK_RGB && g < CONFIG.COLOR_THRESHOLDS.BLACK_RGB && b < CONFIG.COLOR_THRESHOLDS.BLACK_RGB;
+  const isWhite = r > CONFIG.COLOR_THRESHOLDS.WHITE_RGB && g > CONFIG.COLOR_THRESHOLDS.WHITE_RGB && b > CONFIG.COLOR_THRESHOLDS.WHITE_RGB;
   return isBlack || isWhite;
 };
 
 // Helper: get halo color for text color
 // Always return opposite color based on luminance for maximum contrast
 export const getHaloColorForTextColor = (textColor: string, styleUrl: string | undefined): string => {
-  if (!textColor.startsWith('#') || textColor.length < 7) return '#FFFFFF';
+  if (!textColor.startsWith('#') || textColor.length < 7) return THEME_COLORS.textInverse;
   
   const r = parseInt(textColor.slice(1, 3), 16);
   const g = parseInt(textColor.slice(3, 5), 16);
@@ -69,12 +71,12 @@ export const getHaloColorForTextColor = (textColor: string, styleUrl: string | u
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   
   // Always return opposite: if text is bright, use dark halo; if text is dark, use bright halo
-  return luminance > 0.5 ? '#000000' : '#FFFFFF';
+  return luminance > 0.5 ? THEME_COLORS.textBlack : THEME_COLORS.textInverse;
 };
 
 // Helper: get text color opposite to halo color for contrast
 export const getTextColorForHaloColor = (haloColor: string): string => {
-  if (!haloColor.startsWith('#') || haloColor.length < 7) return '#FFFFFF';
+  if (!haloColor.startsWith('#') || haloColor.length < 7) return THEME_COLORS.textInverse;
   
   const r = parseInt(haloColor.slice(1, 3), 16);
   const g = parseInt(haloColor.slice(3, 5), 16);
@@ -84,18 +86,18 @@ export const getTextColorForHaloColor = (haloColor: string): string => {
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   
   // If halo is bright, return dark text; if halo is dark, return bright text
-  return luminance > 0.5 ? '#000000' : '#FFFFFF';
+  return luminance > 0.5 ? THEME_COLORS.textBlack : THEME_COLORS.textInverse;
 };
 
 export const getLabelPaint = (styleUrl: string | undefined): LabelPaint => {
   const lightScheme: LabelPaint = {
-    textColor: '#333333',
-    haloColor: '#FFFFFF',
+    textColor: THEME_COLORS.textPrimary,
+    haloColor: THEME_COLORS.textInverse,
     haloWidth: 1
   };
   const darkScheme: LabelPaint = {
-    textColor: '#FFFFFF',
-    haloColor: '#000000',
+    textColor: THEME_COLORS.textInverse,
+    haloColor: THEME_COLORS.textBlack,
     haloWidth: 1.5
   };
 

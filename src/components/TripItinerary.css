@@ -209,7 +209,7 @@
 
 .trip-leg-tz-diff.positive {
   color: var(--green);
-  background: var(--green-dim, rgba(16, 185, 129, 0.12));
+  background: var(--green-dim);
 }
 
 .trip-leg-tz-diff.negative {

@@ -1,0 +1,20 @@
+export const UI_SYMBOLS = {
+  EXPAND_DOWN: "▼",
+  EXPAND_RIGHT: "▶",
+  DROPDOWN: "▾",
+  EXPAND_INDICATOR: "▸",
+  CLOSE: "×",
+  CHECK: "✓",
+  ESTIMATED: "~",
+  LOADING: "⌛",
+  UNDO: "↩",
+  REDO: "↪",
+  PLUS: "+",
+  MINUS: "-",
+  QUESTION: "?",
+  EXPAND_UP: "▲",
+  PREV: "‹",
+  NEXT: "›",
+  CLOCK: "⏱",
+  DASH: "—"
+};

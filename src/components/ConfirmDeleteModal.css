@@ -5,7 +5,7 @@
 .confirm-delete-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.38);
+  background: var(--bg-modal-overlay);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   z-index: 2000;
@@ -86,6 +86,6 @@
 
 .confirm-delete-modal__btn--confirm:hover {
   background: var(--red);
-  color: #fff;
+  color: var(--text-inverse);
   box-shadow: var(--shadow-float);
 }

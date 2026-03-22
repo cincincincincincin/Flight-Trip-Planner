@@ -39,7 +39,7 @@
   transition: all 0.13s;
 }
 
-.color-settings-reset:hover { background: var(--red); color: #fff; }
+.color-settings-reset:hover { background: var(--red); color: var(--text-inverse); }
 
 /* ── Section labels ──────────────────────────────────────────── */
 .color-section-label {
@@ -174,7 +174,7 @@
   width: 18px;
   height: 18px;
   border-radius: var(--r-xs);
-  border: 1.5px solid rgba(0,0,0,0.18);
+  border: 1.5px solid var(--border-strong);
   cursor: pointer;
   padding: 0;
   display: block;
@@ -183,7 +183,7 @@
 
 .color-swatch-btn:hover {
   transform: scale(1.15);
-  box-shadow: 0 1px 6px rgba(0,0,0,0.22);
+  box-shadow: 0 1px 6px var(--border-strong);
 }
 
 /* ── Color picker popover ────────────────────────────────────── */
@@ -363,7 +363,7 @@
   transition: all 0.13s;
 }
 
-.zoom-copy-btn:hover { background: var(--red); color: #fff; }
+.zoom-copy-btn:hover { background: var(--red); color: var(--text-inverse); }
 
 /* ── Range slider ────────────────────────────────────────────── */
 .range-slider {
@@ -403,7 +403,7 @@
   border-radius: 50%;
   background: var(--accent);
   border: 2px solid white;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.22);
+  box-shadow: 0 1px 4px var(--border-strong);
   pointer-events: all;
   cursor: pointer;
 }
@@ -414,7 +414,7 @@
   border-radius: 50%;
   background: var(--accent);
   border: 2px solid white;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.22);
+  box-shadow: 0 1px 4px var(--border-strong);
   pointer-events: all;
   cursor: pointer;
 }

@@ -19,7 +19,7 @@
 
 .save-trip-btn:hover:not(:disabled) {
   background: var(--accent);
-  color: #fff;
+  color: var(--text-inverse);
   box-shadow: var(--shadow-float);
 }
 

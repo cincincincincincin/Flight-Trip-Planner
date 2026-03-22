@@ -96,3 +96,130 @@
 .maplibregl-ctrl-group button:hover {
   background: var(--bg-hover) !important;
 }
+
+/* Popup Styles */
+.mc-popup-container {
+  margin: 0;
+  padding: 12px 16px;
+  min-width: 420px;
+  max-width: 500px;
+  font-family: system-ui, sans-serif;
+}
+.mc-popup-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+.mc-popup-header-city {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mc-popup-header-city.right {
+  text-align: right;
+}
+.mc-popup-airports {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.mc-popup-duration-est {
+  border-radius: 4px;
+  padding: 1px 7px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  border-width: 1px;
+  border-style: solid;
+}
+.mc-popup-duration-exact {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.mc-popup-arrow {
+  color: var(--border-light);
+  font-size: 13px;
+}
+.mc-popup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--bg-glass-hi);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.mc-popup-time {
+  font-family: monospace;
+  font-weight: 600;
+  min-width: 38px;
+  flex-shrink: 0;
+}
+.mc-popup-airline {
+  flex: 1;
+  text-align: center;
+  color: #555;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mc-popup-arr {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.mc-popup-tz {
+  font-size: 10px;
+  margin-right: 3px;
+}
+.mc-popup-tz.pos { color: var(--green-light); }
+.mc-popup-tz.neg { color: var(--red-light); }
+.mc-popup-est-arr {
+  border-radius: 3px;
+  padding: 1px 5px 1px 5px;
+  font-family: monospace;
+  font-weight: 600;
+  font-size: inherit;
+  margin-right: -5px;
+  border-width: 1px;
+  border-style: solid;
+}
+.mc-popup-date-header {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  padding: 6px 0 2px;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 2px;
+  letter-spacing: 0.3px;
+}
+.mc-popup-no-flights {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 6px 0;
+}
+.mc-popup-dots {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  text-align: center;
+  letter-spacing: 2px;
+}
+.mc-popup-extra {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  text-align: center;
+}

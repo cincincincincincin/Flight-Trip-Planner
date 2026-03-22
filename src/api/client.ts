@@ -1,9 +1,10 @@
+import { CONFIG } from '../constants/config';
 import axios from 'axios';
 import { supabase } from '../lib/supabaseClient';
 
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
-  timeout: 30000,
+  timeout: CONFIG.API_TIMEOUT_MS,
 });
 
 // Attach Supabase JWT to every request when the user is logged in

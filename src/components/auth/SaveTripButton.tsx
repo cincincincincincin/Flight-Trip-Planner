@@ -5,6 +5,7 @@ import { saveTrip, updateTrip } from '../../api/trips';
 import { useTripStore } from '../../stores/tripStore';
 import TripNameModal from '../TripNameModal';
 import './SaveTripButton.css';
+import { TEXTS } from '../../constants/text';
 
 const SaveTripButton: React.FC = () => {
   const { tripState, tripRoutes, savedTripId, savedTripStateJSON, setSavedTrip, editMode, isLoadedTrip } = useTripStore();
@@ -60,7 +61,7 @@ const SaveTripButton: React.FC = () => {
 
   const handleNameConfirm = (name: string) => {
     setShowNameModal(false);
-    const autoName = `Trip ${new Date().toLocaleDateString()}`;
+    const autoName = `${TEXTS.auth.autoNamePrefix}${new Date().toLocaleDateString()}`;
     saveMutation.mutate({ name: name || autoName, stateJSON: currentStateJSON! });
   };
 
@@ -70,16 +71,16 @@ const SaveTripButton: React.FC = () => {
         className="save-trip-btn"
         onClick={handleClick}
         disabled={isPending}
-        title={isUpdate ? 'Update existing trip' : 'Save current trip'}
+        title={isUpdate ? TEXTS.auth.updateTripTitle : TEXTS.auth.saveTripTitle}
       >
-        {isPending ? 'Saving...' : isUpdate ? 'Update Trip' : 'Save Trip'}
+        {isPending ? TEXTS.auth.saving : isUpdate ? TEXTS.auth.updateTrip : TEXTS.auth.saveTrip}
       </button>
 
       {showNameModal && createPortal(
         <TripNameModal
-          initialName={`Trip ${new Date().toLocaleDateString()}`}
-          title="Name your trip"
-          confirmLabel="Save"
+          initialName={`${TEXTS.auth.autoNamePrefix}${new Date().toLocaleDateString()}`}
+          title={TEXTS.auth.nameYourTrip}
+          confirmLabel={TEXTS.buttons.save}
           onConfirm={handleNameConfirm}
           onCancel={() => setShowNameModal(false)}
         />,

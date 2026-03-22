@@ -3,6 +3,8 @@ import type { FeatureCollection, Point } from 'geojson';
 import type { CityFeatureProps, SelectedItem } from '../../types';
 import { getCity } from '../../api/search';
 import { getLabelPaint } from './utils';
+import { THEME_COLORS } from '../../constants/theme';
+import { CONFIG } from '../../constants/config';
 
 export function addCitiesLayer(
   map: MapLibreMap,
@@ -20,8 +22,8 @@ export function addCitiesLayer(
     type: 'circle',
     source: 'cities',
     paint: {
-      'circle-radius': 5,
-      'circle-color': '#4ECDC4',
+      'circle-radius': CONFIG.MAP_CITY_LAYER.RADIUS_SMALL,
+      'circle-color': THEME_COLORS.cTeal,
       'circle-stroke-width': 1,
       'circle-stroke-color': strokeColor
     }
@@ -32,7 +34,7 @@ export function addCitiesLayer(
     source: 'cities',
     layout: {
       'text-field': ['get', 'name'],
-      'text-size': 11,
+      'text-size': CONFIG.MAP_CITY_LAYER.TEXT_SMALL,
       'text-offset': [0, 1.8],
       'text-anchor': 'top',
       'text-max-width': 8,
@@ -50,10 +52,10 @@ export function addCitiesLayer(
     type: 'circle',
     source: 'cities',
     paint: {
-      'circle-radius': 8,
-      'circle-color': '#4CAF50',
+      'circle-radius': CONFIG.MAP_CITY_LAYER.RADIUS_MEDIUM,
+      'circle-color': THEME_COLORS.accent,
       'circle-stroke-width': 2,
-      'circle-stroke-color': 'white',
+      'circle-stroke-color': THEME_COLORS.white,
       'circle-opacity': 0.9,
     },
     filter: ['in', 'code', ''] // empty by default
@@ -65,15 +67,15 @@ export function addCitiesLayer(
     source: 'cities',
     layout: {
       'text-field': ['get', 'name'],
-      'text-size': 13,
+      'text-size': CONFIG.MAP_CITY_LAYER.TEXT_LARGE,
       'text-offset': [0, 1.8],
       'text-anchor': 'top',
       'text-max-width': 8,
       'text-font': ["Noto Sans Bold"],
     },
     paint: {
-      'text-color': '#2e7d32',
-      'text-halo-color': 'white',
+      'text-color': THEME_COLORS.greenDark,
+      'text-halo-color': THEME_COLORS.white,
       'text-halo-width': 2,
     },
     filter: ['in', 'code', ''] // empty by default

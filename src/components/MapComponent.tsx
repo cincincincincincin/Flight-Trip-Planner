@@ -19,35 +19,25 @@ import { buildGCPaths, addRoutesToAnimation, clearRouteAnimation, startPreviewAn
 import type { GCPath } from './map/routeAnimations';
 import './MapComponent.css';
 import './FlightCard.css';
+import { TEXTS } from '../constants/text';
+import { UI_SYMBOLS } from '../constants/ui';
+import { MAP_STYLES, isArcGISUrl } from '../constants/mapStyles';
+import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
+import { THEME_COLORS } from '../constants/theme';
+import { CONFIG } from '../constants/config';
 
 const ARCGIS_API_KEY = import.meta.env.VITE_ARCGIS_API_KEY ?? '';
 
-const ARCGIS_DOMAINS = [
-  'ibasemaps-api.arcgis.com',
-  'basemapstyles-api.arcgis.com',
-  'services.arcgisonline.com',
-  'static.arcgis.com',
-  'tiles.arcgis.com',
-  'basemaps.arcgis.com',
-];
 
-function isArcGISUrl(url: string): boolean {
-  try {
-    const host = new URL(url).hostname;
-    return ARCGIS_DOMAINS.some(d => host === d || host.endsWith('.' + d));
-  } catch {
-    return false;
-  }
-}
 
 // Styles that use the @esri/maplibre-arcgis BasemapStyle plugin (not inline specs or raw URLs)
-const ARCGIS_PLUGIN_STYLES = new Set(['arcgis:imagery', 'arcgis:charted-territory', 'arcgis:community']);
+const ARCGIS_PLUGIN_STYLES = new Set([MAP_STYLES.ARCGIS_IMAGERY, MAP_STYLES.ARCGIS_CHARTED, MAP_STYLES.ARCGIS_COMMUNITY]);
 
 function isArcGISPluginStyle(style: string): boolean {
   return ARCGIS_PLUGIN_STYLES.has(style);
 }
 
-// Convert 'arcgis:imagery' → 'arcgis/imagery' (the format expected by the plugin)
+// Convert MAP_STYLES.ARCGIS_IMAGERY → 'arcgis/imagery' (the format expected by the plugin)
 function toPluginStyleName(style: string): string {
   return style.replace(':', '/');
 }
@@ -63,7 +53,7 @@ function arcGISTransformRequest(url: string, _resourceType?: string): { url: str
 function resolveMapStyle(style: string, globeMode = false): string | maplibregl.StyleSpecification {
   const projection = globeMode ? { type: 'globe' } : undefined;
   switch (style) {
-    case 'arcgis:satellite':
+    case MAP_STYLES.ARCGIS_SATELLITE:
       return {
         version: 8,
         name: 'Satellite Map',
@@ -89,7 +79,7 @@ function resolveMapStyle(style: string, globeMode = false): string | maplibregl.
             type: 'line',
             source: 'world',
             'source-layer': 'countries',
-            paint: { 'line-color': '#ffffff', 'line-width': 1.2 },
+            paint: { 'line-color': THEME_COLORS.textInverse, 'line-width': 1.2 },
           } as maplibregl.LineLayerSpecification,
           {
             id: 'country-labels',
@@ -99,15 +89,15 @@ function resolveMapStyle(style: string, globeMode = false): string | maplibregl.
             layout: {
               'text-field': ['get', 'NAME'],
               'text-font': ['Open Sans Regular'],
-              'text-size': ['interpolate', ['linear'], ['zoom'], 0, 14, 5, 18, 8, 22],
+              'text-size': ['interpolate', ['linear'], ['zoom'], 0, 14, 5, CONFIG.HOVER_RADIUS_FALLBACK, 8, 22],
             },
-            paint: { 'text-color': '#ffffff', 'text-halo-color': '#000000', 'text-halo-width': 1 },
+            paint: { 'text-color': THEME_COLORS.textInverse, 'text-halo-color': THEME_COLORS.textBlack, 'text-halo-width': 1 },
           } as maplibregl.SymbolLayerSpecification,
         ],
       };
-    case 'arcgis:imagery':
-    case 'arcgis:charted-territory':
-    case 'arcgis:community':
+    case MAP_STYLES.ARCGIS_IMAGERY:
+    case MAP_STYLES.ARCGIS_CHARTED:
+    case MAP_STYLES.ARCGIS_COMMUNITY:
       // Plugin styles: map is initialised with a blank spec; BasemapStyle.applyStyle
       // fetches and applies the real style after the map's 'load' event fires.
       // Globe projection for plugin styles is applied via setProjection in onMapReady.
@@ -218,6 +208,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   // Refs for dynamic values used inside stable callbacks
   const tripVisibleAirportCodesRef = useRef<string[] | null>(null);
   const highlightedAirportsRef = useRef<string[]>([]);
+  const airportsDataRef = useRef(airportsData);
   const highlightedLabelCodesRef = useRef<string[]>([]); // codes used for highlighted label filter (for hover exclusion)
   const selectedAirportCodeRef = useRef<string | null>(null);
   const selectedAirportCodesRef = useRef<string[]>([]);
@@ -229,8 +220,8 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   const isRouteHoveredRef = useRef<boolean>(false);
 
   // Size refs for route hover styling
-  const highlightedAirportHoverRadiusMinRef = useRef<number>(10);
-  const highlightedAirportHoverRadiusMaxRef = useRef<number>(40);
+  const highlightedAirportHoverRadiusMinRef = useRef<number>(CONFIG.HOVER_STOP_DELAY_MS);
+  const highlightedAirportHoverRadiusMaxRef = useRef<number>(CONFIG.HOVER_CLEAR_DELAY_MS);
   const highlightedLabelHoverSizeMinRef = useRef<number>(11);
   const highlightedLabelHoverSizeMaxRef = useRef<number>(22);
   const zoomRangeMinRef = useRef<number>(1.3);
@@ -276,6 +267,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   }, [onSelectItem]);
   useEffect(() => { tripVisibleAirportCodesRef.current = tripVisibleAirportCodes; }, [tripVisibleAirportCodes]);
   useEffect(() => { highlightedAirportsRef.current = highlightedAirports; }, [highlightedAirports]);
+  useEffect(() => { airportsDataRef.current = airportsData; }, [airportsData]);
   useEffect(() => { selectedAirportCodeRef.current = selectedAirportCode; }, [selectedAirportCode]);
   useEffect(() => { selectedAirportCodesRef.current = selectedAirportCodes; }, [selectedAirportCodes]);
   useEffect(() => {
@@ -387,7 +379,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     [destinationFilter, airlineFilter, airportCityMap, airportCountryMap]
   );
 
-  // Keep matchesFilter in a ref so it can be used in closures (line 1100 for popup generation)
+  // Keep matchesFilter in a ref so it can be used in closures (line 1CONFIG.HOVER_STOP_DELAY_MS0 for popup generation)
   useEffect(() => {
     matchesFilterRef.current = matchesFilter;
   }, [matchesFilter]);
@@ -600,7 +592,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
         unit: 'metric'
       }), 'bottom-right');
       if (!isArcGISPluginStyle(mapStyle)) {
-        const isDemotiles = mapStyle === 'https://demotiles.maplibre.org/style.json';
+        const isDemotiles = mapStyle === MAP_STYLES.LIGHT;
         const customAttribution = isDemotiles
           ? '© <a href="https://maplibre.org/">MapLibre</a> | © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           : undefined;
@@ -817,10 +809,10 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     // Hover colors
     const startHoverExpr: any = sacMulti.length > 1
       ? ['match', ['get', 'code'],
-          ...sacMulti.flatMap((code, i) => [code, sp[i]?.airportHover ?? '#000000']),
-          sp[0]?.airportHover ?? '#000000',
+          ...sacMulti.flatMap((code, i) => [code, sp[i]?.airportHover ?? THEME_COLORS.textBlack]),
+          sp[0]?.airportHover ?? THEME_COLORS.textBlack,
         ]
-      : (sp[0]?.airportHover ?? '#000000');
+      : (sp[0]?.airportHover ?? THEME_COLORS.textBlack);
 
     const destinationHoverCodes = [...new Set([
       ...ha,
@@ -846,7 +838,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
           : ['interpolate', ['linear'], ['zoom'], zMin, min, zMax, max]
       );
       const labelOffsetExpr = (labelMin: number, labelMax: number, dotMin: number, dotMax: number): any => {
-        const padding = 4;
+        const padding = CONFIG.LABEL_OFFSET_PADDING;
         const minOffset = Math.max(0.2, (dotMin + padding) / Math.max(6, labelMin));
         const maxOffset = Math.max(0.2, (dotMax + padding) / Math.max(6, labelMax));
         return zMin === zMax
@@ -869,30 +861,30 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       }
     const startLabelExpr: any = sacMulti.length > 1
       ? ['match', ['get', 'code'],
-          ...sacMulti.flatMap((code, i) => [code, sp[i]?.label ?? '#000000']),
-          sp[0]?.label ?? '#000000',
+          ...sacMulti.flatMap((code, i) => [code, sp[i]?.label ?? THEME_COLORS.textBlack]),
+          sp[0]?.label ?? THEME_COLORS.textBlack,
         ]
-      : (sp[0]?.label ?? '#000000');
+      : (sp[0]?.label ?? THEME_COLORS.textBlack);
     const startLabelHoverExpr: any = sacMulti.length > 1
       ? ['match', ['get', 'code'],
-          ...sacMulti.flatMap((code, i) => [code, sp[i]?.labelHover ?? '#000000']),
-          sp[0]?.labelHover ?? '#000000',
+          ...sacMulti.flatMap((code, i) => [code, sp[i]?.labelHover ?? THEME_COLORS.textBlack]),
+          sp[0]?.labelHover ?? THEME_COLORS.textBlack,
         ]
-      : (sp[0]?.labelHover ?? '#000000');
+      : (sp[0]?.labelHover ?? THEME_COLORS.textBlack);
     
     // Build corresponding halo expressions for start points
     const startLabelHaloExpr: any = sacMulti.length > 1
       ? ['match', ['get', 'code'],
-          ...sacMulti.flatMap((code, i) => [code, getHaloColorForTextColor(sp[i]?.label ?? '#000000', mapStyle)]),
-          getHaloColorForTextColor(sp[0]?.label ?? '#000000', mapStyle),
+          ...sacMulti.flatMap((code, i) => [code, getHaloColorForTextColor(sp[i]?.label ?? THEME_COLORS.textBlack, mapStyle)]),
+          getHaloColorForTextColor(sp[0]?.label ?? THEME_COLORS.textBlack, mapStyle),
         ]
-      : getHaloColorForTextColor(sp[0]?.label ?? '#000000', mapStyle);
+      : getHaloColorForTextColor(sp[0]?.label ?? THEME_COLORS.textBlack, mapStyle);
     const startLabelHoverHaloExpr: any = sacMulti.length > 1
       ? ['match', ['get', 'code'],
-          ...sacMulti.flatMap((code, i) => [code, getHaloColorForTextColor(sp[i]?.labelHover ?? '#000000', mapStyle)]),
-          getHaloColorForTextColor(sp[0]?.labelHover ?? '#000000', mapStyle),
+          ...sacMulti.flatMap((code, i) => [code, getHaloColorForTextColor(sp[i]?.labelHover ?? THEME_COLORS.textBlack, mapStyle)]),
+          getHaloColorForTextColor(sp[0]?.labelHover ?? THEME_COLORS.textBlack, mapStyle),
         ]
-      : getHaloColorForTextColor(sp[0]?.labelHover ?? '#000000', mapStyle);
+      : getHaloColorForTextColor(sp[0]?.labelHover ?? THEME_COLORS.textBlack, mapStyle);
     
     const labelColorExpr: any = [
       'case',
@@ -967,12 +959,12 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       if (sacMulti.length > 1) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const matchExpr: any[] = ['match', ['get', 'code'],
-          ...sacMulti.flatMap((code, i) => [code, sp[i]?.airport ?? '#000000']),
-          '#000000',
+          ...sacMulti.flatMap((code, i) => [code, sp[i]?.airport ?? THEME_COLORS.textBlack]),
+          THEME_COLORS.textBlack,
         ];
         map.current.setPaintProperty('airports-selected', 'circle-color', matchExpr);
       } else {
-        map.current.setPaintProperty('airports-selected', 'circle-color', sp[0]?.airport ?? '#000000');
+        map.current.setPaintProperty('airports-selected', 'circle-color', sp[0]?.airport ?? THEME_COLORS.textBlack);
       }
     }
 
@@ -981,9 +973,9 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ziLegacy = (base: number): any => [
         'interpolate', ['linear'], ['zoom'],
-        1, Math.max(0.1, base * 0.3),
+        1, Math.max(0.1, base * CONFIG.SIZE_INTERPOLATION_MIN_FACTOR),
         6, base,
-        12, base * 2.5,
+        12, base * CONFIG.SIZE_INTERPOLATION_MAX_FACTOR,
       ];
 
       if (map.current.getLayer('selected-routes')) {
@@ -1086,17 +1078,17 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   const formatTime = (dateString: string | null | undefined, tz?: string) => {
     if (!dateString) return '';
     try {
-      return new Date(dateString).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', ...(tz ? { timeZone: tz } : {}) });
+      return new Date(dateString).toLocaleTimeString(FORMAT_LOCALES.GB, { hour: '2-digit', minute: '2-digit', ...(tz ? { timeZone: tz } : {}) });
     } catch { return ''; }
   };
 
   const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+    if (!dateString) return TEXTS.card.na;
+    return new Date(dateString).toLocaleDateString(FORMAT_LOCALES.GB, FORMAT_OPTIONS.DATE_SHORT);
   };
 
   const popupHaversineKm = (lon1: number, lat1: number, lon2: number, lat2: number) => {
-    const R = 6371;
+    const R = CONFIG.EARTH_RADIUS_KM;
     const toRad = (d: number) => d * Math.PI / 180;
     const dLat = toRad(lat2 - lat1); const dLon = toRad(lon2 - lon1);
     const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
@@ -1308,11 +1300,11 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
         return min + (max - min) * t;
       };
       const hoverRadius = Math.max(
-        18,
+        CONFIG.HOVER_RADIUS_FALLBACK,
         interp(highlightedAirportHoverRadiusMin, highlightedAirportHoverRadiusMax),
         interp(generalAirportHoverRadiusMin, generalAirportHoverRadiusMax),
       );
-      const threshold = hoverRadius + 6;
+      const threshold = hoverRadius + CONFIG.HOVER_KEEP_RADIUS_EXTRA;
       const tSq = threshold * threshold;
       for (const ap of projectedAirportsRef.current) {
         const dx = ap.x - point.x;
@@ -1451,8 +1443,8 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       const displayFlights = (flightDetailsMap.current[destCode] || [])
         .filter(f => !srcCode || f.origin_airport_code === srcCode);
 
-      const MAX_POPUP_FLIGHTS = 6;
-      const shownFlights = displayFlights.slice(0, MAX_POPUP_FLIGHTS);
+      // Removed redundant local MAX_POPUP_FLIGHTS
+      const shownFlights = displayFlights.slice(0, CONFIG.MAX_POPUP_FLIGHTS);
       const extraCount = displayFlights.length - shownFlights.length;
 
       // Group shown flights by departure airport local date (for multi-day windows)
@@ -1479,11 +1471,11 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
         if (!dateStr) return '';
         try {
           const d = new Date(dateStr + 'T12:00:00Z');
-          return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' });
+          return d.toLocaleDateString(FORMAT_LOCALES.GB, { day: 'numeric', month: 'long', timeZone: 'UTC' });
         } catch { return dateStr; }
       };
 
-      const srcAirportName = airportNamesMap.current[srcCode] || srcCode || 'Unknown';
+      const srcAirportName = airportNamesMap.current[srcCode] || srcCode || TEXTS.common.unknown;
       const destAirportName = airportNamesMap.current[destCode] || destCode;
       const srcCityName = displayFlights[0]?.origin_city_name || srcAirportName;
       const destCityName = displayFlights[0]?.destination_city_name || destAirportName;
@@ -1507,14 +1499,14 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       }
       const headerDurationHtml = headerDurationStr
         ? headerDurationEstimated
-          ? `<div style="background:rgba(200,158,50,0.12);color:rgba(190,140,30,0.95);border:1px solid rgba(200,158,50,0.3);border-radius:4px;padding:1px 7px;font-size:12px;font-weight:500;white-space:nowrap;">${headerDurationStr}</div>`
-          : `<div style="color:#999;font-size:12px;font-weight:400;white-space:nowrap;">${headerDurationStr}</div>`
-        : `<div style="color:#ccc;font-size:13px;">→</div>`;
+          ? `<div class="mc-popup-duration-est" style="background:${THEME_COLORS.goldBg};color:${THEME_COLORS.goldText};border-color:${THEME_COLORS.goldBorder}">${headerDurationStr}</div>`
+          : `<div class="mc-popup-duration-exact">${headerDurationStr}</div>`
+        : `<div class="mc-popup-arrow">→</div>`;
 
       // ── Per-flight rows ───────────────────────────────────────────────────────
-      const GOLD = 'rgba(200,158,50,0.12)';
-      const GOLD_BORDER = 'rgba(200,158,50,0.3)';
-      const GOLD_TEXT = 'rgba(190,140,30,0.95)';
+      const GOLD = THEME_COLORS.goldBg;
+      const GOLD_BORDER = THEME_COLORS.goldBorder;
+      const GOLD_TEXT = THEME_COLORS.goldText;
 
       // Derive UTC offsets from displayed flights for arrival-time estimation
       let destUTCOffset: number | null = null;
@@ -1550,9 +1542,9 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
           const tzDiff = (depOff !== null && arrOff !== null) ? arrOff - depOff : null;
           const tzLabel = tzDiff !== null ? formatTzLabel(tzDiff) : null;
           const tzHtml = tzLabel
-            ? `<span style="font-size:10px;color:${tzDiff! > 0 ? '#10b981' : '#ef4444'};margin-right:3px;">${tzLabel}</span>`
+            ? `<span style="font-size:CONFIG.HOVER_STOP_DELAY_MSpx;color:${tzDiff! > 0 ? '#10b981' : '#ef4444'};margin-right:3px;">${tzLabel}</span>`
             : '';
-          arrHtml = `${tzHtml}<span style="font-family:monospace;font-weight:600;">${arrStr}</span>`;
+          arrHtml = `${tzHtml}<span class="mc-popup-time">${arrStr}</span>`;
         } else if (f.scheduled_departure_utc) {
           const srcC = airportCoordsMapRef.current[f.origin_airport_code || ''];
           const dstC = airportCoordsMapRef.current[f.destination_airport_code || ''];
@@ -1571,45 +1563,45 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
             const estTzDiff = (srcUTCOffset !== null && destUTCOffset !== null) ? destUTCOffset - srcUTCOffset : null;
             const estTzLabel = estTzDiff !== null ? formatTzLabel(estTzDiff) : null;
             const estTzHtml = estTzLabel
-              ? `<span style="font-size:10px;color:${estTzDiff! > 0 ? '#10b981' : '#ef4444'};margin-right:3px;">${estTzLabel}</span>`
+              ? `<span style="font-size:CONFIG.HOVER_STOP_DELAY_MSpx;color:${estTzDiff! > 0 ? '#10b981' : '#ef4444'};margin-right:3px;">${estTzLabel}</span>`
               : '';
-            arrHtml = `${estTzHtml}<span style="background:${GOLD};color:${GOLD_TEXT};border:1px solid ${GOLD_BORDER};border-radius:3px;padding:1px 5px 1px 5px;font-family:monospace;font-weight:600;font-size:inherit;margin-right:-5px;">~${estStr}</span>`;
+            arrHtml = `${estTzHtml}<span class="mc-popup-est-arr" style="background:${GOLD};color:${GOLD_TEXT};border-color:${GOLD_BORDER}">${UI_SYMBOLS.ESTIMATED}${estStr}</span>`;
           }
         }
 
         return `
-          <div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid #f5f5f5;font-size:13px;color:#333;">
-            <div style="font-family:monospace;font-weight:600;min-width:38px;flex-shrink:0;">${formatTime(f.scheduled_departure_local || f.scheduled_departure_utc)}</div>
-            <div style="flex:1;text-align:center;color:#555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${centerLabel}</div>
-            <div style="flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;">${arrHtml}</div>
+          <div class="mc-popup-row">
+            <div class="mc-popup-time">${formatTime(f.scheduled_departure_local || f.scheduled_departure_utc)}</div>
+            <div class="mc-popup-airline">${centerLabel}</div>
+            <div class="mc-popup-arr">${arrHtml}</div>
           </div>`;
       };
 
       // Render flight rows, grouped by departure local date when the window spans multiple days
       const flightRows = [...dateGroups.entries()].map(([dateStr, groupFlights]) => {
         const header = showDateHeaders
-          ? `<div style="font-size:11px;color:#999;font-weight:600;padding:6px 0 2px;border-bottom:1px solid #e8e8e8;margin-bottom:2px;letter-spacing:0.3px;">${formatGroupDateLabel(dateStr)}</div>`
+          ? `<div class="mc-popup-date-header">${formatGroupDateLabel(dateStr)}</div>`
           : '';
         return header + groupFlights.map(buildFlightRow).join('');
       }).join('');
 
       const popupHtml = `
-        <div style="margin:0;padding:12px 16px;min-width:420px;max-width:580px;font-family:system-ui,sans-serif;">
-          <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;font-weight:700;font-size:15px;color:#1a1a1a;margin-bottom:2px;">
-            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${srcCityName}</div>
+        <div class="mc-popup-container">
+          <div class="mc-popup-header">
+            <div class="mc-popup-header-city">${srcCityName}</div>
             ${headerDurationHtml}
-            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;">${destCityName}</div>
+            <div class="mc-popup-header-city right">${destCityName}</div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px;font-size:12px;color:#888;margin-bottom:10px;">
-            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${srcAirportName}</div>
+          <div class="mc-popup-airports">
+            <div class="mc-popup-header-city">${srcAirportName}</div>
             <div></div>
-            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;">${destAirportName}</div>
+            <div class="mc-popup-header-city right">${destAirportName}</div>
           </div>
           <div>
-            ${shownFlights.length > 0 ? flightRows : '<div style="color:#aaa;font-size:12px;padding:6px 0;">No flights for selected date</div>'}
+            ${shownFlights.length > 0 ? flightRows : `<div class="mc-popup-no-flights">${TEXTS.card.noFlightsForDate}</div>`}
           </div>
           ${extraCount > 0
-            ? `<div style="font-size:12px;color:#aaa;margin-top:4px;text-align:center;letter-spacing:2px;">...</div><div style="font-size:10px;color:#bbb;margin-top:2px;text-align:center;">Click route to filter by destination</div>`
+            ? `<div class="mc-popup-dots">...</div><div class="mc-popup-extra">${TEXTS.card.clickRouteToFilter}</div>`
             : ''
           }
         </div>
@@ -1917,14 +1909,14 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   // Raw canvas DOM mousemove — fires at browser rate (not throttled to render loop).
   // Hover = dark red circle only (no label).
   // Sampling approach: show every Nth airport to avoid trailing effect. When cursor is
-  // on ocean (null), clear immediately — no queue drain. 10ms stop timer snaps to exact
+  // on ocean (null), clear immediately — no queue drain. CONFIG.HOVER_STOP_DELAY_MSms stop timer snaps to exact
   // current position after mouse stops moving.
   useEffect(() => {
     if (!mapLoaded || !map.current) return;
     const m = map.current;
     const canvas = m.getCanvas();
-    const HOVER_SAMPLE_EVERY = 10;
-    const LABEL_CLEAR_RADIUS = 70;
+    const HOVER_SAMPLE_EVERY = CONFIG.HOVER_SAMPLE_EVERY;
+    const LABEL_CLEAR_RADIUS = CONFIG.LABEL_CLEAR_RADIUS;
 
     const getNearbyLabelCodes = (point: { x: number; y: number }) => {
       const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
@@ -2045,7 +2037,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       }
       // Don't update highlighted labels while route hover is active —
       // applyRouteHoverAtPoint manages its own highlighted label filtering
-      // and the 10ms stop timer calling applyHover(null) must not overwrite it.
+      // and the CONFIG.HOVER_STOP_DELAY_MSms stop timer calling applyHover(null) must not overwrite it.
       if (!isRouteHoveredRef.current) {
         const hlCodes = highlightedLabelCodesRef.current;
         const filteredHl = excludeCodes.length > 0 ? hlCodes.filter(c => !excludeCodes.includes(c)) : hlCodes;
@@ -2068,7 +2060,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
 
       let code: string | null = null;
       if (showAirports) {
-        const THRESHOLD = 18;
+        const THRESHOLD = CONFIG.HOVER_RADIUS_FALLBACK;
         const tSq = THRESHOLD * THRESHOLD;
         let bestDist = Infinity;
         for (const ap of projectedAirportsRef.current) {
@@ -2078,7 +2070,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
           if (dist <= tSq && dist < bestDist) { bestDist = dist; code = ap.code; }
         }
       if (code !== null) {
-        hoverLockUntilRef.current = Date.now() + 80;
+        hoverLockUntilRef.current = Date.now() + CONFIG.HOVER_LOCK_DURATION_MS;
         const tripCodes = tripVisibleAirportCodesRef.current;
         if (tripCodes && tripCodes.length > 0) {
           if (!new Set([...tripCodes, ...highlightedAirportsRef.current]).has(code)) code = null;
@@ -2106,7 +2098,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
           return min + (max - min) * t;
         };
         const keepRadius = Math.max(
-          18,
+          CONFIG.HOVER_RADIUS_FALLBACK,
           interp(highlightedAirportHoverRadiusMin, highlightedAirportHoverRadiusMax),
           interp(generalAirportHoverRadiusMin, generalAirportHoverRadiusMax),
         ) + 6;
@@ -2118,7 +2110,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
           const dy = hoveredPoint.y - y;
           if (dx * dx + dy * dy <= keepRadiusSq) {
             code = hoveredCode;
-            hoverLockUntilRef.current = Date.now() + 120;
+            hoverLockUntilRef.current = Date.now() + CONFIG.HOVER_LOCK_EXTENSION;
           }
         }
       }
@@ -2137,7 +2129,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
             hoverClearTimerRef.current = setTimeout(() => {
               hoverClearTimerRef.current = null;
               applyHover(null);
-            }, 40);
+            }, CONFIG.HOVER_CLEAR_DELAY_MS);
           }
         }
       } else if (code !== hoveredAirportCodeRef.current) {
@@ -2156,7 +2148,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
         hoverClearTimerRef.current = null;
       }
 
-      // 10ms after last movement: snap to exact current position
+      // CONFIG.HOVER_STOP_DELAY_MS ms after last movement: snap to exact current position
       if (mouseStopTimerRef.current !== null) clearTimeout(mouseStopTimerRef.current);
       mouseStopTimerRef.current = setTimeout(() => {
         mouseStopTimerRef.current = null;
@@ -2166,7 +2158,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
           hoverClearTimerRef.current = null;
         }
         applyHover(lastDetectedCodeRef.current, { x, y });
-      }, 10);
+      }, CONFIG.HOVER_STOP_DELAY_MS);
 
       if (!code && showRoutes && Date.now() >= hoverLockUntilRef.current && !hoveredAirportCodeRef.current) {
         routeHoverAtPointRef.current?.({ x, y });
@@ -2185,11 +2177,11 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     };
       
     const handleClick = (e: MouseEvent) => {
-      if (!airportsData || !map.current) return;
+      if (!airportsDataRef.current || !map.current) return;
       const code = hoveredAirportCodeRef.current;
       if (!code) return;
-    
-      const feat = airportsData.features.find(f => f.properties.code === code);
+
+      const feat = airportsDataRef.current.features.find(f => f.properties.code === code);
       if (!feat) return;
     
       const isTripAirport = (tripVisibleAirportCodesRef.current ?? []).includes(code);
@@ -2314,10 +2306,10 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     const isLight = !mapStyle || (
       !mapStyle.includes('dark-matter') &&
       !mapStyle.includes('satelite') &&          // legacy typo kept for any cached value
-      !mapStyle.startsWith('arcgis:satellite') && // our inline satellite styles
+      !mapStyle.startsWith(MAP_STYLES.ARCGIS_SATELLITE) && // our inline satellite styles
       !isArcGISPluginStyle(mapStyle)             // arcgis/imagery etc. are dark/satellite
     );
-    const styleDefaultHalo = isLight ? '#FFFFFF' : '#000000';
+    const styleDefaultHalo = isLight ? THEME_COLORS.textInverse : THEME_COLORS.textBlack;
     
     // Calculate opposite text color
     const styleDefaultText = getTextColorForHaloColor(styleDefaultHalo);
@@ -2535,12 +2527,12 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       <div style={{
         width: '100%', height: '100%',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        backgroundColor: '#f8f9fa', color: '#6c757d',
+        backgroundColor: THEME_COLORS.gray100, color: THEME_COLORS.gray600,
         fontFamily: 'Arial, sans-serif', padding: '20px', textAlign: 'center'
       }}>
         <div>
-          <h3 style={{ marginBottom: '10px', color: '#dc3545' }}>Map could not be loaded</h3>
-          <p>WebGL is not supported in your browser. Please update or try a different browser.</p>
+          <h3 style={{ marginBottom: '10px', color: THEME_COLORS.errorRed }}>{TEXTS.errors.mapNotLoaded}</h3>
+          <p>{TEXTS.errors.webglNotSupported}</p>
         </div>
       </div>
     );

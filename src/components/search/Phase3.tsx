@@ -1,3 +1,5 @@
+import { UI_SYMBOLS } from '../../constants/ui';
+import { TEXTS } from '../../constants/text';
 import React, { useState, useCallback, useEffect } from 'react';
 import type { Country, City, Airport } from '../../types';
 import { highlightText } from './searchUtils';
@@ -70,9 +72,9 @@ const Phase3 = React.memo(({
         <button
           className="expand-button"
           onClick={handleToggleCountry}
-          title={isExpanded ? "Collapse" : "Expand"}
+          title={isExpanded ? TEXTS.search.collapse : TEXTS.search.expand}
         >
-          {isExpanded ? '▼' : '▶'}
+          {isExpanded ? UI_SYMBOLS.EXPAND_DOWN : UI_SYMBOLS.EXPAND_RIGHT}
         </button>
       )}
 
@@ -103,9 +105,9 @@ const Phase3 = React.memo(({
                     <button
                       className="expand-button"
                       onClick={(e) => handleToggleCity(city.code, e)}
-                      title={isCityExpanded ? "Collapse" : "Expand"}
+                      title={isCityExpanded ? TEXTS.search.collapse : TEXTS.search.expand}
                     >
-                      {isCityExpanded ? '▼' : '▶'}
+                      {isCityExpanded ? UI_SYMBOLS.EXPAND_DOWN : UI_SYMBOLS.EXPAND_RIGHT}
                     </button>
                   )}
                   <div

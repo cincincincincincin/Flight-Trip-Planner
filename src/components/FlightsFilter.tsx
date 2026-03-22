@@ -1,8 +1,11 @@
+import { CONFIG } from '../constants/config';
 import React, { useState, useMemo, useCallback } from 'react';
 import type { Flight } from '../types';
 import { useFilterStore } from '../stores/filterStore';
 import { useAirportsQuery } from '../hooks/queries';
 import './FlightsFilter.css';
+import { TEXTS } from '../constants/text';
+import { UI_SYMBOLS } from '../constants/ui';
 
 interface DestAirport { code: string; name: string; cityCode?: string; countryCode?: string; }
 interface DestCity { code: string; name: string; countryCode?: string; airports: DestAirport[]; }
@@ -103,9 +106,9 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
       if (city && !city.airports.some(a => a.code === aC)) city.airports.push(ap);
       else if (!city) {
         // airport without city
-        let noCityEntry = country.cities.find(c => c.code === '__nocity__');
+        let noCityEntry = country.cities.find(c => c.code === CONFIG.NO_CITY_PLACEHOLDER);
         if (!noCityEntry) {
-          noCityEntry = { code: '__nocity__', name: '', countryCode, airports: [] };
+          noCityEntry = { code: CONFIG.NO_CITY_PLACEHOLDER, name: '', countryCode, airports: [] };
           country.cities.push(noCityEntry);
         }
         if (!noCityEntry.airports.some(a => a.code === aC)) noCityEntry.airports.push(ap);
@@ -200,7 +203,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
         } else if (countryCode && countries.includes(countryCode)) {
           // Country was selected: split into all other cities
           const country = destData.find(c => c.code === countryCode);
-          const otherCities = (country?.cities || []).filter(ci => ci.code !== code && ci.code !== '__nocity__').map(ci => ci.code);
+          const otherCities = (country?.cities || []).filter(ci => ci.code !== code && ci.code !== CONFIG.NO_CITY_PLACEHOLDER).map(ci => ci.code);
           setDestinationFilter({ airports, cities: [...cities, ...otherCities.filter(c => !cities.includes(c))], countries: countries.filter(c => c !== countryCode) });
         }
       } else {
@@ -215,7 +218,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
         } else if (countryCode && countries.includes(countryCode)) {
           // Country selected: split into cities except the parent, handle airport
           const country = destData.find(c => c.code === countryCode);
-          const otherCities = (country?.cities || []).filter(ci => ci.code !== cityCode && ci.code !== '__nocity__').map(ci => ci.code);
+          const otherCities = (country?.cities || []).filter(ci => ci.code !== cityCode && ci.code !== CONFIG.NO_CITY_PLACEHOLDER).map(ci => ci.code);
           const parentCity = country?.cities.find(ci => ci.code === cityCode);
           const otherAirports = (parentCity?.airports || []).filter(a => a.code !== code).map(a => a.code);
           setDestinationFilter({
@@ -246,7 +249,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
         // Check auto-upgrade to country
         if (countryCode) {
           const country = destData.find(c => c.code === countryCode);
-          const validCities = (country?.cities || []).filter(ci => ci.code !== '__nocity__');
+          const validCities = (country?.cities || []).filter(ci => ci.code !== CONFIG.NO_CITY_PLACEHOLDER);
           if (validCities.length > 0 && validCities.every(ci => newCities.includes(ci.code))) {
             const countryCityCodes = new Set(validCities.map(ci => ci.code));
             setDestinationFilter({
@@ -271,7 +274,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
             // Check auto-upgrade to country
             if (countryCode) {
               const country = destData.find(c => c.code === countryCode);
-              const validCities = (country?.cities || []).filter(ci => ci.code !== '__nocity__');
+              const validCities = (country?.cities || []).filter(ci => ci.code !== CONFIG.NO_CITY_PLACEHOLDER);
               if (validCities.length > 0 && validCities.every(ci => newCities.includes(ci.code))) {
                 const countryCityCodes = new Set(validCities.map(ci => ci.code));
                 setDestinationFilter({ countries: [...countries, countryCode], cities: newCities.filter(c => !countryCityCodes.has(c)), airports: aps });
@@ -298,7 +301,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
       <div key={ap.code} className={`ff-item ff-airport ${selected ? 'ff-selected' : ''}`}
         onClick={() => selectItem('airport', ap.code, ap.cityCode, ap.countryCode)}>
         <span>{ap.name} <span className="ff-code">({ap.code})</span></span>
-        {selected && <span className="ff-check">✓</span>}
+        {selected && <span className="ff-check">{UI_SYMBOLS.CHECK}</span>}
       </div>
     );
   };
@@ -309,11 +312,11 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
       <div key={ci.code} className="ff-city-wrapper">
         <div className={`ff-item ff-city ${selected ? 'ff-selected' : ''}${expanded && showAirports ? ' ff-city--expanded' : ''}`}>
           {ci.airports.length > 0 && (
-            <button className="ff-expand-btn" onClick={onCityToggle}>{expanded ? '▼' : '▶'}</button>
+            <button className="ff-expand-btn" onClick={onCityToggle}>{expanded ? UI_SYMBOLS.EXPAND_DOWN : UI_SYMBOLS.EXPAND_RIGHT}</button>
           )}
           <div className="ff-item-left" onClick={() => selectItem('city', ci.code, undefined, ci.countryCode)}>
-            <span>{ci.name || ci.code} {ci.code !== '__nocity__' && <span className="ff-code">({ci.code})</span>}</span>
-            {selected && <span className="ff-check">✓</span>}
+            <span>{ci.name || ci.code} {ci.code !== CONFIG.NO_CITY_PLACEHOLDER && <span className="ff-code">({ci.code})</span>}</span>
+            {selected && <span className="ff-check">{UI_SYMBOLS.CHECK}</span>}
           </div>
         </div>
         {expanded && showAirports && (
@@ -340,17 +343,17 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
         <div className={`ff-item ff-country ${isCountrySelected ? 'ff-selected' : ''}${isCountryExpanded ? ' ff-country--expanded' : ''}`}>
           {phase === 1 && setCountryExpanded && (
             <button className="ff-expand-btn" onClick={() => setCountryExpanded(prev => { const n = new Set(prev); if (n.has(country.code)) n.delete(country.code); else n.add(country.code); return n; })}>
-              {isCountryExpanded ? '▼' : '▶'}
+              {isCountryExpanded ? UI_SYMBOLS.EXPAND_DOWN : UI_SYMBOLS.EXPAND_RIGHT}
             </button>
           )}
           <div className="ff-item-left" onClick={() => selectItem('country', country.code)}>
             <span>{country.name} <span className="ff-code">({country.code})</span></span>
-            {isCountrySelected && <span className="ff-check">✓</span>}
+            {isCountrySelected && <span className="ff-check">{UI_SYMBOLS.CHECK}</span>}
           </div>
         </div>
         {isCountryExpanded && (
           <div className="ff-cities-list">
-            {country.cities.filter(c => c.code !== '__nocity__').map(ci => {
+            {country.cities.filter(c => c.code !== CONFIG.NO_CITY_PLACEHOLDER).map(ci => {
               const isCityExpanded = expandedCities.has(ci.code);
               return renderCity(
                 ci,
@@ -382,7 +385,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
     return (
       <div className="flights-filter">
         <button className="ff-toggle-btn" onClick={onToggle}>
-          Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+          {TEXTS.filter.title}{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
         </button>
       </div>
     );
@@ -392,10 +395,10 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
     <div className="flights-filter">
       <div className={`ff-header${activeFilterCount > 0 ? ' ff-header--has-clear' : ''}`}>
         <button className="ff-toggle-btn" onClick={onToggle}>
-          {isOpen ? '▲' : '▼'} Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+          {isOpen ? UI_SYMBOLS.EXPAND_UP : UI_SYMBOLS.EXPAND_DOWN} {TEXTS.filter.title}{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
         </button>
         {activeFilterCount > 0 && (
-          <button className="ff-clear-btn" onClick={clearFilters}>Clear</button>
+          <button className="ff-clear-btn" onClick={clearFilters}>{TEXTS.buttons.clear}</button>
         )}
       </div>
 
@@ -407,32 +410,32 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
               {/* Change 6: Show full names in chips */}
               {destinationFilter.countries.map(code => {
                 const country = destData.find(c => c.code === code);
-                return <span key={`c-${code}`} className="ff-chip">{country?.name || code} <button onClick={() => selectItem('country', code)}>×</button></span>;
+                return <span key={`c-${code}`} className="ff-chip">{country?.name || code} <button onClick={() => selectItem('country', code)}>{UI_SYMBOLS.CLOSE}</button></span>;
               })}
               {destinationFilter.cities.map(code => {
                 const city = destData.flatMap(c => c.cities).find(ci => ci.code === code);
-                return <span key={`ci-${code}`} className="ff-chip">{city?.name || code} <button onClick={() => selectItem('city', code, undefined, city?.countryCode)}>×</button></span>;
+                return <span key={`ci-${code}`} className="ff-chip">{city?.name || code} <button onClick={() => selectItem('city', code, undefined, city?.countryCode)}>{UI_SYMBOLS.CLOSE}</button></span>;
               })}
               {destinationFilter.airports.map(code => {
                 const apName = airportNameMap[code] || code;
                 const ap = destData.flatMap(c => c.cities).flatMap(ci => ci.airports).find(a => a.code === code);
-                return <span key={`a-${code}`} className="ff-chip">{apName} ({code}) <button onClick={() => selectItem('airport', code, ap?.cityCode, ap?.countryCode)}>×</button></span>;
+                return <span key={`a-${code}`} className="ff-chip">{apName} ({code}) <button onClick={() => selectItem('airport', code, ap?.cityCode, ap?.countryCode)}>{UI_SYMBOLS.CLOSE}</button></span>;
               })}
               {airlineFilter.map(code => {
                 const a = airlines.find(al => al.code === code);
-                return <span key={`al-${code}`} className="ff-chip">{a?.name || code} <button onClick={() => toggleAirline(code)}>×</button></span>;
+                return <span key={`al-${code}`} className="ff-chip">{a?.name || code} <button onClick={() => toggleAirline(code)}>{UI_SYMBOLS.CLOSE}</button></span>;
               })}
             </div>
           )}
 
           {/* Destination search */}
           <div className="ff-dest-section">
-            <div className="ff-section-title">Destinations</div>
+            <div className="ff-section-title">{TEXTS.panel.destinations}</div>
             {/* Change 1 & 7: onFocus/onBlur on input, results only shown when focused or query non-empty */}
             <input
               className="ff-search-input"
               type="text"
-              placeholder="Search destinations..."
+              placeholder={TEXTS.filter.searchDestinations}
               value={destQuery}
               onChange={e => setDestQuery(e.target.value)}
               onFocus={() => setInputFocused(true)}
@@ -443,13 +446,13 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
                 {/* Exact airport code */}
                 {exactAirport && (
                   <div className="ff-section">
-                    <div className="ff-section-label">Airport code</div>
+                    <div className="ff-section-label">{TEXTS.search.airportCode}</div>
                     {renderAirport(exactAirport)}
                   </div>
                 )}
-                {renderSection('Countries', phase1, 1)}
-                {q && renderSection('Cities', phase2, 2)}
-                {q && renderSection('Airports', phase3, 3)}
+                {renderSection(TEXTS.filter.countries, phase1, 1)}
+                {q && renderSection(TEXTS.filter.cities, phase2, 2)}
+                {q && renderSection(TEXTS.filter.airports, phase3, 3)}
               </div>
             )}
           </div>
@@ -457,7 +460,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
           {/* Airline filter */}
           {airlines.length > 0 && (
             <div className="ff-airline-section">
-              <div className="ff-section-title">Airlines</div>
+              <div className="ff-section-title">{TEXTS.panel.airlines}</div>
               <div className="ff-airlines">
                 {airlines.map(a => (
                   <label key={a.code} className="ff-airline-item">

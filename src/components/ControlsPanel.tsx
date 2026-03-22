@@ -4,6 +4,9 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useAirportsQuery, useCitiesQuery, useRoutesQuery } from '../hooks/queries';
 import ColorSettings from './ColorSettings';
 import './ControlsPanel.css';
+import { TEXTS } from '../constants/text';
+import { UI_SYMBOLS } from '../constants/ui';
+import { MAP_STYLES, isArcGISUrl } from '../constants/mapStyles';
 
 const CURRENCIES = [
   { code: 'PLN', label: 'PLN – Polish Złoty' },
@@ -42,17 +45,17 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
   return (
     <div className="controls-panel">
       <div className="controls-panel-header">
-        <h2>Flight Trip Planner</h2>
-        <button className="controls-panel-close" onClick={onClose}>✕</button>
+        <h2>{TEXTS.appTitle}</h2>
+        <button className="controls-panel-close" onClick={onClose}>{UI_SYMBOLS.CLOSE}</button>
       </div>
 
       {isError && (
-        <div className="error-message">Failed to load routes</div>
+        <div className="error-message">{TEXTS.controls.failedRoutes}</div>
       )}
 
       <div className="controls">
         <div className="currency-selector">
-          <label> Currency:</label>
+          <label> {TEXTS.controls.currency}</label>
           <div className="currency-toggle">
             {CURRENCIES.map(({ code, label }) => (
               <button
@@ -68,7 +71,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
         </div>
 
         <div className="currency-selector">
-          <label>Min. transfer time:</label>
+          <label>{TEXTS.controls.minTransferTime}</label>
           <div className="currency-toggle">
             <button
               className="currency-option"
@@ -85,7 +88,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
         </div>
 
         <div className="currency-selector">
-          <label>Min. manual transfer:</label>
+          <label>{TEXTS.controls.minManualTransfer}</label>
           <div className="currency-toggle">
             <button
               className="currency-option"
@@ -102,23 +105,23 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
         </div>
 
         <div className="map-style-selector">
-          <label>Map Style:</label>
+          <label>{TEXTS.controls.mapStyle}</label>
           <select onChange={e => setMapStyle(e.target.value)} className="style-select" value={mapStyle}>
-            <option value="https://demotiles.maplibre.org/style.json">Light (default)</option>
-            <option value="https://tiles.basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json">Dark Matter</option>
-            <option value="https://tiles.basemaps.cartocdn.com/gl/positron-gl-style/style.json">Positron</option>
-            <option value="https://tiles.basemaps.cartocdn.com/gl/voyager-gl-style/style.json">Voyager</option>
-            <option value="arcgis:satellite">Satellite</option>
-            <option value="arcgis:imagery">ArcGIS Imagery</option>
-            <option value="arcgis:charted-territory">ArcGIS Charted Territory</option>
-            <option value="arcgis:community">ArcGIS Community</option>
+            <option value={MAP_STYLES.LIGHT}>{TEXTS.controls.lightDefault}</option>
+            <option value={MAP_STYLES.DARK_MATTER}>{TEXTS.controls.darkMatter}</option>
+            <option value={MAP_STYLES.POSITRON}>{TEXTS.controls.positron}</option>
+            <option value={MAP_STYLES.VOYAGER}>{TEXTS.controls.voyager}</option>
+            <option value={MAP_STYLES.ARCGIS_SATELLITE}>{TEXTS.controls.satellite}</option>
+            <option value={MAP_STYLES.ARCGIS_IMAGERY}>{TEXTS.controls.imagery}</option>
+            <option value={MAP_STYLES.ARCGIS_CHARTED}>{TEXTS.controls.charted}</option>
+            <option value={MAP_STYLES.ARCGIS_COMMUNITY}>{TEXTS.controls.community}</option>
           </select>
           <div className="globe-toggle-row">
-            <span className="globe-toggle-label">Globe</span>
+            <span className="globe-toggle-label">{TEXTS.controls.globe}</span>
             <button
               className={`globe-toggle-btn ${globeMode ? 'active' : ''}`}
               onClick={() => setGlobeMode(!globeMode)}
-              title={globeMode ? 'Switch to flat map' : 'Switch to globe'}
+              title={globeMode ? TEXTS.controls.switchToFlat : TEXTS.controls.switchToGlobe}
             >
               <span className="globe-toggle-thumb" />
             </button>
@@ -130,7 +133,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
           className={`color-settings-toggle ${showColorSettings ? 'active' : ''}`}
           onClick={() => setShowColorSettings(v => !v)}
         >
-          {showColorSettings ? 'Hide Styles' : 'Customize Styles'}
+          {showColorSettings ? TEXTS.controls.hideStyles : TEXTS.controls.customizeStyles}
         </button>
 
         {/* Sekcja Customize Styles – bez suwaków (showSizes={false}) */}
@@ -141,7 +144,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
           className={`color-settings-toggle ${showDeveloper ? 'active' : ''}`}
           onClick={() => setShowDeveloper(v => !v)}
         >
-          {showDeveloper ? 'Hide Developer' : 'Developer'}
+          {showDeveloper ? TEXTS.controls.hideDeveloper : TEXTS.controls.developer}
         </button>
 
         {/* Zawartość developera */}
@@ -154,7 +157,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
                   checked={showRefreshButton}
                   onChange={e => setShowRefreshButton(e.target.checked)}
                 />
-                <span>Show Refresh Button</span>
+                <span>{TEXTS.controls.showRefresh}</span>
               </label>
             </div>
 
@@ -165,7 +168,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
                   checked={showConsoleLogs}
                   onChange={e => setShowConsoleLogs(e.target.checked)}
                 />
-                <span>Show Console Logs</span>
+                <span>{TEXTS.controls.showConsole}</span>
               </label>
             </div>
             
@@ -177,14 +180,14 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
                   onChange={e => setShowRoutes(e.target.checked)}
                   disabled={loadingRoutes}
                 />
-                <span>Load Routes</span>
-                {loadingRoutes && <span className="loading"> (loading...)</span>}
+                <span>{TEXTS.controls.loadRoutes}</span>
+                {loadingRoutes && <span className="loading"> {TEXTS.controls.loading}</span>}
               </label>
             </div>
 
             <div className="developer-stats">
-              <div className="stat-item">Airports: {airportsData?.features?.length || 0}{loadingAirports ? ' (loading...)' : ''}</div>
-              <div className="stat-item">Routes: {routesData?.features?.length || 0}</div>
+              <div className="stat-item">{TEXTS.controls.airportsCount}{airportsData?.features?.length || 0}{loadingAirports ? <span className="loading"> {TEXTS.controls.loading}</span> : ''}</div>
+              <div className="stat-item">{TEXTS.controls.routesCount}{routesData?.features?.length || 0}</div>
             </div>
 
             <button
@@ -192,7 +195,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
               onClick={() => setShowSizes(v => !v)}
               style={{ marginTop: '12px' }}
             >
-              {showSizes ? 'Hide Size Settings' : 'Map Size Settings'}
+              {showSizes ? TEXTS.controls.hideSizeSettings : TEXTS.controls.mapSizeSettings}
             </button>
 
             {showSizes && <ColorSettings showOnlySizes={true} />}

@@ -1,13 +1,5 @@
 import React from 'react';
 
-export const DEBOUNCE_TIME = 150;
-
-export const LIMITS = {
-  main: 20,
-  cities: 50,
-  airports: 50
-};
-
 export const highlightText = (
   text: string,
   query: string,

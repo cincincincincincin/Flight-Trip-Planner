@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
 
 interface SettingsState {
   currency: string;
@@ -17,7 +18,7 @@ interface SettingsState {
   setShowConsoleLogs: (v: boolean) => void;
 }
 
-const today = new Date().toLocaleDateString('en-CA');
+const today = new Date().toLocaleDateString(FORMAT_LOCALES.CA);
 
 export const useSettingsStore = create<SettingsState>(set => ({
   currency: 'PLN',

@@ -9,6 +9,9 @@ import { useFilterStore } from '../stores/filterStore';
 import { useAirportsQuery } from '../hooks/queries';
 import type { Flight } from '../types';
 import './FlightsList.css';
+import { TEXTS } from '../constants/text';
+import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
+import { CONFIG } from '../constants/config';
 
 
 interface FlightsListProps {
@@ -86,7 +89,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
         let dateStr: string;
         if (flight.scheduled_departure_utc && timezone) {
           dateStr = new Date(flight.scheduled_departure_utc)
-            .toLocaleDateString('en-CA', { timeZone: timezone });
+            .toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
         } else {
           dateStr = flight.scheduled_departure_local?.split('T')[0] || '';
         }
@@ -187,10 +190,10 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
         // In trip mode: if dateStr is the arrival date, start from the arrival time
         // (not from midnight or current time).
         if (tripArrivalTimeUTC && timezone) {
-          const arrivalDate = new Date(tripArrivalTimeUTC).toLocaleDateString('en-CA', { timeZone: timezone });
+          const arrivalDate = new Date(tripArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
           if (dateStr === arrivalDate) {
             if (!airportTZ) return dateStr + 'T00:00:00';
-            const arrivalLocal = new Date(tripArrivalTimeUTC).toLocaleString('sv-SE', {
+            const arrivalLocal = new Date(tripArrivalTimeUTC).toLocaleString(FORMAT_LOCALES.SE, {
               timeZone: airportTZ,
               year: 'numeric', month: '2-digit', day: '2-digit',
               hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -203,14 +206,14 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
 
         // Is dateStr "today" in the selected (display) timezone?
         const selectedTodayStr = timezone
-          ? now.toLocaleDateString('en-CA', { timeZone: timezone })
+          ? now.toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone })
           : now.toISOString().split('T')[0];
         const isToday = dateStr === selectedTodayStr;
 
         if (isToday) {
           // Use current moment expressed in airport's local timezone
           if (!airportTZ) return dateStr + 'T00:00:00';
-          const s = now.toLocaleString('sv-SE', {
+          const s = now.toLocaleString(FORMAT_LOCALES.SE, {
             timeZone: airportTZ,
             year: 'numeric', month: '2-digit', day: '2-digit',
             hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -225,11 +228,11 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
         }
         // Find UTC of midnight in selectedTZ by anchoring at noon UTC
         const noonUTC = new Date(`${dateStr}T12:00:00Z`);
-        const localNoon = noonUTC.toLocaleString('sv-SE', { timeZone: timezone });
+        const localNoon = noonUTC.toLocaleString(FORMAT_LOCALES.SE, { timeZone: timezone });
         const [, localTime] = localNoon.split(' ');
         const [h, m, s2] = localTime.split(':').map(Number);
-        const utcMidnight = new Date(noonUTC.getTime() - h * 3600000 - m * 60000 - s2 * 1000);
-        const airportLocal = utcMidnight.toLocaleString('sv-SE', { timeZone: airportTZ });
+        const utcMidnight = new Date(noonUTC.getTime() - h * CONFIG.HOUR_IN_MS - m * 60000 - s2 * 1000);
+        const airportLocal = utcMidnight.toLocaleString(FORMAT_LOCALES.SE, { timeZone: airportTZ });
         return airportLocal.replace(' ', 'T').substring(0, 19);
       },
       [timezone, airportTimezones, tripArrivalTimeUTC]
@@ -255,7 +258,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
         try {
           const response = (await getFlights(airportCode, {
             from_local_datetime: normalizedDatetime,
-            limit: 200,
+            limit: CONFIG.FLIGHT_LIMIT,
           })) as unknown as RawFlightsResponse;
 
           if (response.success) {
@@ -300,11 +303,11 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
                   try {
                     const nextLocalDate = rangeEnd.split('T')[0];
                     const noonUTC = new Date(`${nextLocalDate}T12:00:00Z`);
-                    const localNoon = noonUTC.toLocaleString('sv-SE', { timeZone: airportTZ });
+                    const localNoon = noonUTC.toLocaleString(FORMAT_LOCALES.SE, { timeZone: airportTZ });
                     const [, ltStr] = localNoon.split(' ');
                     const [hh, mm, ss] = ltStr.split(':').map(Number);
-                    const utcMidnight = new Date(noonUTC.getTime() - hh * 3600000 - mm * 60000 - ss * 1000);
-                    const displayDate = utcMidnight.toLocaleDateString('en-CA', { timeZone: timezone });
+                    const utcMidnight = new Date(noonUTC.getTime() - hh * CONFIG.HOUR_IN_MS - mm * 60000 - ss * 1000);
+                    const displayDate = utcMidnight.toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
                     if (displayDate === travelDateRef.current) shouldContinue = true;
                   } catch { /* ignore */ }
                 }
@@ -497,7 +500,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
           const fromDatetime = getFromDatetimeForAirport(dateStr, code);
           loadFlightsFromDatetime(code, fromDatetime);
         });
-        setTimeout(() => { isManualJumpRef.current = false; }, 500);
+        setTimeout(() => { isManualJumpRef.current = false; }, CONFIG.MANUAL_JUMP_TIMEOUT_MS);
       },
       scrollToFlight: (_destCode: string) => { /* scroll removed */ },
     }));
@@ -519,8 +522,8 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
           // flights from transfer airports also need minManualTransferHours
           const isFromOriginal = !originalAirportCode || flight.origin_airport_code === originalAirportCode;
           const thresholdMs = isFromOriginal
-            ? arrMs + minTransferHours * 3600000
-            : arrMs + (minTransferHours + minManualTransferHours) * 3600000;
+            ? arrMs + minTransferHours * CONFIG.HOUR_IN_MS
+            : arrMs + (minTransferHours + minManualTransferHours) * CONFIG.HOUR_IN_MS;
           if (depMs < thresholdMs) return 'soon';
         }
         return null;
@@ -560,14 +563,14 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
 
     // ── Formatters ────────────────────────────────────────────────────────────
     const formatLastFetched = (timestamp: string | null) => {
-      if (!timestamp) return 'Never';
+      if (!timestamp) return TEXTS.flights.never;
       const date = new Date(timestamp);
       const diffMins = Math.floor((Date.now() - date.getTime()) / 60000);
-      if (diffMins < 1) return 'Just now';
-      if (diffMins < 60) return `${diffMins} min ago`;
+      if (diffMins < 1) return TEXTS.flights.justNow;
+      if (diffMins < 60) return TEXTS.flights.minutesAgo(diffMins);
       const diffHours = Math.floor(diffMins / 60);
-      if (diffHours < 24) return `${diffHours}h ago`;
-      return date.toLocaleDateString('en-GB', {
+      if (diffHours < 24) return TEXTS.flights.hoursAgo(diffHours);
+      return date.toLocaleDateString(FORMAT_LOCALES.GB, {
         day: '2-digit',
         month: 'short',
         hour: '2-digit',
@@ -585,14 +588,14 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
             <div className="loading-more">
               <div className="spinner"></div>
               {loadingCodes.map(code => (
-                <div key={code}>Loading flights from {code}...</div>
+                <div key={code}>{TEXTS.flights.loadingFrom(code)}</div>
               ))}
             </div>
           )}
           {anyLoading && !multiAirport && (
             <div className="loading-more">
               <div className="spinner"></div>
-              <div>Loading flights...</div>
+              <div>{TEXTS.panel.loadingFlights}</div>
             </div>
           )}
         </>
@@ -606,7 +609,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
           <div className="flights-error">
             <div className="error-icon"></div>
             <div className="error-message">{error}</div>
-            <button onClick={handleRefresh} className="retry-button">Try Again</button>
+            <button onClick={handleRefresh} className="retry-button">{TEXTS.buttons.tryAgain}</button>
           </div>
         </div>
       );
@@ -617,15 +620,13 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       <div className="flights-list">
         <div className="flights-header">
           <div className="flights-info">
-            <h4>Departing Flights</h4>
+            <h4>{TEXTS.panel.departingFlights}</h4>
             {lastFetched && (
-              <div className="last-fetched">Last updated: {formatLastFetched(lastFetched)}</div>
+              <div className="last-fetched">{TEXTS.flights.lastUpdated} {formatLastFetched(lastFetched)}</div>
             )}
           </div>
           {showRefreshButton && (
-            <button onClick={handleRefresh} disabled={anyLoading} className="refresh-button">
-              Refresh
-            </button>
+            <button onClick={handleRefresh} disabled={anyLoading} className="refresh-button">{TEXTS.buttons.refresh}</button>
           )}
         </div>
 
@@ -634,13 +635,13 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
             <div className="no-flights-icon"></div>
             <div className="no-flights-message">
               {isFilterActive && todayFlights.length > 0
-                ? 'No flights match the current filters'
-                : `No flights for ${travelDate}`}
+                ? TEXTS.flights.noFlightsMatchFilters
+                : TEXTS.flights.noFlightsForDate(travelDate)}
             </div>
             <div className="no-flights-hint">
               {isFilterActive && todayFlights.length > 0
-                ? 'Try adjusting or clearing filters'
-                : 'Try selecting a different date'}
+                ? TEXTS.flights.tryAdjustFilters
+                : TEXTS.flights.tryDifferentDate}
             </div>
           </div>
         ) : (
@@ -663,7 +664,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
                 );
               }}
               endReached={handleEndReached}
-              overscan={200}
+              overscan={CONFIG.VIRTUOSO_OVERSCAN}
               components={{ Footer }}
             />
           </div>

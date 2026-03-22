@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import './AuthModal.css';
+import { TEXTS } from '../../constants/text';
+import { UI_SYMBOLS } from '../../constants/ui';
 
 type Mode = 'login' | 'register';
 
@@ -32,7 +34,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
     if (err) {
       setError(err);
     } else if (mode === 'register') {
-      setInfo('Check your email to confirm your account.');
+      setInfo(TEXTS.auth.checkEmail);
     } else {
       onClose();
     }
@@ -47,14 +49,14 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
   return (
     <div className="auth-modal-overlay" onClick={onClose}>
       <div className="auth-modal" onClick={e => e.stopPropagation()}>
-        <button className="auth-modal__close" onClick={onClose}>✕</button>
+        <button className="auth-modal__close" onClick={onClose}>{UI_SYMBOLS.CLOSE}</button>
 
-        <h2>{mode === 'login' ? 'Sign In' : 'Create Account'}</h2>
+        <h2>{mode === 'login' ? TEXTS.buttons.signIn : TEXTS.auth.createAccount}</h2>
 
         <form onSubmit={handleSubmit} className="auth-modal__form">
           <input
             type="email"
-            placeholder="Email"
+            placeholder={TEXTS.auth.email}
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
@@ -62,7 +64,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
           />
           <input
             type="password"
-            placeholder="Password"
+            placeholder={TEXTS.auth.password}
             value={password}
             onChange={e => setPassword(e.target.value)}
             required
@@ -73,18 +75,16 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
           {info  && <p className="auth-modal__info">{info}</p>}
 
           <button type="submit" disabled={busy} className="auth-modal__submit">
-            {busy ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Register'}
+            {busy ? TEXTS.auth.pleaseWait : mode === 'login' ? TEXTS.buttons.signIn : TEXTS.auth.register}
           </button>
         </form>
 
-        <button className="auth-modal__google" onClick={handleGoogle} disabled={busy}>
-          Continue with Google
-        </button>
+        <button className="auth-modal__google" onClick={handleGoogle} disabled={busy}>{TEXTS.auth.continueGoogle}</button>
 
         <p className="auth-modal__switch">
           {mode === 'login'
-            ? <><span>No account?</span> <button type="button" onClick={() => setMode('register')}>Register</button></>
-            : <><span>Have an account?</span> <button type="button" onClick={() => setMode('login')}>Sign In</button></>
+            ? <><span>{TEXTS.auth.noAccount}</span> <button type="button" onClick={() => setMode('register')}>{TEXTS.buttons.register}</button></>
+            : <><span>{TEXTS.auth.haveAccount}</span> <button type="button" onClick={() => setMode('login')}>{TEXTS.buttons.signIn}</button></>
           }
         </p>
       </div>

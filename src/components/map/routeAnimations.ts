@@ -2,8 +2,8 @@ import type { Map as MapLibreMap, GeoJSONSource } from 'maplibre-gl';
 import type { FeatureCollection, Point } from 'geojson';
 import type { AirportFeatureProps, Flight } from '../../types';
 import { generateGreatCircle } from './utils';
+import { CONFIG } from '../../constants/config';
 
-const GC_POINTS = 64;
 
 export interface GCPath {
   srcCoords: [number, number];
@@ -68,7 +68,7 @@ export function buildGCPaths(
         destCode,
         srcCode,
         srcIdx,
-        gcCoords: generateGreatCircle(srcCoords, destFeat.geometry.coordinates as [number, number], GC_POINTS),
+        gcCoords: generateGreatCircle(srcCoords, destFeat.geometry.coordinates as [number, number], CONFIG.GC_POINTS),
       });
     });
   });
@@ -105,7 +105,7 @@ export function addRoutesToAnimation(
 
   currentAnimatingRef.current = newPaths;
   const snapshotCompleted = completedPathsRef.current; // snapshot so closure is stable
-  const speed = 0.005;
+  const speed = CONFIG.ANIMATION_SPEED;
   let progress = 0;
 
   const toFeature = (d: GCPath, i: number, coords: [number, number][]) => ({
@@ -129,7 +129,7 @@ export function addRoutesToAnimation(
       return;
     }
 
-    const numVisible = Math.max(2, Math.ceil(progress * GC_POINTS) + 1);
+    const numVisible = Math.max(2, Math.ceil(progress * CONFIG.GC_POINTS) + 1);
     source.setData({
       type: 'FeatureCollection',
       features: [
@@ -196,9 +196,9 @@ export function startPreviewAnimation(
 
   const startCoords = startFeature.geometry.coordinates as [number, number];
   const destCoords = destFeature.geometry.coordinates as [number, number];
-  const gcCoords = generateGreatCircle(startCoords, destCoords, GC_POINTS);
+  const gcCoords = generateGreatCircle(startCoords, destCoords, CONFIG.GC_POINTS);
   let progress = 0;
-  const speed = 0.005;
+  const speed = CONFIG.ANIMATION_SPEED;
 
   const animate = () => {
     progress += speed;
@@ -209,7 +209,7 @@ export function startPreviewAnimation(
       });
       return;
     }
-    const numVisible = Math.max(2, Math.ceil(progress * GC_POINTS) + 1);
+    const numVisible = Math.max(2, Math.ceil(progress * CONFIG.GC_POINTS) + 1);
     source.setData({
       type: 'FeatureCollection',
       features: [{ type: 'Feature', id: 0, geometry: { type: 'LineString', coordinates: gcCoords.slice(0, numVisible) }, properties: {} }],

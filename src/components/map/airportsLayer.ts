@@ -2,6 +2,8 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { FeatureCollection, Point } from 'geojson';
 import type { AirportFeatureProps } from '../../types';
 import { getLabelPaint } from './utils';
+import { THEME_COLORS } from '../../constants/theme';
+import { CONFIG } from '../../constants/config';
 
 export function addAirportsLayer(
   map: MapLibreMap,
@@ -18,8 +20,8 @@ export function addAirportsLayer(
     type: 'circle',
     source: 'airports',
     paint: {
-      'circle-radius': 4,
-      'circle-color': '#FF6B6B',
+      'circle-radius': CONFIG.MAP_AIRPORT_LAYER.RADIUS_TINY,
+      'circle-color': THEME_COLORS.cRose,
       'circle-stroke-width': 1,
       'circle-stroke-color': strokeColor
     }
@@ -31,8 +33,8 @@ export function addAirportsLayer(
     source: 'airports',
     filter: ['in', 'code', ''],
     paint: {
-      'circle-radius': 6,
-      'circle-color': '#000000',
+      'circle-radius': CONFIG.MAP_AIRPORT_LAYER.RADIUS_SMALL,
+      'circle-color': THEME_COLORS.textBlack,
       'circle-stroke-width': 1,
       'circle-stroke-color': strokeColor
     }
@@ -44,8 +46,8 @@ export function addAirportsLayer(
     source: 'airports',
     filter: ['in', 'code', ''],
     paint: {
-      'circle-radius': 6,
-      'circle-color': '#4CAF50',
+      'circle-radius': CONFIG.MAP_AIRPORT_LAYER.RADIUS_SMALL,
+      'circle-color': THEME_COLORS.accent,
       'circle-stroke-width': 1,
       'circle-stroke-color': strokeColor
     }
@@ -57,8 +59,8 @@ export function addAirportsLayer(
     source: 'airports',
     filter: ['==', 'code', ''],
     paint: {
-      'circle-radius': 8,
-      'circle-color': '#C62828',
+      'circle-radius': CONFIG.MAP_AIRPORT_LAYER.RADIUS_MEDIUM,
+      'circle-color': THEME_COLORS.red,
       'circle-stroke-width': 2,
       'circle-stroke-color': strokeColor,
       // No transitions — hover must appear/disappear instantly
@@ -75,8 +77,8 @@ export function addAirportsLayer(
     source: 'airports',
     filter: ['==', 'code', ''],
     paint: {
-      'circle-radius': 8,
-      'circle-color': '#000000',
+      'circle-radius': CONFIG.MAP_AIRPORT_LAYER.RADIUS_MEDIUM,
+      'circle-color': THEME_COLORS.textBlack,
       'circle-stroke-width': 2,
       'circle-stroke-color': strokeColor
     }
@@ -88,8 +90,8 @@ export function addAirportsLayer(
     source: 'airports',
     filter: ['==', 'code', ''],
     paint: {
-      'circle-radius': 10,
-      'circle-color': '#FFD700',
+      'circle-radius': CONFIG.MAP_AIRPORT_LAYER.RADIUS_LARGE,
+      'circle-color': THEME_COLORS.cGold,
       'circle-stroke-width': 2,
       'circle-stroke-color': strokeColor
     }
@@ -102,7 +104,7 @@ export function addAirportsLayer(
     minzoom: 5,
     layout: {
       'text-field': ['get', 'name'],
-      'text-size': 10,
+      'text-size': CONFIG.MAP_AIRPORT_LAYER.TEXT_SMALL,
       'text-offset': [0, 1.5],
       'text-anchor': 'top',
       'text-max-width': 8,
@@ -125,7 +127,7 @@ export function addAirportsLayer(
     filter: ['in', 'code', ''],
     layout: {
       'text-field': ['coalesce', ['get', 'city_name'], ['get', 'name']],
-      'text-size': 11,
+      'text-size': CONFIG.MAP_AIRPORT_LAYER.TEXT_MEDIUM,
       'text-font': ["Noto Sans Regular"],
       'text-offset': [0, 1.5],
       'text-anchor': 'top',
@@ -149,7 +151,7 @@ export function addAirportsLayer(
     filter: ['in', 'code', ''],
     layout: {
       'text-field': ['coalesce', ['get', 'city_name'], ['get', 'name']],
-      'text-size': 12,
+      'text-size': CONFIG.MAP_AIRPORT_LAYER.TEXT_LARGE,
       'text-font': ["Noto Sans Bold"],
       'text-offset': [0, 1.5],
       'text-anchor': 'top',
@@ -172,7 +174,7 @@ export function addAirportsLayer(
     filter: ['in', 'code', ''],
     layout: {
       'text-field': ['get', 'name'],
-      'text-size': 12,
+      'text-size': CONFIG.MAP_AIRPORT_LAYER.TEXT_LARGE,
       'text-font': ["Noto Sans Bold"],
       'text-offset': [0, 1.5],
       'text-anchor': 'top',
@@ -194,7 +196,7 @@ export function addAirportsLayer(
     filter: ['==', 'code', ''],
     layout: {
       'text-field': ['get', 'name'],
-      'text-size': 12,
+      'text-size': CONFIG.MAP_AIRPORT_LAYER.TEXT_LARGE,
       'text-font': ["Noto Sans Bold"],
       'text-offset': [0, 1.5],
       'text-anchor': 'top',
@@ -204,7 +206,7 @@ export function addAirportsLayer(
       'symbol-sort-key': 3,
     },
     paint: {
-      'text-color': '#000000',
+      'text-color': THEME_COLORS.textBlack,
       'text-halo-color': labelPaint.haloColor,
       'text-halo-width': 1.5,
       'text-opacity-transition': { duration: 0 },
@@ -220,7 +222,7 @@ export function addAirportsLayer(
     filter: ['==', 'code', ''],
     layout: {
       'text-field': ['get', 'name'],
-      'text-size': 12,
+      'text-size': CONFIG.MAP_AIRPORT_LAYER.TEXT_LARGE,
       'text-font': ["Noto Sans Bold"],
       'text-offset': [0, 1.5],
       'text-anchor': 'top',
@@ -230,7 +232,7 @@ export function addAirportsLayer(
       'symbol-sort-key': 3,
     },
     paint: {
-      'text-color': '#FFA500',
+      'text-color': THEME_COLORS.cGold,
       'text-halo-color': labelPaint.haloColor,
       'text-halo-width': 1.5,
       'text-opacity-transition': { duration: 0 },

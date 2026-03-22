@@ -1,6 +1,8 @@
+import { UI_SYMBOLS } from '../../constants/ui';
 import React, { useState, useCallback } from 'react';
 import type { Country, City, Airport } from '../../types';
 import { highlightText } from './searchUtils';
+import { TEXTS } from '../../constants/text';
 
 interface CityCacheEntry {
   airports: Airport[];
@@ -72,9 +74,9 @@ const Phase2 = React.memo(({
         <button
           className="expand-button"
           onClick={handleToggleCountry}
-          title={isExpanded ? "Collapse" : "Expand"}
+          title={isExpanded ? TEXTS.search.collapse : TEXTS.search.expand}
         >
-          {isExpanded ? '▼' : '▶'}
+          {isExpanded ? UI_SYMBOLS.EXPAND_DOWN : UI_SYMBOLS.EXPAND_RIGHT}
         </button>
       )}
 
@@ -105,9 +107,9 @@ const Phase2 = React.memo(({
                     <button
                       className="expand-button"
                       onClick={(e) => handleToggleCity(city.code, city.name, e)}
-                      title={isCityExpanded ? "Collapse" : "Expand to show airports"}
+                      title={isCityExpanded ? TEXTS.search.collapse : TEXTS.search.expandToShowAirports}
                     >
-                      {isCityExpanded ? '▼' : '▶'}
+                      {isCityExpanded ? UI_SYMBOLS.EXPAND_DOWN : UI_SYMBOLS.EXPAND_RIGHT}
                     </button>
                   )}
                   <div
@@ -147,7 +149,7 @@ const Phase2 = React.memo(({
 
                 {isCityExpanded && !cachedAirports && loadingExpand && (
                   <div className="nested-list">
-                    <div className="no-items">Loading airports for {city.name}...</div>
+                    <div className="no-items">{TEXTS.search.loadingAirportsForCity(city.name)}</div>
                   </div>
                 )}
               </div>

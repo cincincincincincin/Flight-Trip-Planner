@@ -1,5 +1,9 @@
+import { CONFIG } from '../constants/config';
+import { UI_SYMBOLS } from '../constants/ui';
 import { useState, useRef, useEffect } from 'react';
 import './DateInput.css';
+import { TEXTS } from '../constants/text';
+import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
 
 interface DateInputProps {
   value: string;
@@ -29,7 +33,7 @@ const DateInput = ({ value, onChange, timezone, minDate: minDateProp }: DateInpu
 
     if (timezone) {
       // Get today's date in airport timezone
-      const todayStr = now.toLocaleDateString('en-CA', { timeZone: timezone });
+      const todayStr = now.toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
       const [year, month, day] = todayStr.split('-');
       today = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
       today.setHours(0, 0, 0, 0);
@@ -80,7 +84,7 @@ const DateInput = ({ value, onChange, timezone, minDate: minDateProp }: DateInpu
       // If no value but timezone is provided, use timezone's today
       if (timezone) {
         const now = new Date();
-        const todayStr = now.toLocaleDateString('en-CA', { timeZone: timezone });
+        const todayStr = now.toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
         const [year, month, day] = todayStr.split('-');
         setDisplayValue(`${day}/${month}/${year}`);
         setSelectedDate(new Date(parseInt(year), parseInt(month) - 1, parseInt(day)));
@@ -351,7 +355,7 @@ const DateInput = ({ value, onChange, timezone, minDate: minDateProp }: DateInpu
     const { minDate, maxDate } = getDateRange();
     let testDate = new Date(startDate);
 
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < CONFIG.MAX_MONTHS_FOR_DAY_SEARCH; i++) {
       const year = testDate.getFullYear();
       const month = testDate.getMonth() + 1;
       const daysInMonth = getDaysInMonth(month, year);
@@ -446,7 +450,7 @@ const DateInput = ({ value, onChange, timezone, minDate: minDateProp }: DateInpu
           value={displayValue}
           onKeyDown={handleKeyDown}
           onClick={handleInputClick}
-          placeholder="DD/MM/YYYY"
+          placeholder={TEXTS.date.placeholder}
           className="date-text-input"
           readOnly
         />
@@ -455,21 +459,21 @@ const DateInput = ({ value, onChange, timezone, minDate: minDateProp }: DateInpu
       {isOpen && (
         <div className="calendar-popup">
           <div className="calendar-header">
-            <button onClick={() => changeMonth(-1)} className="month-nav">‹</button>
+            <button onClick={() => changeMonth(-1)} className="month-nav">{UI_SYMBOLS.PREV}</button>
             <div className="month-year">
-              {currentMonth.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+              {currentMonth.toLocaleDateString(FORMAT_LOCALES.GB, { month: 'long', year: 'numeric' })}
             </div>
-            <button onClick={() => changeMonth(1)} className="month-nav">›</button>
+            <button onClick={() => changeMonth(1)} className="month-nav">{UI_SYMBOLS.NEXT}</button>
           </div>
 
           <div className="calendar-weekdays">
-            <div className="weekday">Mon</div>
-            <div className="weekday">Tue</div>
-            <div className="weekday">Wed</div>
-            <div className="weekday">Thu</div>
-            <div className="weekday">Fri</div>
-            <div className="weekday">Sat</div>
-            <div className="weekday">Sun</div>
+            <div className="weekday">{TEXTS.days.mon}</div>
+            <div className="weekday">{TEXTS.days.tue}</div>
+            <div className="weekday">{TEXTS.days.wed}</div>
+            <div className="weekday">{TEXTS.days.thu}</div>
+            <div className="weekday">{TEXTS.days.fri}</div>
+            <div className="weekday">{TEXTS.days.sat}</div>
+            <div className="weekday">{TEXTS.days.sun}</div>
           </div>
 
           <div className="calendar-grid">

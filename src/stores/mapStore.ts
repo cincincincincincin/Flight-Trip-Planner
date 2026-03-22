@@ -1,3 +1,5 @@
+import { MAP_STYLES } from '../constants/mapStyles';
+import { CONFIG } from '../constants/config';
 import { create } from 'zustand';
 import type { Viewport } from '../types';
 
@@ -26,9 +28,9 @@ export const useMapStore = create<MapState>(set => ({
   showAirports: true,
   showCities: false,
   showRoutes: false,
-  mapStyle: 'https://demotiles.maplibre.org/style.json',
+  mapStyle: MAP_STYLES.LIGHT,
   globeMode: false,
-  viewport: { center: [19.0, 52.0], zoom: 4, pitch: 0, bearing: 0 },
+  viewport: { center: CONFIG.DEFAULT_MAP_CENTER, zoom: CONFIG.DEFAULT_MAP_ZOOM, pitch: 0, bearing: 0 },
   controlsPanelOpen: false,
   viewMode: 'airports',
   flyToZoom: null,

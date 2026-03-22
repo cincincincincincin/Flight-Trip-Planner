@@ -68,7 +68,7 @@
 
 .ff-clear-btn:hover {
   background: var(--red);
-  color: #fff;
+  color: var(--text-inverse);
 }
 
 /* ── Body ────────────────────────────────────────────────────── */

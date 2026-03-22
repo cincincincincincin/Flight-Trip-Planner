@@ -6,21 +6,25 @@ import type { Flight } from '../types';
 import { useTripStore } from '../stores/tripStore';
 import { useAirportsQuery, useAirportInfosQuery } from '../hooks/queries';
 import './TripItinerary.css';
+import { TEXTS } from '../constants/text';
+import { CONFIG } from '../constants/config';
+import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
+import { UI_SYMBOLS } from '../constants/ui';
 
 const formatTime = (str: string | null | undefined): string => {
-  if (!str) return '—';
-  return new Date(str).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  if (!str) return UI_SYMBOLS.DASH;
+  return new Date(str).toLocaleTimeString(FORMAT_LOCALES.GB, FORMAT_OPTIONS.TIME_24H);
 };
 
 const formatDate = (str: string | null | undefined): string => {
-  if (!str) return '—';
-  return new Date(str).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+  if (!str) return UI_SYMBOLS.DASH;
+  return new Date(str).toLocaleDateString(FORMAT_LOCALES.GB, FORMAT_OPTIONS.DATE_SHORT);
 };
 
 const formatDurationMs = (ms: number): string => {
   const totalMinutes = Math.floor(ms / 60000);
-  const d = Math.floor(totalMinutes / 1440);
-  const h = Math.floor((totalMinutes % 1440) / 60);
+  const d = Math.floor(totalMinutes / CONFIG.MINUTES_PER_DAY);
+  const h = Math.floor((totalMinutes % CONFIG.MINUTES_PER_DAY) / 60);
   const m = totalMinutes % 60;
   if (d > 0) return `${d}d ${h}h ${m}m`;
   return `${h}h ${m}m`;
@@ -41,14 +45,14 @@ const getDurationMs = (from: string | undefined, to: string | undefined): number
 
 const formatTimeInTz = (str: string, tz?: string): string => {
   const d = new Date(str);
-  if (isNaN(d.getTime())) return '—';
-  return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', ...(tz ? { timeZone: tz } : {}) });
+  if (isNaN(d.getTime())) return UI_SYMBOLS.DASH;
+  return d.toLocaleTimeString(FORMAT_LOCALES.GB, { ...FORMAT_OPTIONS.TIME_24H, ...(tz ? { timeZone: tz } : {}) });
 };
 
 const formatDateInTz = (str: string, tz?: string): string => {
   const d = new Date(str);
-  if (isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', ...(tz ? { timeZone: tz } : {}) });
+  if (isNaN(d.getTime())) return UI_SYMBOLS.DASH;
+  return d.toLocaleDateString(FORMAT_LOCALES.GB, { ...FORMAT_OPTIONS.DATE_SHORT, ...(tz ? { timeZone: tz } : {}) });
 };
 
 const computeTzDiff = (depUtc: string, depTz: string, destTz: string): number | null => {
@@ -56,8 +60,8 @@ const computeTzDiff = (depUtc: string, depTz: string, destTz: string): number | 
   const d = new Date(depUtc);
   if (isNaN(d.getTime())) return null;
   const getOff = (tz: string) => {
-    const s = d.toLocaleString('sv-SE', { timeZone: tz });
-    const u = d.toLocaleString('sv-SE', { timeZone: 'UTC' });
+    const s = d.toLocaleString(FORMAT_LOCALES.SE, { timeZone: tz });
+    const u = d.toLocaleString(FORMAT_LOCALES.SE, { timeZone: 'UTC' });
     return (new Date(s).getTime() - new Date(u).getTime()) / 3600000;
   };
   const diff = getOff(destTz) - getOff(depTz);
@@ -73,7 +77,7 @@ const formatTzDiff = (diff: number): string => {
 };
 
 const haversineKm = (lon1: number, lat1: number, lon2: number, lat2: number): number => {
-  const R = 6371;
+  const R = CONFIG.EARTH_RADIUS_KM;
   const toRad = (d: number) => d * Math.PI / 180;
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
@@ -141,7 +145,7 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
     const to = airportCoordsMap[toCode];
     if (!from || !to) return null;
     const distKm = haversineKm(from[0], from[1], to[0], to[1]);
-    const blockHours = distKm / 850 + 0.5;
+    const blockHours = distKm / CONFIG.AVERAGE_AIRCRAFT_SPEED_KMH + CONFIG.ADDITIONAL_BLOCK_HOURS;
     const depMs = new Date(depUtc).getTime();
     if (isNaN(depMs)) return null;
     return new Date(depMs + blockHours * 3600000).toISOString();
@@ -163,7 +167,7 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
     if (currentLegs.length === 0) return false;
     const lastLeg = currentLegs[currentLegs.length - 1];
     const isManual = (lastLeg as { type?: string }).type === 'manual';
-    if (isManual) return true; // manual legs have no departure time — always undoable
+    if (isManual) return true; // manual legs have no departure time {UI_SYMBOLS.DASH} always undoable
     if (!lastLeg.flight?.scheduled_departure_utc) return true;
     return new Date(lastLeg.flight.scheduled_departure_utc).getTime() >= Date.now();
   }, [editMode, pastTrips.length, tripState]);
@@ -186,8 +190,8 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
     }
     const legRect = e.currentTarget.getBoundingClientRect();
     const wrapperRect = wrapperRef.current?.getBoundingClientRect();
-    const left = wrapperRect ? wrapperRect.right + 8 : legRect.right + 8;
-    const top = Math.min(legRect.top, window.innerHeight - 480);
+    const left = wrapperRect ? wrapperRect.right + CONFIG.POPUP_OFFSET : legRect.right + 8;
+    const top = Math.min(legRect.top, window.innerHeight - CONFIG.POPUP_MAX_HEIGHT);
     setHoveredFlight(flight);
     setPopupPos({ top, left });
   };
@@ -222,22 +226,22 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
 
   return (
     <div className="trip-itinerary-wrapper" ref={wrapperRef}>
-      {/* Actions bar — always on top */}
+      {/* Actions bar {UI_SYMBOLS.DASH} always on top */}
       <div className={`trip-itinerary-actions${legs.length > 0 ? ' trip-itinerary-actions--has-list' : ''}`}>
         {/* LEFT: Undo (disabled in view mode since pastTrips=[]) */}
         <button
           onClick={() => { undo(); onUndo?.(); }}
           disabled={editMode ? !canUndoInEditMode : pastTrips.length === 0}
           className="trip-action-btn trip-action-btn--undo"
-          title="Undo"
+          title={TEXTS.buttons.undo}
         >
-          ↩ Undo
+          {UI_SYMBOLS.UNDO} {TEXTS.buttons.undo}
         </button>
 
         {/* MIDDLE: Close (view mode) or Save/Update (edit/normal mode) */}
         <div className="trip-itinerary-middle">
           {isViewMode
-            ? <button className="trip-action-btn trip-action-btn--close" onClick={onClose}>✕ Close</button>
+            ? <button className="trip-action-btn trip-action-btn--close" onClick={onClose}>{UI_SYMBOLS.CLOSE} {TEXTS.buttons.close}</button>
             : showSaveButton && <SaveTripButton />
           }
         </div>
@@ -248,17 +252,15 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
             onClick={onEditTrip}
             disabled={tripEnded || !onEditTrip}
             className="trip-action-btn trip-action-btn--edit"
-            title={tripEnded ? 'Trip has already ended' : 'Edit this trip'}
-          >
-            Edit
-          </button>
+            title={tripEnded ? TEXTS.trip.tripEnded : TEXTS.trip.editTrip}
+          >{TEXTS.buttons.edit}</button>
         ) : (
           <button
             onClick={() => { redo(); onRedo?.(); }}
             disabled={futureTrips.length === 0}
             className="trip-action-btn trip-action-btn--redo"
           >
-            Redo ↪
+            {TEXTS.buttons.redo} {UI_SYMBOLS.REDO}
           </button>
         )}
       </div>
@@ -308,12 +310,12 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
               <React.Fragment key={i}>
                 {timeAvailableMs !== null && timeAvailableCity && (
                   <div className="trip-time-available">
-                    ⏱ Time in {timeAvailableCity}: {formatDurationMs(timeAvailableMs)}
+                    {UI_SYMBOLS.CLOCK} {TEXTS.trip.timeInCity(timeAvailableCity)}: {formatDurationMs(timeAvailableMs)}
                   </div>
                 )}
                 {isManual ? (
                   <div className="trip-time-transfer">
-                    Transfer: {timeToTransferMs !== null ? formatDurationMs(timeToTransferMs) : '—'}
+                    {TEXTS.trip.transfer}{timeToTransferMs !== null ? formatDurationMs(timeToTransferMs) : UI_SYMBOLS.DASH}
                   </div>
                 ) : (
                   <div
@@ -360,7 +362,7 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
                                   }}
                                   onMouseLeave={() => setEstimatedTooltipPos(null)}
                                 >
-                                  ~{formatTimeInTz(estimatedArrUTC!, destTz!)}
+                                  {UI_SYMBOLS.ESTIMATED}{formatTimeInTz(estimatedArrUTC!, destTz!)}
                                 </span>
                               ) : (
                                 <span className="trip-leg-time">{formatTime(arrStr!)}</span>
@@ -383,7 +385,7 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
           className="trip-estimated-tooltip"
           style={{ top: estimatedTooltipPos.top, left: estimatedTooltipPos.left }}
         >
-          Estimated arrival — calculated from flight distance and average aircraft speed (~850 km/h)
+          {TEXTS.card.estimatedTooltip}
         </div>,
         document.body
       )}

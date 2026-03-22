@@ -7,6 +7,9 @@ import { useAirportsQuery } from '../../hooks/queries';
 import TripNameModal from '../TripNameModal';
 import ConfirmDeleteModal from '../ConfirmDeleteModal';
 import './SavedTripsPanel.css';
+import { TEXTS } from '../../constants/text';
+import { UI_SYMBOLS } from '../../constants/ui';
+import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../../constants/format';
 
 interface SavedTripsPanelProps {
   onClose: () => void;
@@ -50,7 +53,7 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
       if (!firstDep && leg.flight.scheduled_departure_utc) firstDep = leg.flight.scheduled_departure_utc;
       if (leg.flight.scheduled_arrival_utc) lastArr = leg.flight.scheduled_arrival_utc;
     }
-    const fmt = (s: string) => new Date(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const fmt = (s: string) => new Date(s).toLocaleDateString(FORMAT_LOCALES.GB, { day: 'numeric', month: 'short' });
     const dateRange = firstDep && lastArr ? `${fmt(firstDep)} – ${fmt(lastArr)}` : null;
     return { countriesCount: countries.size, dateRange };
   };
@@ -87,7 +90,7 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
 
   const handleRenameConfirm = (name: string) => {
     if (!renamingTrip) return;
-    const autoName = `Trip #${renamingTrip.id}`;
+    const autoName = TEXTS.savedTrips.tripId(renamingTrip.id);
     renameMutation.mutate({ trip: renamingTrip, name: name || autoName });
   };
 
@@ -100,16 +103,16 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
     <>
       <div className="saved-trips-panel">
         <div className="saved-trips-panel__header">
-          <h3>Saved Trips</h3>
-          <button onClick={onClose}>✕</button>
+          <h3>{TEXTS.savedTrips.title}</h3>
+          <button onClick={onClose}>{UI_SYMBOLS.CLOSE}</button>
         </div>
 
         <div className="saved-trips-panel__body">
-          {isLoading && <p className="saved-trips-panel__status">Loading...</p>}
-          {isError && <p className="saved-trips-panel__status saved-trips-panel__status--error">Failed to load trips.</p>}
+          {isLoading && <p className="saved-trips-panel__status">{TEXTS.search.loading}</p>}
+          {isError && <p className="saved-trips-panel__status saved-trips-panel__status--error">{TEXTS.savedTrips.failed}</p>}
 
           {trips && trips.length === 0 && (
-            <p className="saved-trips-panel__empty">No saved trips yet.</p>
+            <p className="saved-trips-panel__empty">{TEXTS.savedTrips.noTrips}</p>
           )}
 
           <ul className="saved-trips-panel__list">
@@ -118,24 +121,20 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
               return (
               <li key={trip.id} className="saved-trips-panel__item">
                 <div className="saved-trips-panel__info">
-                  <strong>{trip.name ?? `Trip #${trip.id}`}</strong>
+                  <strong>{trip.name ?? TEXTS.savedTrips.tripId(trip.id)}</strong>
                   <small>
-                    {countriesCount} {countriesCount === 1 ? 'country' : 'countries'}
+                    {countriesCount} {countriesCount === 1 ? TEXTS.savedTrips.country : TEXTS.savedTrips.countries}
                     {dateRange && <> &bull; {dateRange}</>}
                   </small>
                 </div>
                 <div className="saved-trips-panel__actions">
-                  <button onClick={() => handleLoad(trip)}>Load</button>
-                  <button onClick={() => setRenamingTrip(trip)} disabled={renameMutation.isPending}>
-                    Rename
-                  </button>
+                  <button onClick={() => handleLoad(trip)}>{TEXTS.buttons.load}</button>
+                  <button onClick={() => setRenamingTrip(trip)} disabled={renameMutation.isPending}>{TEXTS.buttons.rename}</button>
                   <button
                     className="danger"
                     onClick={() => setDeletingTrip(trip)}
                     disabled={deleteMutation.isPending}
-                  >
-                    Delete
-                  </button>
+                  >{TEXTS.buttons.delete}</button>
                 </div>
               </li>
             );
@@ -147,8 +146,8 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
       {renamingTrip && (
         <TripNameModal
           initialName={renamingTrip.name ?? ''}
-          title={`Rename "${renamingTrip.name ?? `Trip #${renamingTrip.id}`}"`}
-          confirmLabel="Rename"
+          title={`Rename "${renamingTrip.name ?? TEXTS.savedTrips.tripId(renamingTrip.id)}"`}
+          confirmLabel={TEXTS.buttons.rename}
           onConfirm={handleRenameConfirm}
           onCancel={() => setRenamingTrip(null)}
         />
@@ -156,7 +155,7 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
 
       {deletingTrip && (
         <ConfirmDeleteModal
-          tripName={deletingTrip.name ?? `Trip #${deletingTrip.id}`}
+          tripName={deletingTrip.name ?? TEXTS.savedTrips.tripId(deletingTrip.id)}
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeletingTrip(null)}
         />

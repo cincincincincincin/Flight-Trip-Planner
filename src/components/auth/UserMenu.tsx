@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import './UserMenu.css';
+import { TEXTS } from '../../constants/text';
+import { UI_SYMBOLS } from '../../constants/ui';
 
 interface UserMenuProps {
   onOpenSavedTrips: () => void;
@@ -22,21 +24,17 @@ const UserMenu: React.FC<UserMenuProps> = ({ onOpenSavedTrips }) => {
 
   if (!user) return null;
 
-  const label = user.email?.split('@')[0] ?? 'User';
+  const label = user.email?.split('@')[0] ?? TEXTS.common.userFallback;
 
   return (
     <div className="user-menu" ref={ref}>
       <button className="user-menu__trigger" onClick={() => setOpen(o => !o)}>
-        {label} ▾
+        {label} {UI_SYMBOLS.DROPDOWN}
       </button>
       {open && (
         <div className="user-menu__dropdown">
-          <button onClick={() => { onOpenSavedTrips(); setOpen(false); }}>
-            Saved Trips
-          </button>
-          <button onClick={() => { signOut(); setOpen(false); }}>
-            Sign Out
-          </button>
+          <button onClick={() => { onOpenSavedTrips(); setOpen(false); }}>{TEXTS.savedTrips.title}</button>
+          <button onClick={() => { signOut(); setOpen(false); }}>{TEXTS.buttons.signOut}</button>
         </div>
       )}
     </div>

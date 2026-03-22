@@ -5,7 +5,7 @@
 .trip-name-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.38);
+  background: var(--bg-modal-overlay);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   z-index: 2000;
@@ -101,6 +101,6 @@
 
 .trip-name-modal__btn--confirm:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--text-inverse);
   box-shadow: var(--shadow-float);
 }

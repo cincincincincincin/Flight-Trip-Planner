@@ -152,7 +152,7 @@
 .retry-button {
   padding: 7px 16px;
   background: var(--accent);
-  color: #fff;
+  color: var(--text-inverse);
   border: none;
   border-radius: var(--r-md);
   font-size: 12px;
@@ -161,4 +161,4 @@
   transition: all 0.13s;
 }
 
-.retry-button:hover { background: #1560e0; }
+.retry-button:hover { background: var(--accent-dark); }

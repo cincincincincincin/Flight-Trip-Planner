@@ -117,7 +117,7 @@
   background: var(--accent);
   border: none;
   border-radius: var(--r-sm);
-  color: #fff;
+  color: var(--text-inverse);
   font-size: 13px;
   font-weight: 700;
   font-family: var(--font-display);

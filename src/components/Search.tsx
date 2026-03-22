@@ -1,3 +1,4 @@
+import { CONFIG } from '../constants/config';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import type { Country, City, Airport, SelectedItem } from '../types';
 import Phase1 from './search/Phase1';
@@ -6,6 +7,8 @@ import Phase3 from './search/Phase3';
 import { useSearchData } from './search/useSearchData';
 import { useSettingsStore } from '../stores/settingsStore';
 import './Search.css';
+import { TEXTS } from '../constants/text';
+import { UI_SYMBOLS } from '../constants/ui';
 
 interface SearchProps {
   onSelectItem: (item: SelectedItem) => void;
@@ -36,7 +39,7 @@ class SearchErrorBoundary extends React.Component<React.PropsWithChildren, Searc
     if (this.state.hasError) {
       return (
         <div className="error-boundary">
-          <h3>Search Component Error</h3>
+          <h3>{TEXTS.search.error}</h3>
           <p>{this.state.error?.toString()}</p>
         </div>
       );
@@ -146,7 +149,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
         if (containerRef.current) {
           containerRef.current.scrollTop = savedPosition;
         }
-      }, 50);
+      }, CONFIG.SCROLL_RESTORE_DELAY_MS);
       return () => clearTimeout(timer);
     }
   }, [isSearchOpen, query]);
@@ -188,8 +191,8 @@ const Search = ({ onSelectItem }: SearchProps) => {
       }
     }, {
       root: containerRef.current,
-      rootMargin: '100px',
-      threshold: 0.1
+      rootMargin: CONFIG.INFINITE_SCROLL_MARGIN,
+      threshold: CONFIG.INTERSECTION_THRESHOLD
     });
 
     mainObserverRef.current = observer;
@@ -227,8 +230,8 @@ const Search = ({ onSelectItem }: SearchProps) => {
 
     const observer = new IntersectionObserver(handleIntersection, {
       root: containerRef.current,
-      rootMargin: '100px',
-      threshold: 0.1
+      rootMargin: CONFIG.INFINITE_SCROLL_MARGIN,
+      threshold: CONFIG.INTERSECTION_THRESHOLD
     });
 
     const triggers = containerRef.current.querySelectorAll('.cities-load-more-trigger');
@@ -274,7 +277,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
 
     const observer = new IntersectionObserver(handleVisibilityIntersection, {
       root: containerRef.current,
-      rootMargin: '-10% 0px -80% 0px',
+      rootMargin: CONFIG.VISIBILITY_OBSERVER_ROOT_MARGIN,
       threshold: 0
     });
 
@@ -343,18 +346,18 @@ const Search = ({ onSelectItem }: SearchProps) => {
         <div className="section-header">
           <h4>
             {icon} {title}{showConsoleLogs && ` (${items.length})`}
-            {showConsoleLogs && searchMode === 'contains' && ' (Contains)'}
-            {showConsoleLogs && !isCurrentPhase && items.length > 0 && ' (Loaded)'}
+            {showConsoleLogs && searchMode === 'contains' && TEXTS.search.containsSearch}
+            {showConsoleLogs && !isCurrentPhase && items.length > 0 && TEXTS.search.loaded}
           </h4>
           {loading.search && isCurrentPhase && hasMore[phaseNumber] &&
-            <span className="loading-indicator">Loading...</span>}
+            <span className="loading-indicator">{TEXTS.search.loading}</span>}
         </div>
         <div className="section-content">
           {items.length > 0 ? (
             <>
               {showConsoleLogs && phaseNumber === 1 && query.trim() !== '' && (
-                <div className="debug-info" style={{ fontSize: '10px', color: '#999', padding: '5px 16px' }}>
-                  Phase 1: Showing {items.length} matching countries (collapsed by default)
+                <div className="debug-info" style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '5px 16px' }}>
+                  {TEXTS.search.debugPhase1(items.length)}
                 </div>
               )}
               {items.map(renderFunction)}
@@ -409,14 +412,14 @@ const Search = ({ onSelectItem }: SearchProps) => {
           <input
             type="text"
             className="search-input"
-            placeholder="Search countries, cities, airports..."
+            placeholder={TEXTS.search.placeholder}
             value={query}
             onChange={handleQueryChange}
             onFocus={handleSearchFocus}
             autoComplete="off"
           />
           {(loading.search || loading.expand) && (
-            <span className="search-loading">⌛</span>
+            <span className="search-loading">{UI_SYMBOLS.LOADING}</span>
           )}
         </div>
 
@@ -425,16 +428,14 @@ const Search = ({ onSelectItem }: SearchProps) => {
             <div className="results-header">
               <div className="header-main">
                 <h3>
-                  Search Results
-                  {showConsoleLogs && searchMode === 'contains' && ' (Contains Search)'}
-                  {showConsoleLogs && isMainScrollPaused && activeNestedScrolls.size > 0 && ` (Scrolling ${activeNestedScrolls.size} countries...)`}
+                  {TEXTS.search.searchResults}
+                  {showConsoleLogs && searchMode === 'contains' && TEXTS.search.containsSearch}
+                  {showConsoleLogs && isMainScrollPaused && activeNestedScrolls.size > 0 && TEXTS.search.scrolling(activeNestedScrolls.size)}
                 </h3>
                 <button
                   className="close-results"
                   onClick={() => setIsSearchOpen(false)}
-                >
-                  ×
-                </button>
+                >{UI_SYMBOLS.CLOSE}</button>
               </div>
 
               {visibleExpandedName && (
@@ -448,14 +449,14 @@ const Search = ({ onSelectItem }: SearchProps) => {
             <div className="results-content">
               {!hasResults && !exactAirport && !loading.search && query.trim() !== '' ? (
                 <div className="no-results">
-                  No results found for "{query}"
+                  {TEXTS.search.noResultsFound(query)}
                 </div>
               ) : (
                 <>
                   {query.trim().length === 3 && exactAirport && (
                     <div className="search-section">
                       <div className="section-header">
-                        <h4>Airport code</h4>
+                        <h4>{TEXTS.search.airportCode}</h4>
                       </div>
                       <div className="section-content">
                         <div
@@ -471,16 +472,16 @@ const Search = ({ onSelectItem }: SearchProps) => {
                       </div>
                     </div>
                   )}
-                  {renderPhaseSection(1, "Countries", "", renderPhase1Country)}
-                  {renderPhaseSection(2, "Cities", "", renderPhase2Country)}
-                  {renderPhaseSection(3, "Airports", "", renderPhase3Country)}
+                  {renderPhaseSection(1, TEXTS.search.countries, "", renderPhase1Country)}
+                  {renderPhaseSection(2, TEXTS.search.cities, "", renderPhase2Country)}
+                  {renderPhaseSection(3, TEXTS.search.airports, "", renderPhase3Country)}
 
                   {showConsoleLogs && searchMode === 'contains' && hasResults && (
                     <div className="debug-info" style={{
                       padding: '10px 16px',
-                      backgroundColor: '#fff3cd',
-                      color: '#856404',
-                      borderTop: '1px solid #ffeaa7',
+                      backgroundColor: 'var(--warning-bg)',
+                      color: 'var(--warning-text)',
+                      borderTop: '1px solid var(--warning-border)',
                       fontSize: '12px',
                       marginTop: '10px'
                     }}>
@@ -491,7 +492,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
               )}
 
               {loading.expand && (
-                <div className="global-loading">Loading details...</div>
+                <div className="global-loading">{TEXTS.search.loadingDetails}</div>
               )}
             </div>
 

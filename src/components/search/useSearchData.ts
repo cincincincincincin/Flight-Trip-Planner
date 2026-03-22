@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import axios from 'axios';
 import { search, getCountryCities, getCityAirports, getAirport } from '../../api/search';
-import { DEBOUNCE_TIME, LIMITS } from './searchUtils';
+import { CONFIG } from '../../constants/config';
 import type { Country, City, Airport, SearchPhaseInfo, Airport as AirportType } from '../../types';
 
 interface CountryCacheEntry {
@@ -146,7 +146,7 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
       abortControllerRef.current = new AbortController();
 
       const data = await search(
-        { q: trimmedQuery, offset: searchOffset, limit: LIMITS.main },
+        { q: trimmedQuery, offset: searchOffset, limit: CONFIG.SEARCH_LIMITS.main },
         { signal: abortControllerRef.current.signal }
       );
       console.log('[SEARCH] Search response:', {
@@ -180,7 +180,7 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
           data.data.forEach((country: Country) => {
             if (country.code && country.cities) {
               const existing = prev[country.code];
-              if (!existing || existing.fetchedAt < Date.now() - 1000) {
+              if (!existing || existing.fetchedAt < Date.now() - CONFIG.CACHE_FRESHNESS_MS) {
                 newCache[country.code] = { cities: country.cities, fetchedAt: Date.now() };
                 hasChanges = true;
               }
@@ -195,7 +195,7 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
           data.data.forEach((country: Country) => {
             if (country.code) {
               const existing = prev[country.code];
-              if (!existing || existing.fetchedAt < Date.now() - 1000) {
+              if (!existing || existing.fetchedAt < Date.now() - CONFIG.CACHE_FRESHNESS_MS) {
                 newCache[country.code] = { cities: country.cities || [], fetchedAt: Date.now() };
                 hasChanges = true;
               }
@@ -282,7 +282,7 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
 
     try {
       const { data: cities, pagination } = await getCountryCities(countryCode, {
-        limit: LIMITS.cities,
+        limit: CONFIG.SEARCH_LIMITS.cities,
         offset: citiesOffset,
       });
 
@@ -359,7 +359,7 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
     setLoading(prev => ({ ...prev, expand: true }));
 
     try {
-      const { data } = await getCityAirports(cityCode, { limit: LIMITS.airports, offset: 0 });
+      const { data } = await getCityAirports(cityCode, { limit: CONFIG.SEARCH_LIMITS.airports, offset: 0 });
       setCitiesCache(prev => {
         if (prev[cityCode]) return prev;
         return { ...prev, [cityCode]: { airports: data, fetchedAt: Date.now() } };
@@ -404,7 +404,7 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
     }
     debounceRef.current = setTimeout(() => {
       performSearch(searchQuery, searchOffset, append);
-    }, DEBOUNCE_TIME);
+    }, CONFIG.DEBOUNCE_TIME_MS);
   }, [performSearch]);
 
   const triggerSearchImmediate = useCallback((searchQuery: string, searchOffset = 0, append = false) => {

@@ -12,13 +12,15 @@ import { useMapStore } from '../stores/mapStore';
 import { useAirportInfoQuery, useAirportInfosQuery, useAirportsQuery, useAirportsByCountryQuery } from '../hooks/queries';
 import { getCityAirports, getCountryCities } from '../api/search';
 import './RightPanel.css';
+import { TEXTS } from '../constants/text';
+import { UI_SYMBOLS } from '../constants/ui';
+import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
+import { CONFIG } from '../constants/config';
 
-const MAX_AIRPORTS = 6;
-const MAX_TRANSFER_AIRPORTS = 5;
 
 const haversineKm = (lon1: number, lat1: number, lon2: number, lat2: number): number => {
-  const R = 6371;
-  const toRad = (d: number) => d * Math.PI / 180;
+  const R = CONFIG.EARTH_RADIUS_KM;
+  const toRad = (d: number) => d * CONFIG.DEG_TO_RAD;
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
@@ -33,27 +35,27 @@ function buildTzGroups(airports: Array<{ code: string; name: string; time_zone?:
   // Key by UTC offset in minutes to deduplicate same-offset IANA timezones (e.g. America/Detroit vs America/New_York)
   const groups = new Map<string | number, { tz: string; airports: Array<{ code: string; name: string }>; currentDT: string; utcLabel: string; currentDateStr: string; currentTimeStr: string }>();
   const now = new Date();
-  const utcStr = now.toLocaleString('sv-SE', { timeZone: 'UTC' });
+  const utcStr = now.toLocaleString(FORMAT_LOCALES.SE, { timeZone: 'UTC' });
   for (const airport of airports) {
-    const tz = airport.time_zone ?? '_unknown';
-    if (tz === '_unknown') {
-      if (!groups.has('_unknown')) {
-        groups.set('_unknown', { tz: '_unknown', airports: [], currentDT: '9999', utcLabel: '?', currentDateStr: '', currentTimeStr: '' });
+    const tz = airport.time_zone ?? CONFIG.UNKNOWN_TIMEZONE;
+    if (tz === CONFIG.UNKNOWN_TIMEZONE) {
+      if (!groups.has(CONFIG.UNKNOWN_TIMEZONE)) {
+        groups.set(CONFIG.UNKNOWN_TIMEZONE, { tz: CONFIG.UNKNOWN_TIMEZONE, airports: [], currentDT: CONFIG.UNKNOWN_TZ_DUMMY, utcLabel: CONFIG.UNKNOWN_TZ_UTCLABEL, currentDateStr: '', currentTimeStr: '' });
       }
-      groups.get('_unknown')!.airports.push(airport);
+      groups.get(CONFIG.UNKNOWN_TIMEZONE)!.airports.push(airport);
       continue;
     }
-    const localStr = now.toLocaleString('sv-SE', { timeZone: tz });
+    const localStr = now.toLocaleString(FORMAT_LOCALES.SE, { timeZone: tz });
     const diffMin = Math.round((new Date(localStr.replace(' ', 'T')).getTime() - new Date(utcStr.replace(' ', 'T')).getTime()) / 60000);
     if (!groups.has(diffMin)) {
-      const diffH = diffMin / 60;
+      const diffH = diffMin / CONFIG.MINUTES_IN_HOUR;
       const sign = diffH >= 0 ? '+' : '-';
       const absH = Math.abs(diffH);
       const h = Math.floor(absH);
-      const m = Math.round((absH - h) * 60);
+      const m = Math.round((absH - h) * CONFIG.MINUTES_IN_HOUR);
       const utcLabel = `UTC${sign}${h}${m > 0 ? ':' + String(m).padStart(2, '0') : ''}`;
-      const currentDateStr = now.toLocaleDateString('en-GB', { timeZone: tz, weekday: 'short', day: '2-digit', month: '2-digit' });
-      const currentTimeStr = now.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit' });
+      const currentDateStr = now.toLocaleDateString(FORMAT_LOCALES.GB, { timeZone: tz, weekday: 'short', day: '2-digit', month: '2-digit' });
+      const currentTimeStr = now.toLocaleTimeString(FORMAT_LOCALES.GB, { timeZone: tz, hour: '2-digit', minute: '2-digit' });
       groups.set(diffMin, { tz, airports: [], currentDT: localStr, utcLabel, currentDateStr, currentTimeStr });
     }
     groups.get(diffMin)!.airports.push(airport);
@@ -208,7 +210,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
         const to = airportCoordsMap[leg.toAirportCode];
         if (!from || !to) return null;
         const distKm = haversineKm(from[0], from[1], to[0], to[1]);
-        const blockHours = distKm / 850 + 0.5;
+        const blockHours = distKm / CONFIG.AVERAGE_AIRCRAFT_SPEED_KMH + CONFIG.ADDITIONAL_BLOCK_HOURS;
         const depMs = new Date(leg.flight.scheduled_departure_utc).getTime();
         if (isNaN(depMs)) return null;
         return new Date(depMs + blockHours * 3600000).toISOString();
@@ -318,7 +320,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   // ── "Display TZ" for country mode: active TZ → earliest group → browser ────
   const countryDisplayTZ = useMemo(() => {
     if (selectedItem?.type !== 'country') return null;
-    return countryActiveTZ ?? countryTzGroups.find(g => g.tz !== '_unknown')?.tz ?? BROWSER_TIMEZONE;
+    return countryActiveTZ ?? countryTzGroups.find(g => g.tz !== CONFIG.UNKNOWN_TIMEZONE)?.tz ?? BROWSER_TIMEZONE;
   }, [selectedItem?.type, countryActiveTZ, countryTzGroups]);
 
   const timezone = selectedTimezoneOverride
@@ -378,10 +380,10 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     const cityCode = selectedItem.data.code;
     setLoadingCityAirports(true);
     setCityAirports([]);
-    getCityAirports(cityCode, { limit: 200, offset: 0 })
+    getCityAirports(cityCode, { limit: CONFIG.PAGE_LIMITS.GET_CITY_AIRPORTS, offset: 0 })
       .then(r => {
         const flightable = (r.data || []).filter((a: Airport) => a.flightable !== false);
-        setCityAirports(flightable.slice(0, MAX_AIRPORTS));
+        setCityAirports(flightable.slice(0, CONFIG.MAX_AIRPORTS));
       })
       .catch(console.error)
       .finally(() => setLoadingCityAirports(false));
@@ -399,7 +401,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     setCountryCities([]);
     setSelectedFlatAirports([]);
     setSelectedCities([]);
-    getCountryCities(selectedItem.data.code, { limit: 200, offset: 0 })
+    getCountryCities(selectedItem.data.code, { limit: CONFIG.PAGE_LIMITS.GET_COUNTRY_CITIES, offset: 0 })
       .then(r => setCountryCities(r.data || []))
       .catch(console.error)
       .finally(() => setLoadingCountry(false));
@@ -432,7 +434,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
         .forEach(f => codes.push(f.properties.code));
     });
     if (selectedItem?.type !== 'country') return;
-    onCountryAirportsConfirmed(codes.slice(0, MAX_AIRPORTS), selectedItem.data.code, selectedItem.data.name);
+    onCountryAirportsConfirmed(codes.slice(0, CONFIG.MAX_AIRPORTS), selectedItem.data.code, selectedItem.data.name);
   }, [selectedCities, airportsData, onCountryAirportsConfirmed, selectedItem]);
 
 
@@ -454,10 +456,10 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
         }
         return next;
       } else {
-        if (prev.length >= MAX_AIRPORTS) return prev;
+        if (prev.length >= CONFIG.MAX_AIRPORTS) return prev;
         if (prev.length === 0) {
           const groupTz = getGroupTz(airport.code);
-          if (groupTz && groupTz !== '_unknown') setCountryActiveTZ(groupTz);
+          if (groupTz && groupTz !== CONFIG.UNKNOWN_TIMEZONE) setCountryActiveTZ(groupTz);
         }
         return [...prev, airport];
       }
@@ -504,9 +506,9 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
       prevSelectedItemKeyRef.current = key;
       // selectedItem changed, reset date
       if (effectiveArrivalTimeUTC) {
-        setTravelDate(new Date(effectiveArrivalTimeUTC).toLocaleDateString('en-CA', { timeZone: timezone }));
+        setTravelDate(new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }));
       } else {
-        setTravelDate(new Date().toLocaleDateString('en-CA', { timeZone: timezone }));
+        setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }));
       }
       prevTimezoneRef.current = timezone;
       prevExplorationItemsCountRef.current = explorationItems.length;
@@ -519,20 +521,20 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
 
     if (itemsWereRemoved && timezoneChanged && prevTimezoneRef.current) {
       // Smart date handling: check if the old timezone's "today" matches the current travelDate
-      const oldTzToday = new Date().toLocaleDateString('en-CA', { timeZone: prevTimezoneRef.current });
+      const oldTzToday = new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: prevTimezoneRef.current });
 
       if (travelDate === oldTzToday) {
         // User was viewing today in the old timezone, update to today in new timezone
-        setTravelDate(new Date().toLocaleDateString('en-CA', { timeZone: timezone }));
+        setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }));
       }
       // If travelDate was not today in the old timezone (user selected a different date),
       // keep the travelDate and only change the timezone
     } else if (!itemsWereRemoved && timezoneChanged) {
       // Timezone changed but airports weren't removed - reset date to today/arrival date
       if (effectiveArrivalTimeUTC) {
-        setTravelDate(new Date(effectiveArrivalTimeUTC).toLocaleDateString('en-CA', { timeZone: timezone }));
+        setTravelDate(new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }));
       } else {
-        setTravelDate(new Date().toLocaleDateString('en-CA', { timeZone: timezone }));
+        setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }));
       }
     }
 
@@ -550,9 +552,9 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     prevResolvedTZRef.current = resolvedTimezone;
     if (prevTZ === undefined || resolvedTimezone === prevTZ || !resolvedTimezone) return;
     // Only update travelDate if it was "today" in the previous timezone
-    const todayInPrevTZ = prevTZ ? new Date().toLocaleDateString('en-CA', { timeZone: prevTZ }) : null;
+    const todayInPrevTZ = prevTZ ? new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: prevTZ }) : null;
     if (!todayInPrevTZ || travelDateForTZRef.current === todayInPrevTZ) {
-      setTravelDate(new Date().toLocaleDateString('en-CA', { timeZone: resolvedTimezone }));
+      setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: resolvedTimezone }));
     }
   }, [resolvedTimezone, selectedTimezoneOverride, selectedItem?.type, setTravelDate]);
 
@@ -563,7 +565,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     if (countryDisplayTZ === prevCountryDisplayTZRef.current) return;
     prevCountryDisplayTZRef.current = countryDisplayTZ;
     if (countryDisplayTZ) {
-      setTravelDate(new Date().toLocaleDateString('en-CA', { timeZone: countryDisplayTZ }));
+      setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: countryDisplayTZ }));
     }
   }, [selectedItem?.type, countryDisplayTZ, setTravelDate]);
 
@@ -595,7 +597,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     const thresholdMs = new Date(effectiveArrivalTimeUTC).getTime()
       + (minTransferHours + manualTransferCount * minManualTransferHours) * 3600000;
     const thresholdDate = new Date(thresholdMs);
-    if (timezone) return thresholdDate.toLocaleDateString('en-CA', { timeZone: timezone });
+    if (timezone) return thresholdDate.toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
     return thresholdDate.toISOString().split('T')[0];
   }, [effectiveArrivalTimeUTC, minTransferHours, manualTransferCount, minManualTransferHours, timezone]);
 
@@ -607,17 +609,17 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   const isToday = useMemo(() => {
     if (!timezone) return false;
     const now = new Date();
-    return travelDate === now.toLocaleDateString('en-CA', { timeZone: timezone });
+    return travelDate === now.toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
   }, [timezone, travelDate]);
 
   const actualArrivalDate = useMemo(() => {
     if (!effectiveArrivalTimeUTC || !timezone) return null;
-    return new Date(effectiveArrivalTimeUTC).toLocaleDateString('en-CA', { timeZone: timezone });
+    return new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
   }, [effectiveArrivalTimeUTC, timezone]);
 
   const actualArrivalLocalTime = useMemo(() => {
     if (!effectiveArrivalTimeUTC || !timezone) return null;
-    return new Date(effectiveArrivalTimeUTC).toLocaleTimeString('en-GB', {
+    return new Date(effectiveArrivalTimeUTC).toLocaleTimeString(FORMAT_LOCALES.GB, {
       timeZone: timezone, hour: '2-digit', minute: '2-digit',
     });
   }, [effectiveArrivalTimeUTC, timezone]);
@@ -626,7 +628,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     if (!timezone) { setAirportTime(null); return; }
     const updateTime = () => {
       try {
-        setAirportTime(new Date().toLocaleTimeString('en-GB', { timeZone: timezone, hour: '2-digit', minute: '2-digit' }));
+        setAirportTime(new Date().toLocaleTimeString(FORMAT_LOCALES.GB, { timeZone: timezone, hour: '2-digit', minute: '2-digit' }));
         setNowTick(t => t + 1);
       } catch { setAirportTime(null); }
     };
@@ -644,13 +646,13 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     if (!originalTZ || originalTZ === selectedTimezoneOverride) return null;
 
     const date = new Date(effectiveArrivalTimeUTC);
-    const selectedTime = date.toLocaleTimeString('en-GB', { timeZone: selectedTimezoneOverride, hour: '2-digit', minute: '2-digit' });
-    const originalTime = date.toLocaleTimeString('en-GB', { timeZone: originalTZ, hour: '2-digit', minute: '2-digit' });
+    const selectedTime = date.toLocaleTimeString(FORMAT_LOCALES.GB, { timeZone: selectedTimezoneOverride, hour: '2-digit', minute: '2-digit' });
+    const originalTime = date.toLocaleTimeString(FORMAT_LOCALES.GB, { timeZone: originalTZ, hour: '2-digit', minute: '2-digit' });
 
     // Compute hour offset: how many hours originalTZ is ahead of selectedTZ
     const toUTCOffset = (tz: string) => {
-      const utcStr = date.toLocaleString('sv-SE', { timeZone: 'UTC' });
-      const localStr = date.toLocaleString('sv-SE', { timeZone: tz });
+      const utcStr = date.toLocaleString(FORMAT_LOCALES.SE, { timeZone: 'UTC' });
+      const localStr = date.toLocaleString(FORMAT_LOCALES.SE, { timeZone: tz });
       return Math.round((new Date(localStr.replace(' ', 'T') + 'Z').getTime() - new Date(utcStr.replace(' ', 'T') + 'Z').getTime()) / 3600000);
     };
     const diff = toUTCOffset(originalTZ) - toUTCOffset(selectedTimezoneOverride);
@@ -666,8 +668,8 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     if (!tz || tz === timezone) return null;
     const now = new Date();
     const getOffsetMs = (tzName: string) => {
-      const utcStr = now.toLocaleString('sv-SE', { timeZone: 'UTC' });
-      const localStr = now.toLocaleString('sv-SE', { timeZone: tzName });
+      const utcStr = now.toLocaleString(FORMAT_LOCALES.SE, { timeZone: 'UTC' });
+      const localStr = now.toLocaleString(FORMAT_LOCALES.SE, { timeZone: tzName });
       return new Date(localStr).getTime() - new Date(utcStr).getTime();
     };
     const diffH = (getOffsetMs(tz) - getOffsetMs(timezone)) / 3600000;
@@ -676,18 +678,18 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     const absH = Math.abs(diffH);
     if (Number.isInteger(absH)) return `(${sign}${absH}h)`;
     const h = Math.floor(absH);
-    const m = Math.round((absH - h) * 60);
+    const m = Math.round((absH - h) * CONFIG.MINUTES_IN_HOUR);
     return `(${sign}${h}h${m}m)`;
   }, [timezone, airportTimezoneMap]);
 
   // Relative offset of a country TZ group vs the currently active country TZ
   const getCountryTzRelativeOffset = useCallback((tz: string): string | null => {
     const relativeTo = countryActiveTZ;
-    if (!relativeTo || tz === relativeTo || tz === '_unknown') return null;
+    if (!relativeTo || tz === relativeTo || tz === CONFIG.UNKNOWN_TIMEZONE) return null;
     const now = new Date();
     const getOffsetMs = (tzName: string) => {
-      const utcStr = now.toLocaleString('sv-SE', { timeZone: 'UTC' });
-      const localStr = now.toLocaleString('sv-SE', { timeZone: tzName });
+      const utcStr = now.toLocaleString(FORMAT_LOCALES.SE, { timeZone: 'UTC' });
+      const localStr = now.toLocaleString(FORMAT_LOCALES.SE, { timeZone: tzName });
       return new Date(localStr).getTime() - new Date(utcStr).getTime();
     };
     const diffH = (getOffsetMs(tz) - getOffsetMs(relativeTo)) / 3600000;
@@ -696,7 +698,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     const absH = Math.abs(diffH);
     if (Number.isInteger(absH)) return `(${sign}${absH}h)`;
     const h = Math.floor(absH);
-    const m = Math.round((absH - h) * 60);
+    const m = Math.round((absH - h) * CONFIG.MINUTES_IN_HOUR);
     return `(${sign}${h}h${m}m)`;
   }, [countryActiveTZ]);
 
@@ -708,16 +710,16 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     if (effectiveArrivalTimeUTC) {
       // Trip mode: only jump to arrival date in new TZ if currently on the arrival date.
       // If user manually changed the date, preserve it.
-      const arrivalDateInCurrentTZ = new Date(effectiveArrivalTimeUTC).toLocaleDateString('en-CA', { timeZone: timezone ?? 'UTC' });
+      const arrivalDateInCurrentTZ = new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone ?? 'UTC' });
       if (travelDate === arrivalDateInCurrentTZ) {
-        setTravelDate(new Date(effectiveArrivalTimeUTC).toLocaleDateString('en-CA', { timeZone: tz }));
+        setTravelDate(new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: tz }));
       }
     } else {
       // Non-trip mode: if viewing TODAY in current TZ, jump to TODAY in new TZ
       // If viewing a manually-selected date, keep it
-      const todayInCurrentTZ = new Date().toLocaleDateString('en-CA', { timeZone: timezone ?? 'UTC' });
+      const todayInCurrentTZ = new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone ?? 'UTC' });
       if (travelDate === todayInCurrentTZ) {
-        setTravelDate(new Date().toLocaleDateString('en-CA', { timeZone: tz }));
+        setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: tz }));
       }
     }
   }, [airportTimezoneMap, selectedTimezoneOverride, setTravelDate, effectiveArrivalTimeUTC, timezone, travelDate]);
@@ -736,9 +738,9 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
       // Update travelDate to today in the restored timezone if the user was viewing today.
       // (The main travelDate effect won't catch this because resolvedTimezone didn't change.)
       if (resolvedTimezone) {
-        const todayInOverrideTZ = new Date().toLocaleDateString('en-CA', { timeZone: selectedTimezoneOverride });
+        const todayInOverrideTZ = new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: selectedTimezoneOverride });
         if (travelDate === todayInOverrideTZ) {
-          setTravelDate(new Date().toLocaleDateString('en-CA', { timeZone: resolvedTimezone }));
+          setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: resolvedTimezone }));
         }
       }
     }
@@ -1008,10 +1010,10 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
               <span className="exploration-name">{item.name}</span>
               <span className="exploration-code">({item.code})</span>
               {altTime && (
-                <button className="exploration-tz-btn" title="Click to switch to this timezone"
+                <button className="exploration-tz-btn" title={TEXTS.panel.switchTimezone}
                   onClick={() => handleSwitchTimezone(item.code)}>{altTime}</button>
               )}
-              <button className="exploration-remove-btn" onClick={() => item.itemId && removeExplorationItem(item.itemId)}>×</button>
+              <button className="exploration-remove-btn" onClick={() => item.itemId && removeExplorationItem(item.itemId)}>{UI_SYMBOLS.CLOSE}</button>
             </div>
           );
         }
@@ -1055,11 +1057,11 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
               <div key={item.code} className="exploration-item exploration-item--group">
                 <span className="exploration-icon"></span>
                 <span className="exploration-name">{item.name}</span>
-                <span className="exploration-count">{item.airportCodes.length}ap</span>
+                <span className="exploration-count">{item.airportCodes.length}{TEXTS.panel.airportAbbreviation}</span>
                 {altTime && (
                   <button className="exploration-tz-btn" onClick={() => handleSwitchTimezone(item.airportCodes[0])}>{altTime}</button>
                 )}
-                <button className="exploration-remove-btn" onClick={() => removeAirportCodes(item.airportCodes)}>×</button>
+                <button className="exploration-remove-btn" onClick={() => removeAirportCodes(item.airportCodes)}>{UI_SYMBOLS.CLOSE}</button>
               </div>
             );
           }
@@ -1076,11 +1078,11 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                 })}>{isExpanded ? '▾' : '▸'}</button>
                 <span className="exploration-icon"></span>
                 <span className="exploration-name">{item.name}</span>
-                <span className="exploration-count">{item.airportCodes.length}ap</span>
+                <span className="exploration-count">{item.airportCodes.length}{TEXTS.panel.airportAbbreviation}</span>
                 {altTime && (
                   <button className="exploration-tz-btn" onClick={() => handleSwitchTimezone(item.airportCodes[0])}>{altTime}</button>
                 )}
-                <button className="exploration-remove-btn" onClick={() => removeAirportCodes(item.airportCodes)}>×</button>
+                <button className="exploration-remove-btn" onClick={() => removeAirportCodes(item.airportCodes)}>{UI_SYMBOLS.CLOSE}</button>
               </div>
               {isExpanded && item.childCities?.map(city =>
                 city.airports.map(ap => (
@@ -1088,7 +1090,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                     <span className="exploration-icon"></span>
                     <span className="exploration-name">{ap.name}</span>
                     <span className="exploration-code">({ap.code})</span>
-                    <button className="exploration-remove-btn" onClick={() => removeExplorationItem(ap.id)}>×</button>
+                    <button className="exploration-remove-btn" onClick={() => removeExplorationItem(ap.id)}>{UI_SYMBOLS.CLOSE}</button>
                   </div>
                 ))
               )}
@@ -1114,12 +1116,12 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                 })}>{isExpanded ? '▾' : '▸'}</button>
                 <span className="exploration-icon"></span>
                 <span className="exploration-name">{item.name}</span>
-                <span className="exploration-count">{item.airportCodes.length}ap</span>
+                <span className="exploration-count">{item.airportCodes.length}{TEXTS.panel.airportAbbreviation}</span>
                 {countryTzBtn && (
-                  <button className="exploration-tz-btn" title="Click to switch timezone"
+                  <button className="exploration-tz-btn" title={TEXTS.panel.switchTimezone}
                     onClick={() => handleSwitchTimezone(item.airportCodes[0])}>{countryTzBtn}</button>
                 )}
-                <button className="exploration-remove-btn" onClick={() => removeAirportCodes(item.airportCodes)}>×</button>
+                <button className="exploration-remove-btn" onClick={() => removeAirportCodes(item.airportCodes)}>{UI_SYMBOLS.CLOSE}</button>
               </div>
               {isExpanded && item.childCities?.map(city => {
                 const cityKey = `${item.code}:${city.cityCode}`;
@@ -1138,17 +1140,17 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                       <span className="exploration-name">{city.cityName}</span>
                       <span className="exploration-count">{city.airports.length}ap</span>
                       {cityTzBtn && cityRepCode && (
-                        <button className="exploration-tz-btn" title="Click to switch timezone"
+                        <button className="exploration-tz-btn" title={TEXTS.panel.switchTimezone}
                           onClick={() => handleSwitchTimezone(cityRepCode)}>{cityTzBtn}</button>
                       )}
-                      <button className="exploration-remove-btn" onClick={() => removeAirportCodes(city.airports.map(a => a.code))}>×</button>
+                      <button className="exploration-remove-btn" onClick={() => removeAirportCodes(city.airports.map(a => a.code))}>{UI_SYMBOLS.CLOSE}</button>
                     </div>
                     {isCityExpanded && city.airports.map(ap => (
                       <div key={ap.code} className="exploration-item exploration-item--child">
                         <span className="exploration-icon"></span>
                         <span className="exploration-name">{ap.name}</span>
                         <span className="exploration-code">({ap.code})</span>
-                        <button className="exploration-remove-btn" onClick={() => removeExplorationItem(ap.id)}>×</button>
+                        <button className="exploration-remove-btn" onClick={() => removeExplorationItem(ap.id)}>{UI_SYMBOLS.CLOSE}</button>
                       </div>
                     ))}
                   </div>
@@ -1178,13 +1180,13 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                 <span className="exploration-name">{selectedItem.data.name}</span>
                 <span className="exploration-code">({selectedItem.data.code})</span>
                 {tzDisplay && (
-                  <button className="exploration-tz-btn" title="Click to switch to this timezone"
+                  <button className="exploration-tz-btn" title={TEXTS.panel.switchTimezone}
                     onClick={() => handleSwitchTimezone(selectedItem.data.code)}>{tzDisplay}</button>
                 )}
               </div>
             );
           })()}
-          {/* Transfer airports */}
+          {TEXTS.panel.transferAirports}
           {transferAirports.map(code => {
             const tzDisplay = getAltTimeDisplay(code);
             const feat = airportsData?.features.find(f => f.properties.code === code);
@@ -1195,7 +1197,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                 <span className="exploration-name">{label}</span>
                 <span className="exploration-code">({code})</span>
                 {tzDisplay && (
-                  <button className="exploration-tz-btn" title="Click to switch timezone"
+                  <button className="exploration-tz-btn" title={TEXTS.panel.switchTimezone}
                     onClick={() => handleSwitchTimezone(code)}>{tzDisplay}</button>
                 )}
                 <button className="exploration-remove-btn" onClick={() => {
@@ -1204,13 +1206,13 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                     setSelectedTimezoneOverride(null);
                     setSelectedTimezoneAirportCode(null);
                   }
-                }}>×</button>
+                }}>{UI_SYMBOLS.CLOSE}</button>
               </div>
             );
           })}
         </div>
         {/* Inline search input — hidden when 6 airports already selected (1 original + 5 transfers) */}
-        {transferAirports.length < MAX_TRANSFER_AIRPORTS && (
+        {transferAirports.length < CONFIG.MAX_TRANSFER_AIRPORTS && (
           <AirportTransferPicker
             currentAirport={selectedItem.data}
             inline
@@ -1218,18 +1220,18 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
             onSelectAirports={(newCodes) => {
               setTransferAirports(prev => {
                 const combined = [...new Set([...prev, ...newCodes])];
-                return combined.slice(0, MAX_TRANSFER_AIRPORTS);
+                return combined.slice(0, CONFIG.MAX_TRANSFER_AIRPORTS);
               });
             }}
             onSelectAirport={(code) => {
               setTransferAirports(prev => {
-                if (prev.includes(code) || prev.length >= MAX_TRANSFER_AIRPORTS) return prev;
+                if (prev.includes(code) || prev.length >= CONFIG.MAX_TRANSFER_AIRPORTS) return prev;
                 return [...prev, code];
               });
             }}
             onPreviewAirport={onPreviewAirport}
             onClearPreview={onClearPreview}
-            maxSelect={MAX_TRANSFER_AIRPORTS - transferAirports.length}
+            maxSelect={CONFIG.MAX_TRANSFER_AIRPORTS - transferAirports.length}
           />
         )}
       </div>
@@ -1240,7 +1242,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     <div className="right-panel">
       <div className="panel-header">
         <div className="header-content">
-          <h3>Departure date</h3>
+          <h3>{TEXTS.panel.departureDate}</h3>
           {(selectedItem.type === 'airport' || (selectedItem.type === 'city' && cityAirports.length > 0) || selectedItem.type === 'country') && (
             <div className="header-info">
               <DateInput value={travelDate} onChange={handleManualDateChange}
@@ -1260,25 +1262,25 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                     <div>{lastRealLeg?.toAirportCode}: {actualArrivalLocalTime}</div>
                   )}
                   {isArrivalEstimated && (
-                    <div className="arrival-estimated-note">~ estimated</div>
+                    <div className="arrival-estimated-note">{TEXTS.card.estimated}</div>
                   )}
                   {isArrivalEstimated && (
                     <div className="arrival-estimated-tooltip">
-                      Estimated arrival — calculated from flight distance and average aircraft speed (~850 km/h)
+                      {TEXTS.card.estimatedTooltip}
                     </div>
                   )}
                 </div>
               )}
               {((selectedItem.type === 'airport' && !effectiveArrivalTimeUTC) ||
                 selectedItem.type === 'city' ||
-                (selectedItem.type === 'country' && countryTzGroups.filter(g => g.tz !== '_unknown').length <= 1)) &&
+                (selectedItem.type === 'country' && countryTzGroups.filter(g => g.tz !== CONFIG.UNKNOWN_TIMEZONE).length <= 1)) &&
                 isToday && airportTime && (
                 <div className="airport-time">{airportTime}</div>
               )}
             </div>
           )}
         </div>
-        <button className="close-button" onClick={handleClose}>×</button>
+        <button className="close-button" onClick={handleClose}>{UI_SYMBOLS.CLOSE}</button>
       </div>
 
       <div className="panel-content">
@@ -1286,18 +1288,18 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
         {pendingCountryPicker && selectedItem.type !== 'country' && (
           <div className="pending-country-picker">
             <div className="pending-country-header">
-              <span>Add airports from {pendingCountryPicker.name}</span>
-              <button className="pending-country-close" onClick={onClearCountryPicker}>×</button>
+              <span>{TEXTS.panel.addAirportsFrom}{pendingCountryPicker.name}</span>
+              <button className="pending-country-close" onClick={onClearCountryPicker}>{UI_SYMBOLS.CLOSE}</button>
             </div>
             <div className="pending-country-content">
               {(() => {
-                const hasMixedTZ = pendingCountryTzGroups.filter(g => g.tz !== '_unknown').length > 1;
+                const hasMixedTZ = pendingCountryTzGroups.filter(g => g.tz !== CONFIG.UNKNOWN_TIMEZONE).length > 1;
                 const alreadySelectedCodes = new Set(explorationItems.flatMap(i => i.airportCodes));
                 const renderPendingCheckbox = (airport: { code: string; name: string }) => {
                   const alreadySelected = alreadySelectedCodes.has(airport.code);
                   const isPendingSelected = pendingSelectedAirports.includes(airport.code);
                   const isSelected = alreadySelected || isPendingSelected;
-                  const canSelect = !alreadySelected && (isPendingSelected || pendingSelectedAirports.length < MAX_AIRPORTS);
+                  const canSelect = !alreadySelected && (isPendingSelected || pendingSelectedAirports.length < CONFIG.MAX_AIRPORTS);
                   return (
                     <label key={airport.code}
                       className={`country-airport-item ${isSelected ? 'selected' : ''} ${alreadySelected ? 'disabled locked' : !canSelect ? 'disabled' : ''}`}>
@@ -1307,7 +1309,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                           setPendingSelectedAirports(prev =>
                             prev.includes(airport.code)
                               ? prev.filter(c => c !== airport.code)
-                              : (prev.length < MAX_AIRPORTS ? [...prev, airport.code] : prev)
+                              : (prev.length < CONFIG.MAX_AIRPORTS ? [...prev, airport.code] : prev)
                           );
                         }} />
                       <span>{airport.name} ({airport.code})</span>
@@ -1317,7 +1319,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                 if (hasMixedTZ) {
                   return pendingCountryTzGroups.map(group => (
                     <div key={group.tz} className="country-tz-group">
-                      {group.tz !== '_unknown' && (
+                      {group.tz !== CONFIG.UNKNOWN_TIMEZONE && (
                         <div className="country-tz-header">
                           <span className="tz-offset">{group.utcLabel}</span>
                           <span className="tz-current-dt">{group.currentDateStr} · {group.currentTimeStr}</span>
@@ -1339,9 +1341,9 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
             {pendingSelectedAirports.length > 0 && (
               <button className="confirm-flights-btn" onClick={() => {
                 const currentCodes = explorationItems.flatMap((i: any) => i.airportCodes as string[]);
-                const willFill = pendingSelectedAirports.length >= MAX_AIRPORTS;
+                const willFill = pendingSelectedAirports.length >= CONFIG.MAX_AIRPORTS;
                 if (willFill) clearExploration();
-                const slotsLeft = MAX_AIRPORTS - (willFill ? 0 : currentCodes.length);
+                const slotsLeft = CONFIG.MAX_AIRPORTS - (willFill ? 0 : currentCodes.length);
                 const codesToAdd = pendingSelectedAirports.slice(0, slotsLeft);
                 codesToAdd.forEach(code => {
                   const feat = airportsData?.features.find((f: any) => f.properties.code === code);
@@ -1358,7 +1360,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                 onClearCountryPicker?.();
                 setPendingSelectedAirports([]);
               }}>
-                Add {Math.min(pendingSelectedAirports.length, MAX_AIRPORTS)} airport{pendingSelectedAirports.length !== 1 ? 's' : ''}
+                {TEXTS.panel.addCountAirports(Math.min(pendingSelectedAirports.length, CONFIG.MAX_AIRPORTS))}
               </button>
             )}
           </div>
@@ -1401,9 +1403,9 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
               {explorationItems.length > 0 ? renderExplorationList() : (
                 <div className="simplified-details">{getSimplifiedDetails()}</div>
               )}
-              {loadingCityAirports && <div className="mode-loading">Loading airports...</div>}
+              {loadingCityAirports && <div className="mode-loading">{TEXTS.panel.loadingAirports}</div>}
               {!loadingCityAirports && cityAirports.length === 0 && explorationItems.length === 0 && (
-                <div className="mode-no-airports">No flightable airports found for this city.</div>
+                <div className="mode-no-airports">{TEXTS.panel.noFlightableAirports}</div>
               )}
             </div>
             {showFlightsList && (
@@ -1429,11 +1431,11 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
               <div className="simplified-details">{getSimplifiedDetails()}</div>
 
               {viewMode === 'airports' && (() => {
-                const hasMixedTZ = countryTzGroups.filter(g => g.tz !== '_unknown').length > 1;
+                const hasMixedTZ = countryTzGroups.filter(g => g.tz !== CONFIG.UNKNOWN_TIMEZONE).length > 1;
                 const allCountryAirports = countryTzGroups.flatMap(g => g.airports);
                 const renderAirportCheckbox = (airport: { code: string; name: string }) => {
                   const isSelected = selectedFlatAirports.some(a => a.code === airport.code);
-                  const canSelect = isSelected || selectedFlatAirports.length < MAX_AIRPORTS;
+                  const canSelect = isSelected || selectedFlatAirports.length < CONFIG.MAX_AIRPORTS;
                   return (
                     <label key={airport.code}
                       className={`country-airport-item ${isSelected ? 'selected' : ''} ${!canSelect ? 'disabled' : ''}`}>
@@ -1446,7 +1448,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                 return (
                   <div className="country-flat-airports">
                     <div className="country-mode-info">
-                      Select airports (max {MAX_AIRPORTS}). Selected: {selectedFlatAirports.length} / {MAX_AIRPORTS}
+                      {TEXTS.panel.selectAirportsMax(CONFIG.MAX_AIRPORTS)} {TEXTS.panel.selectedCount(selectedFlatAirports.length, CONFIG.MAX_AIRPORTS)}
                     </div>
                     {hasMixedTZ ? (
                       countryTzGroups.map(group => {
@@ -1455,7 +1457,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                         const hasSelected = selectedFlatAirports.some(a => group.airports.some(ga => ga.code === a.code));
                         return (
                           <div key={group.tz} className={`country-tz-group${isActive ? ' country-tz-group--active' : ''}`}>
-                            {group.tz !== '_unknown' && (
+                            {group.tz !== CONFIG.UNKNOWN_TIMEZONE && (
                               <div className="country-tz-header">
                                 <span className="tz-offset">{group.utcLabel}</span>
                                 <span className="tz-current-dt">{group.currentDateStr} · {group.currentTimeStr}</span>
@@ -1477,7 +1479,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                     )}
                     {selectedFlatAirports.length > 0 && (
                       <button className="confirm-flights-btn" onClick={handleConfirmFlatAirports}>
-                        Load flights from {selectedFlatAirports.length} airport{selectedFlatAirports.length !== 1 ? 's' : ''}
+                        {TEXTS.panel.loadFlightsFromCount(selectedFlatAirports.length)}
                       </button>
                     )}
                   </div>
@@ -1487,16 +1489,16 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
               {viewMode === 'cities' && (
                 <>
                   <div className="country-mode-info">
-                    Select cities (max 6 airports total). Selected airports: {selectedCityAirportTotal} / {MAX_AIRPORTS}
+                    Select cities (max 6 airports total). Selected airports: {selectedCityAirportTotal} / {CONFIG.MAX_AIRPORTS}
                   </div>
-                  {loadingCountry && <div className="mode-loading">Loading cities...</div>}
+                  {loadingCountry && <div className="mode-loading">{TEXTS.panel.loadingCities}</div>}
                   {!loadingCountry && countryCities.length > 0 && (
                     <div className="country-cities-list">
                       {countryCities.map(city => {
                         const airportCount = cityAirportCountMap[city.code] || 0;
                         if (airportCount === 0) return null;
                         const isSelected = selectedCities.some(c => c.code === city.code);
-                        const wouldExceed = !isSelected && (selectedCityAirportTotal + airportCount > MAX_AIRPORTS);
+                        const wouldExceed = !isSelected && (selectedCityAirportTotal + airportCount > CONFIG.MAX_AIRPORTS);
                         return (
                           <label key={city.code}
                             className={`country-airport-item ${isSelected ? 'selected' : ''} ${wouldExceed ? 'disabled' : ''}`}>
@@ -1517,7 +1519,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                   )}
                   {selectedCities.length > 0 && (
                     <button className="confirm-flights-btn" disabled={loadingConfirm} onClick={handleConfirmCities}>
-                      {loadingConfirm ? 'Loading...' : `Load flights from ${selectedCities.length} city${selectedCities.length !== 1 ? 's' : ''} (${selectedCityAirportTotal} airports)`}
+                      {loadingConfirm ? TEXTS.panel.loadingFlights : `${TEXTS.panel.loadFlightsFromCount(selectedCities.length)} (${TEXTS.panel.selectedCount(selectedCityAirportTotal, CONFIG.MAX_AIRPORTS)})`}
                     </button>
                   )}
                 </>
@@ -1526,7 +1528,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
 
             {!loadingCountry && selectedFlatAirports.length === 0 && selectedCities.length === 0 && (
               <div className="placeholder-message">
-                <p>Select airports above to view departing flights.</p>
+                <p>{TEXTS.panel.selectAirportsMax(CONFIG.MAX_AIRPORTS)}</p>
               </div>
             )}
           </>

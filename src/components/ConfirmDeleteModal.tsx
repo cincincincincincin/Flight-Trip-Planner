@@ -1,5 +1,6 @@
 import React from 'react';
 import './ConfirmDeleteModal.css';
+import { TEXTS } from '../constants/text';
 
 interface ConfirmDeleteModalProps {
   tripName?: string;
@@ -11,18 +12,13 @@ const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({ tripName, onCon
   return (
     <div className="confirm-delete-overlay" onClick={onCancel}>
       <div className="confirm-delete-modal" onClick={e => e.stopPropagation()}>
-        <h4 className="confirm-delete-modal__title">Delete trip?</h4>
-        <p className="confirm-delete-modal__body">
-          Are you sure you want to delete <strong>{tripName ?? 'this trip'}</strong>?
-          This action cannot be undone.
+        <h4 className="confirm-delete-modal__title">{TEXTS.modals.deleteTrip}</h4>
+        <p className="confirm-delete-modal__body">{TEXTS.modals.sureDelete}<strong>{tripName ?? TEXTS.modals.thisTrip}</strong>?
+          {TEXTS.modals.undoWarning}
         </p>
         <div className="confirm-delete-modal__actions">
-          <button className="confirm-delete-modal__btn confirm-delete-modal__btn--cancel" onClick={onCancel}>
-            Cancel
-          </button>
-          <button className="confirm-delete-modal__btn confirm-delete-modal__btn--confirm" onClick={onConfirm}>
-            Delete
-          </button>
+          <button className="confirm-delete-modal__btn confirm-delete-modal__btn--cancel" onClick={onCancel}>{TEXTS.buttons.cancel}</button>
+          <button className="confirm-delete-modal__btn confirm-delete-modal__btn--confirm" onClick={onConfirm}>{TEXTS.buttons.delete}</button>
         </div>
       </div>
     </div>

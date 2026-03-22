@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './TripNameModal.css';
+import { TEXTS } from '../constants/text';
 
 interface TripNameModalProps {
   initialName?: string;
@@ -49,12 +50,10 @@ const TripNameModal: React.FC<TripNameModalProps> = ({
             className="trip-name-modal__input"
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="Leave empty for auto-generated name"
+            placeholder={TEXTS.modals.namePlaceholder}
           />
           <div className="trip-name-modal__actions">
-            <button type="button" className="trip-name-modal__btn trip-name-modal__btn--cancel" onClick={onCancel}>
-              Cancel
-            </button>
+            <button type="button" className="trip-name-modal__btn trip-name-modal__btn--cancel" onClick={onCancel}>{TEXTS.buttons.cancel}</button>
             <button type="submit" className="trip-name-modal__btn trip-name-modal__btn--confirm">
               {confirmLabel}
             </button>

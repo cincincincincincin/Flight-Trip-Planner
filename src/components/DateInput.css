@@ -163,6 +163,6 @@
 
 .calendar-day.selected.today {
   background: var(--accent);
-  color: #fff;
+  color: var(--text-inverse);
   border-color: var(--accent);
 }

@@ -16,13 +16,15 @@ import { useSettingsStore } from './stores/settingsStore';
 import { useAuthStore } from './stores/authStore';
 import { useFilterStore } from './stores/filterStore';
 import { useColorStore } from './stores/colorStore'; // for flight card highlight CSS vars
+import { TEXTS } from './constants/text';
 import './App.css';
+import { CONFIG } from './constants/config';
+import { MAP_ASSETS } from './constants/mapStyles';
 
 const _origLog = console.log;
 const _origWarn = console.warn;
 const _origDebug = console.debug;
 
-const AIRPORT_ZOOM_THRESHOLD = 1.2;
 
 function medianVal(arr: number[]): number {
   const sorted = [...arr].sort((a, b) => a - b);
@@ -30,7 +32,7 @@ function medianVal(arr: number[]): number {
   return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
-function filterOutliersCoords(coords: [number, number][], maxDeg = 5): [number, number][] {
+function filterOutliersCoords(coords: [number, number][], maxDeg = CONFIG.OUTLIER_MAX_DEG): [number, number][] {
   if (coords.length <= 1) return coords;
   let current = [...coords];
   let prevLen = 0;
@@ -47,11 +49,6 @@ function filterOutliersCoords(coords: [number, number][], maxDeg = 5): [number, 
   return current;
 }
 
-const FALLBACK_ZOOM = {
-  AIRPORT: 6,
-  CITY: 5,
-  COUNTRY: 4
-};
 
 const MemoizedMapComponent = memo(MapComponent);
 
@@ -61,7 +58,7 @@ function App() {
   const handleAddToTripRef = useRef<((flight: any) => Promise<void>) | null>(null);
 
   // ── Mobile bottom sheet (state + refs only — effects are after store declarations) ──
-  const PEEK_H = 100; // px visible in peek state (header height)
+   // px visible in peek state (header height)
   const [mobileSheetExpanded, setMobileSheetExpanded] = useState(false);
   const mobileSheetRef = useRef<HTMLDivElement>(null);
   const sheetExpandedRef = useRef(false);
@@ -104,10 +101,10 @@ function App() {
     const onStart = (e: TouchEvent) => {
       const rect = sheet.getBoundingClientRect();
       const fromTop = e.touches[0].clientY - rect.top;
-      if (fromTop > PEEK_H + 20) return; // only drag from header area
+      if (fromTop > CONFIG.PEEK_H + CONFIG.DRAG_HEADER_EXTRA) return; // only drag from header area
       dragging = true;
       startY = e.touches[0].clientY;
-      startTranslate = sheetExpandedRef.current ? 0 : window.innerHeight - PEEK_H;
+      startTranslate = sheetExpandedRef.current ? 0 : window.innerHeight - CONFIG.PEEK_H;
       currentTranslate = startTranslate;
       sheet.style.transition = 'none';
     };
@@ -116,7 +113,7 @@ function App() {
       if (!dragging) return;
       e.preventDefault();
       const dy = e.touches[0].clientY - startY;
-      const maxT = window.innerHeight - PEEK_H;
+      const maxT = window.innerHeight - CONFIG.PEEK_H;
       currentTranslate = Math.max(0, Math.min(maxT, startTranslate + dy));
       sheet.style.transform = `translateY(${currentTranslate}px)`;
     };
@@ -125,9 +122,8 @@ function App() {
       if (!dragging) return;
       dragging = false;
       const totalDrag = currentTranslate - startTranslate;
-      const THRESHOLD = 60;
-      const wasExpanded = sheetExpandedRef.current;
-      const nextExpanded = wasExpanded ? totalDrag < THRESHOLD : totalDrag < -THRESHOLD;
+            const wasExpanded = sheetExpandedRef.current;
+      const nextExpanded = wasExpanded ? totalDrag < CONFIG.DRAG_THRESHOLD : totalDrag < -CONFIG.DRAG_THRESHOLD;
       sheet.style.transition = '';
       sheet.style.transform = '';
       setMobileSheetExpanded(nextExpanded);
@@ -136,7 +132,8 @@ function App() {
     sheet.addEventListener('touchstart', onStart, { passive: true });
     sheet.addEventListener('touchmove', onMove, { passive: false });
     sheet.addEventListener('touchend', onEnd);
-    return () => {
+
+  return () => {
       sheet.removeEventListener('touchstart', onStart);
       sheet.removeEventListener('touchmove', onMove);
       sheet.removeEventListener('touchend', onEnd);
@@ -220,7 +217,7 @@ function App() {
   }, [tripState]);
 
   const flyToLocation = useCallback((lng: number, lat: number, zoom: number) => {
-    mapRef.current?.flyTo({ center: [lng, lat], zoom, essential: true, duration: 800 });
+    mapRef.current?.flyTo({ center: [lng, lat], zoom, essential: true, duration: CONFIG.FLY_DURATION });
   }, []);
 
   // Use a ref so fitBoundsToAirportCodes doesn't change reference when flights load
@@ -234,10 +231,10 @@ function App() {
       .map(code => airportsData.features.find(f => f.properties.code === code)?.geometry?.coordinates as [number, number] | undefined)
       .filter((p): p is [number, number] => !!p);
     if (points.length === 0) return;
-    if (points.length === 1) { flyToLocation(points[0][0], points[0][1], FALLBACK_ZOOM.AIRPORT); return; }
+    if (points.length === 1) { flyToLocation(points[0][0], points[0][1], CONFIG.FALLBACK_ZOOM.AIRPORT); return; }
     const lngs = points.map(p => p[0]);
     const lats = points.map(p => p[1]);
-    mapRef.current?.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]], { padding: 80, duration: 800, maxZoom: 8 });
+    mapRef.current?.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]], { padding: CONFIG.FIT_BOUNDS_PADDING, duration: CONFIG.FLY_DURATION, maxZoom: CONFIG.FIT_BOUNDS_MAX_ZOOM });
   }, [airportsData, flyToLocation]);
 
   const setDisplayMode = useCallback((mode: string) => {
@@ -245,8 +242,8 @@ function App() {
       setShowAirports(true);
       setShowCities(false);
       setViewMode('airports');
-      if (viewport.zoom < AIRPORT_ZOOM_THRESHOLD) {
-        mapRef.current?.flyTo({ zoom: AIRPORT_ZOOM_THRESHOLD, duration: 800, essential: true });
+      if (viewport.zoom < CONFIG.AIRPORT_ZOOM_THRESHOLD) {
+        mapRef.current?.flyTo({ zoom: CONFIG.AIRPORT_ZOOM_THRESHOLD, duration: CONFIG.FLY_DURATION, essential: true });
       }
     } else {
       setShowAirports(false);
@@ -267,7 +264,8 @@ function App() {
       lng = coords.lon;
       lat = coords.lat;
     }
-    return (lng !== undefined && lat !== undefined) ? { lng, lat } : null;
+
+  return (lng !== undefined && lat !== undefined) ? { lng, lat } : null;
   };
 
   const getExplorationAirportCodes = useCallback((type: 'airport' | 'city', code: string): string[] => {
@@ -286,13 +284,13 @@ function App() {
       if (coords.length > 0) {
         const continental = filterOutliersCoords(coords);
         if (continental.length === 1) {
-          flyToLocation(continental[0][0], continental[0][1], FALLBACK_ZOOM.COUNTRY);
+          flyToLocation(continental[0][0], continental[0][1], CONFIG.FALLBACK_ZOOM.COUNTRY);
         } else {
           const lngs = continental.map(c => c[0]);
           const lats = continental.map(c => c[1]);
           mapRef.current?.fitBounds(
             [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
-            { padding: 80, duration: 800, maxZoom: 7 }
+            { padding: CONFIG.FIT_BOUNDS_PADDING, duration: CONFIG.FLY_DURATION, maxZoom: CONFIG.MAX_ZOOM_FOR_COUNTRY }
           );
         }
         return;
@@ -300,7 +298,7 @@ function App() {
     }
     // Fallback to backend center if GeoJSON has no airports for this country
     getCountryCenter(countryCode).then((center: any) => {
-      flyToLocation(center.lon ?? 0, center.lat ?? 0, center.recommended_zoom ?? FALLBACK_ZOOM.COUNTRY);
+      flyToLocation(center.lon ?? 0, center.lat ?? 0, center.recommended_zoom ?? CONFIG.FALLBACK_ZOOM.COUNTRY);
     }).catch(() => {});
   }, [airportsData, flyToLocation]);
 
@@ -393,7 +391,7 @@ function App() {
         if (cityAirportCodes.length > 1) {
           fitBoundsToAirportCodes(cityAirportCodes);
         } else if (coords) {
-          flyToLocation(coords.lng, coords.lat, FALLBACK_ZOOM.CITY);
+          flyToLocation(coords.lng, coords.lat, CONFIG.FALLBACK_ZOOM.CITY);
         }
       }
       return;
@@ -415,7 +413,7 @@ function App() {
     }
 
     if (coords) {
-      flyToLocation(coords.lng, coords.lat, FALLBACK_ZOOM.AIRPORT);
+      flyToLocation(coords.lng, coords.lat, CONFIG.FALLBACK_ZOOM.AIRPORT);
     }
   }, [setDisplayMode, flyToLocation, fitBoundsToAirportCodes, tripState, flightsData, travelDate, selectedItem, viewMode, addExplorationItem, explorationItems, getExplorationAirportCodes, setSelectedItem, setSelectedAirportCode, setHighlightedAirports, setFlightsData]);
 
@@ -496,7 +494,7 @@ function App() {
       setSelectedItem({ type: 'airport', data: destData, overrideFromDatetime });
 
       const coords = destData.coordinates;
-      if (coords) flyToLocation((coords.lon ?? coords.lng) ?? 0, coords.lat ?? 0, FALLBACK_ZOOM.AIRPORT);
+      if (coords) flyToLocation((coords.lon ?? coords.lng) ?? 0, coords.lat ?? 0, CONFIG.FALLBACK_ZOOM.AIRPORT);
     } catch (e) {
       console.error('Failed to fetch destination airport:', e);
       // Fallback: set a minimal selectedItem so the panel stays consistent
@@ -512,7 +510,7 @@ function App() {
       if (!item) return;
       const coords = extractCoordinates(item);
       if (coords) {
-        flyToLocation(coords.lng, coords.lat, FALLBACK_ZOOM.AIRPORT);
+        flyToLocation(coords.lng, coords.lat, CONFIG.FALLBACK_ZOOM.AIRPORT);
       }
     }, 0);
   }, [flyToLocation]);
@@ -597,7 +595,7 @@ function App() {
         : lastArrivalUTC ? lastArrivalUTC.substring(0, 19) : undefined;
       setSelectedItem({ type: 'airport', data: destData, overrideFromDatetime });
       const coords = destData.coordinates;
-      if (coords) flyToLocation((coords.lon ?? coords.lng) ?? 0, coords.lat ?? 0, FALLBACK_ZOOM.AIRPORT);
+      if (coords) flyToLocation((coords.lon ?? coords.lng) ?? 0, coords.lat ?? 0, CONFIG.FALLBACK_ZOOM.AIRPORT);
     } catch {
       setSelectedItem({ type: 'airport', data: { code: lastCode, name: lastCode } as any });
     }
@@ -675,6 +673,9 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode]);
 
+  useEffect(() => {
+    document.documentElement.style.setProperty('--map-bg-image', MAP_ASSETS.BACKGROUND_IMAGE);
+  }, []);
 
   return (
     <div className="app">
@@ -692,11 +693,11 @@ function App() {
               className="open-controls-btn"
               onClick={() => setControlsPanelOpen(!controlsPanelOpen)}
             >
-              {controlsPanelOpen ? '✕ Close settings' : 'Settings'}
+              {controlsPanelOpen ? TEXTS.buttons.closeControls : TEXTS.buttons.openControls}
             </button>
             {!user && (
               <button className="sign-in-btn" onClick={() => setShowAuthModal(true)}>
-                Sign In
+                {TEXTS.buttons.signIn}
               </button>
             )}
             {user && <UserMenu onOpenSavedTrips={() => setShowSavedTrips(true)} />}

@@ -3,55 +3,53 @@ import ReactDOM from 'react-dom';
 import { useColorStore, type ColorKey, type SizeKey } from '../stores/colorStore';
 import { useMapStore } from '../stores/mapStore';
 import './ColorSettings.css';
+import { TEXTS } from '../constants/text';
+import { CONFIG } from '../constants/config';
+import { THEME_COLORS } from '../constants/theme';
 
-const MIN_ZOOM = 1;
-const MAX_ZOOM = 12;
 function interpolateZoomValue(minVal: number, maxVal: number, z: number, zMin: number, zMax: number): number {
-  const minZoom = Math.max(MIN_ZOOM, Math.min(zMin, zMax));
-  const maxZoom = Math.min(MAX_ZOOM, Math.max(zMin, zMax));
+  const minZoom = Math.max(CONFIG.MIN_ZOOM, Math.min(zMin, zMax));
+  const maxZoom = Math.min(CONFIG.MAX_ZOOM, Math.max(zMin, zMax));
   if (minZoom === maxZoom) return maxVal;
   const clamped = Math.max(minZoom, Math.min(z, maxZoom));
   const t = (clamped - minZoom) / (maxZoom - minZoom);
   return minVal + (maxVal - minVal) * t;
 }
 
-const START_POINT_LABELS = [
-  'Point 1', 'Point 2', 'Point 3',
-  'Point 4', 'Point 5', 'Point 6',
-];
+
 
 const MAP_AIRPORT_ROWS: { key: ColorKey; label: string; hoverKey: ColorKey; labelKey: ColorKey; labelHoverKey: ColorKey }[] = [
-  { key: 'generalAirport',     label: 'General airports',     hoverKey: 'generalAirportHover',     labelKey: 'generalLabelColor',      labelHoverKey: 'generalLabelHoverColor' },
-  { key: 'destinationAirport', label: 'Destination airports', hoverKey: 'destinationAirportHover', labelKey: 'destinationLabelColor',  labelHoverKey: 'destinationLabelHoverColor' },
-  { key: 'tripAirport',        label: 'Trip airports',        hoverKey: 'tripAirportHover',        labelKey: 'tripLabelColor',         labelHoverKey: 'tripLabelHoverColor' },
+  { key: 'generalAirport',     label: TEXTS.colorSettings.generalAirports,     hoverKey: 'generalAirportHover',     labelKey: 'generalLabelColor',      labelHoverKey: 'generalLabelHoverColor' },
+  { key: 'destinationAirport', label: TEXTS.colorSettings.destinationAirports, hoverKey: 'destinationAirportHover', labelKey: 'destinationLabelColor',  labelHoverKey: 'destinationLabelHoverColor' },
+  { key: 'tripAirport',        label: TEXTS.colorSettings.tripAirports,        hoverKey: 'tripAirportHover',        labelKey: 'tripLabelColor',         labelHoverKey: 'tripLabelHoverColor' },
 ];
 
 const FC_HIGHLIGHT_ROWS: { bgKey: ColorKey; borderKey: ColorKey; label: string }[] = [
-  { bgKey: 'fcHighlightAirportBg',  borderKey: 'fcHighlightAirportBorder',  label: 'Same airport' },
-  { bgKey: 'fcHighlightCityBg',     borderKey: 'fcHighlightCityBorder',     label: 'Same city' },
-  { bgKey: 'fcHighlightCountryBg',  borderKey: 'fcHighlightCountryBorder',  label: 'Same country' },
-  { bgKey: 'fcHighlightSoonBg',     borderKey: 'fcHighlightSoonBorder',     label: 'Departs too soon' },
+  { bgKey: 'fcHighlightAirportBg',  borderKey: 'fcHighlightAirportBorder',  label: TEXTS.colorSettings.sameAirport },
+  { bgKey: 'fcHighlightCityBg',     borderKey: 'fcHighlightCityBorder',     label: TEXTS.colorSettings.sameCity },
+  { bgKey: 'fcHighlightCountryBg',  borderKey: 'fcHighlightCountryBorder',  label: TEXTS.colorSettings.sameCountry },
+  { bgKey: 'fcHighlightSoonBg',     borderKey: 'fcHighlightSoonBorder',     label: TEXTS.colorSettings.departsTooSoon },
 ];
 
 const MAP_ROUTE_ROWS: { key: ColorKey; label: string; hoverKey?: ColorKey; hint?: string }[] = [
-  { key: 'tripRoute',      label: 'Trip route',      hoverKey: 'tripRouteHover' },
-  { key: 'transferRoute',  label: 'Transfer route',  hoverKey: 'transferRouteHover' },
-  { key: 'transferRoute',  label: 'Transfer preview' },
+  { key: 'tripRoute',      label: TEXTS.colorSettings.tripRoute,      hoverKey: 'tripRouteHover' },
+  { key: 'transferRoute',  label: TEXTS.colorSettings.transferRoute,  hoverKey: 'transferRouteHover' },
+  { key: 'transferRoute',  label: TEXTS.colorSettings.transferPreview },
 ];
 
 const SIZE_ROWS: { minKey: SizeKey; maxKey: SizeKey; label: string; min: number; max: number; step: number }[] = [
-  { minKey: 'generalAirportRadiusMin',        maxKey: 'generalAirportRadiusMax',        label: 'General dot size',              min: 0.5, max: 30, step: 0.5 },
-  { minKey: 'generalAirportHoverRadiusMin',   maxKey: 'generalAirportHoverRadiusMax',   label: 'General dot hover size',        min: 0.5, max: 40, step: 0.5 },
-  { minKey: 'generalAirportLabelSizeMin',     maxKey: 'generalAirportLabelSizeMax',     label: 'General label size',            min: 6,   max: 40, step: 1 },
-  { minKey: 'generalLabelHoverSizeMin',       maxKey: 'generalLabelHoverSizeMax',       label: 'General label hover size',      min: 6,   max: 48, step: 1 },
-  { minKey: 'highlightedAirportRadiusMin',    maxKey: 'highlightedAirportRadiusMax',    label: 'Highlighted dot size',          min: 0.5, max: 30, step: 0.5 },
-  { minKey: 'highlightedAirportHoverRadiusMin', maxKey: 'highlightedAirportHoverRadiusMax', label: 'Highlighted dot hover size', min: 0.5, max: 40, step: 0.5 },
-  { minKey: 'highlightedLabelSizeMin',        maxKey: 'highlightedLabelSizeMax',        label: 'Highlighted label size',        min: 6,   max: 40, step: 1 },
-  { minKey: 'highlightedLabelHoverSizeMin',   maxKey: 'highlightedLabelHoverSizeMax',   label: 'Highlighted label hover size',  min: 6,   max: 48, step: 1 },
-  { minKey: 'routeLineWidthMin',              maxKey: 'routeLineWidthMax',              label: 'Route line width',              min: 0.2, max: 16, step: 0.2 },
-  { minKey: 'routeLineHoverWidthMin',         maxKey: 'routeLineHoverWidthMax',         label: 'Route line hover width',        min: 0.2, max: 20, step: 0.2 },
-  { minKey: 'tripRouteWidthMin',              maxKey: 'tripRouteWidthMax',              label: 'Trip route line width',         min: 0.2, max: 18, step: 0.2 },
-  { minKey: 'tripRouteHoverWidthMin',         maxKey: 'tripRouteHoverWidthMax',         label: 'Trip route line hover width',   min: 0.2, max: 22, step: 0.2 },
+  { minKey: 'generalAirportRadiusMin',        maxKey: 'generalAirportRadiusMax',        label: TEXTS.colorSettings.generalDotSize,              min: 0.5, max: 30, step: 0.5 },
+  { minKey: 'generalAirportHoverRadiusMin',   maxKey: 'generalAirportHoverRadiusMax',   label: TEXTS.colorSettings.generalDotHoverSize,        min: 0.5, max: 40, step: 0.5 },
+  { minKey: 'generalAirportLabelSizeMin',     maxKey: 'generalAirportLabelSizeMax',     label: TEXTS.colorSettings.generalLabelSize,            min: 6,   max: 40, step: 1 },
+  { minKey: 'generalLabelHoverSizeMin',       maxKey: 'generalLabelHoverSizeMax',       label: TEXTS.colorSettings.generalLabelHoverSize,      min: 6,   max: 48, step: 1 },
+  { minKey: 'highlightedAirportRadiusMin',    maxKey: 'highlightedAirportRadiusMax',    label: TEXTS.colorSettings.highlightedDotSize,          min: 0.5, max: 30, step: 0.5 },
+  { minKey: 'highlightedAirportHoverRadiusMin', maxKey: 'highlightedAirportHoverRadiusMax', label: TEXTS.colorSettings.highlightedDotHoverSize, min: 0.5, max: 40, step: 0.5 },
+  { minKey: 'highlightedLabelSizeMin',        maxKey: 'highlightedLabelSizeMax',        label: TEXTS.colorSettings.highlightedLabelSize,        min: 6,   max: 40, step: 1 },
+  { minKey: 'highlightedLabelHoverSizeMin',   maxKey: 'highlightedLabelHoverSizeMax',   label: TEXTS.colorSettings.highlightedLabelHoverSize,  min: 6,   max: 48, step: 1 },
+  { minKey: 'routeLineWidthMin',              maxKey: 'routeLineWidthMax',              label: TEXTS.colorSettings.routeLineWidth,              min: 0.2, max: 16, step: 0.2 },
+  { minKey: 'routeLineHoverWidthMin',         maxKey: 'routeLineHoverWidthMax',         label: TEXTS.colorSettings.routeLineHoverWidth,        min: 0.2, max: 20, step: 0.2 },
+  { minKey: 'tripRouteWidthMin',              maxKey: 'tripRouteWidthMax',              label: TEXTS.colorSettings.tripRouteWidth,         min: 0.2, max: 18, step: 0.2 },
+  { minKey: 'tripRouteHoverWidthMin',         maxKey: 'tripRouteHoverWidthMax',         label: TEXTS.colorSettings.tripRouteHoverWidth,   min: 0.2, max: 22, step: 0.2 },
 ];
 
 // ─── Color helpers ─────────────────────────────────────────────────────────────
@@ -112,7 +110,7 @@ interface ScreenPickerProps {
 const ScreenPickerOverlay: React.FC<ScreenPickerProps> = ({ onPick, onCancel }) => {
   const [imgSrc, setImgSrc] = useState<string | null>(null);
   const pixelRef = useRef<{ data: Uint8ClampedArray; w: number; h: number; sx: number; sy: number } | null>(null);
-  const [hoverColor, setHoverColor] = useState('#000000');
+  const [hoverColor, setHoverColor] = useState(THEME_COLORS.textBlack);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const zoomRef = useRef<HTMLCanvasElement>(null);
   const CELL = 8, CELLS = 11, ZOOM = CELL * CELLS;
@@ -144,7 +142,7 @@ const ScreenPickerOverlay: React.FC<ScreenPickerProps> = ({ onPick, onCancel }) 
 
   const getHex = (cx: number, cy: number) => {
     const p = pixelRef.current;
-    if (!p) return '#000000';
+    if (!p) return THEME_COLORS.textBlack;
     const px = Math.min(Math.round(cx * p.sx), p.w - 1);
     const py = Math.min(Math.round(cy * p.sy), p.h - 1);
     const i = (py * p.w + px) * 4;
@@ -192,7 +190,7 @@ const ScreenPickerOverlay: React.FC<ScreenPickerProps> = ({ onPick, onCancel }) 
         ? <img src={imgSrc} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} draggable={false} />
         : <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ background: '#1e1e2e', color: 'white', padding: '12px 20px', borderRadius: 8, fontSize: 13 }}>
-              Select window in browser dialog…
+              {TEXTS.colorSettings.picker.selectWindow}
             </div>
           </div>
       }
@@ -213,7 +211,7 @@ const ScreenPickerOverlay: React.FC<ScreenPickerProps> = ({ onPick, onCancel }) 
             background: 'rgba(0,0,0,0.75)', color: 'white', fontSize: 12,
             padding: '4px 12px', borderRadius: 4, pointerEvents: 'none', whiteSpace: 'nowrap',
           }}>
-            Click to pick · Esc to cancel
+            {TEXTS.colorSettings.picker.clickToPick}
           </div>
         </>
       )}
@@ -230,7 +228,7 @@ interface ColorPickerProps {
   title?: string;
 }
 
-const SV_W = 148, SV_H = 120, STRIP_W = 14, STRIP_H = 120;
+const SV_W = CONFIG.COLOR_PICKER_SV_WIDTH, SV_H = CONFIG.COLOR_PICKER_SV_HEIGHT, STRIP_W = CONFIG.COLOR_PICKER_STRIP_WIDTH, STRIP_H = CONFIG.COLOR_PICKER_STRIP_HEIGHT;
 
 const ColorPicker: React.FC<ColorPickerProps> = ({ color, onChange, title }) => {
   const [open, setOpen] = useState(false);
@@ -427,11 +425,9 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ color, onChange, title }) => 
       <button
         className="cp-eyedropper"
         onClick={handleEyedropper}
-        title={'EyeDropper' in window ? 'Pick color from screen' : 'Not supported in this browser'}
+        title={'EyeDropper' in window ? TEXTS.controls.pickColor : TEXTS.controls.notSupportedBrowser}
         disabled={!('EyeDropper' in window)}
-      >
-        Eyedropper
-      </button>
+      >{TEXTS.controls.eyedropper}</button>
       <div className="cp-canvases">
         <canvas
           ref={svRef}
@@ -582,7 +578,6 @@ const RangeSlider: React.FC<RangeSliderProps> = ({ min, max, step, minVal, maxVa
 };
 
 // Reference zoom = 6 (quick jump point)
-const REFERENCE_ZOOM = 6;
 
 interface ColorSettingsProps {
   showOnlySizes?: boolean;
@@ -632,29 +627,29 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
         <>
           <div className="color-settings-header">
             <span className="color-settings-title">Colors</span>
-            <button className="color-settings-reset" onClick={resetColors}>Reset all</button>
+            <button className="color-settings-reset" onClick={resetColors}>{TEXTS.controls.resetAll}</button>
           </div>
 
           {/* ── Starting points ── */}
           <div className="color-section-label">Starting points</div>
           <div className="color-settings-col-headers color-settings-col-headers--sp7">
             <span className="color-col-label" style={{textAlign:'left'}}></span>
-            {helpBtn("Airport dot")}
-            {helpBtn("Airport dot hover")}
-            {helpBtn("Route line")}
-            {helpBtn("Route line hover")}
-            {helpBtn("Label color")}
-            {helpBtn("Label hover color")}
+            {helpBtn(TEXTS.colorSettings.help.airportDot)}
+            {helpBtn(TEXTS.colorSettings.help.airportDotHover)}
+            {helpBtn(TEXTS.colorSettings.help.routeLine)}
+            {helpBtn(TEXTS.colorSettings.help.routeLineHover)}
+            {helpBtn(TEXTS.colorSettings.help.labelColor)}
+            {helpBtn(TEXTS.colorSettings.help.labelHoverColor)}
           </div>
           {startPoints.map((sp, i) => (
             <div key={i} className="color-row color-row--sp7">
-              <span className="color-row-label">{START_POINT_LABELS[i]}</span>
-              <ColorPicker color={sp.airport}          onChange={c => setStartPointColor(i, 'airport', c)}          title={`${START_POINT_LABELS[i]} - dot`} />
-              <ColorPicker color={sp.airportHover}     onChange={c => setStartPointColor(i, 'airportHover', c)}     title={`${START_POINT_LABELS[i]} - dot hover`} />
-              <ColorPicker color={sp.route}            onChange={c => setStartPointColor(i, 'route', c)}            title={`${START_POINT_LABELS[i]} - line`} />
-              <ColorPicker color={sp.routeHover}       onChange={c => setStartPointColor(i, 'routeHover', c)}       title={`${START_POINT_LABELS[i]} - line hover`} />
-              <ColorPicker color={sp.label}            onChange={c => setStartPointColor(i, 'label', c)}            title={`${START_POINT_LABELS[i]} - label`} />
-              <ColorPicker color={sp.labelHover}       onChange={c => setStartPointColor(i, 'labelHover', c)}       title={`${START_POINT_LABELS[i]} - label hover`} />
+              <span className="color-row-label">{TEXTS.colorSettings.pointLabel(i + 1)}</span>
+              <ColorPicker color={sp.airport}          onChange={c => setStartPointColor(i, 'airport', c)}          title={`${TEXTS.colorSettings.pointLabel(i + 1)} - dot`} />
+              <ColorPicker color={sp.airportHover}     onChange={c => setStartPointColor(i, 'airportHover', c)}     title={`${TEXTS.colorSettings.pointLabel(i + 1)} - dot hover`} />
+              <ColorPicker color={sp.route}            onChange={c => setStartPointColor(i, 'route', c)}            title={`${TEXTS.colorSettings.pointLabel(i + 1)} - line`} />
+              <ColorPicker color={sp.routeHover}       onChange={c => setStartPointColor(i, 'routeHover', c)}       title={`${TEXTS.colorSettings.pointLabel(i + 1)} - line hover`} />
+              <ColorPicker color={sp.label}            onChange={c => setStartPointColor(i, 'label', c)}            title={`${TEXTS.colorSettings.pointLabel(i + 1)} - label`} />
+              <ColorPicker color={sp.labelHover}       onChange={c => setStartPointColor(i, 'labelHover', c)}       title={`${TEXTS.colorSettings.pointLabel(i + 1)} - label hover`} />
             </div>
           ))}
 
@@ -665,10 +660,10 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
           <div className="color-subsection-label">Airports</div>
           <div className="color-settings-col-headers color-settings-col-headers--elem4">
             <span className="color-col-label" style={{textAlign:'left'}}></span>
-            {helpBtn("Dot color")}
-            {helpBtn("Dot hover color")}
-            {helpBtn("Label color")}
-            {helpBtn("Label hover color")}
+            {helpBtn(TEXTS.colorSettings.help.dotColor)}
+            {helpBtn(TEXTS.colorSettings.help.dotHoverColor)}
+            {helpBtn(TEXTS.colorSettings.help.labelColor)}
+            {helpBtn(TEXTS.colorSettings.help.labelHoverColor)}
           </div>
           {MAP_AIRPORT_ROWS.map(({ key, label, hoverKey, labelKey, labelHoverKey }) => (
             <div key={key} className="color-row color-row--elem4">
@@ -683,8 +678,8 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
           <div className="color-subsection-label">Routes</div>
           <div className="color-settings-col-headers color-settings-col-headers--elem2">
             <span className="color-col-label" style={{textAlign:'left'}}></span>
-            {helpBtn("Color")}
-            {helpBtn("Hover color")}
+            {helpBtn(TEXTS.colorSettings.help.color)}
+            {helpBtn(TEXTS.colorSettings.help.hoverColor)}
           </div>
       {MAP_ROUTE_ROWS.map(({ key, label, hoverKey, hint }) => (
         <div key={`${label}-${key}`} className="color-row color-row--elem2">
@@ -704,8 +699,8 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
           <div className="color-subsection-label">Flight card highlights</div>
           <div className="color-settings-col-headers color-settings-col-headers--elem2">
             <span className="color-col-label" style={{textAlign:'left'}}></span>
-            {helpBtn("Background color")}
-            {helpBtn("Border color")}
+            {helpBtn(TEXTS.colorSettings.help.bgColor)}
+            {helpBtn(TEXTS.colorSettings.help.borderColor)}
           </div>
           {FC_HIGHLIGHT_ROWS.map(({ bgKey, borderKey, label }) => (
             <div key={bgKey} className="color-row color-row--elem2">
@@ -727,12 +722,12 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
           {/* Zoom display + reset to default sizes */}
           <div className="size-row">
             <div className="size-row-header">
-              <span className="color-row-label">Zoom range</span>
+              <span className="color-row-label">{TEXTS.colorSettings.zoomRange}</span>
               <span className="size-value">{zoomRangeMin.toFixed(1)}–{zoomRangeMax.toFixed(1)}</span>
             </div>
             <RangeSlider
-              min={MIN_ZOOM}
-              max={MAX_ZOOM}
+              min={CONFIG.MIN_ZOOM}
+              max={CONFIG.MAX_ZOOM}
               step={0.1}
               minVal={zoomRangeMin}
               maxVal={zoomRangeMax}
@@ -749,10 +744,10 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
             />
           </div>
           <div className="zoom-info-row">
-            <span className="zoom-label">Zoom:</span>
+            <span className="zoom-label">{TEXTS.controls.zoom}</span>
             <span className="zoom-value">{zoom.toFixed(2)}</span>
             <button className="zoom-copy-btn" onClick={resetSizes} title="Reset all size sliders to defaults">
-              ↺ Reset sizes
+              {TEXTS.controls.resetSizes}
             </button>
           </div>
 

@@ -1,7 +1,10 @@
+import { CONFIG } from '../constants/config';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { Airport } from '../types';
 import { useAirportsQuery } from '../hooks/queries';
 import './AirportTransferPicker.css';
+import { UI_SYMBOLS } from '../constants/ui';
+import { TEXTS } from '../constants/text';
 
 interface AirportTransferPickerProps {
   currentAirport: Airport;
@@ -17,8 +20,8 @@ interface AirportTransferPickerProps {
 }
 
 const formatDist = (km: number) => {
-  if (km < 1000) return `${km} km`;
-  return `${(km / 1000).toFixed(1)}k km`;
+  if (km < CONFIG.KM_THRESHOLD) return `${km} ${CONFIG.UNIT_KM}`;
+  return `${(km / CONFIG.KM_THRESHOLD).toFixed(1)}${CONFIG.UNIT_K_KM}`;
 };
 
 const AirportTransferPicker = ({
@@ -49,8 +52,8 @@ const AirportTransferPicker = ({
       .filter(f => f.properties.code && f.properties.code !== currentAirport.code)
       .map(f => {
         const [fLng, fLat] = f.geometry.coordinates;
-        const dLat = (fLat - lat) * 111;
-        const dLng = (fLng - lng) * 111 * Math.cos(latRad);
+        const dLat = (fLat - lat) * CONFIG.KM_PER_DEGREE;
+        const dLng = (fLng - lng) * CONFIG.KM_PER_DEGREE * Math.cos(latRad);
         const distKm = Math.round(Math.sqrt(dLat * dLat + dLng * dLng));
         return {
           code: f.properties.code,
@@ -118,7 +121,7 @@ const AirportTransferPicker = ({
       if (!containerRef.current?.contains(e.target as Node)) {
         setIsOpen(false);
         setSearchText('');
-        setDisplayCount(30);
+        setDisplayCount(CONFIG.INITIAL_DISPLAY_COUNT);
         setCheckedCodes([]);
       }
     };
@@ -132,7 +135,7 @@ const AirportTransferPicker = ({
       if (e.key === 'Escape') {
         setIsOpen(false);
         setSearchText('');
-        setDisplayCount(30);
+        setDisplayCount(CONFIG.INITIAL_DISPLAY_COUNT);
         setCheckedCodes([]);
       }
     };
@@ -143,10 +146,10 @@ const AirportTransferPicker = ({
   // Toggle mode: open from display div
   const handleOpen = () => {
     setIsOpen(true);
-    setDisplayCount(30);
+    setDisplayCount(CONFIG.INITIAL_DISPLAY_COUNT);
     setSearchText('');
     setCheckedCodes([]);
-    setTimeout(() => inputRef.current?.focus(), 50);
+    setTimeout(() => inputRef.current?.focus(), CONFIG.FOCUS_DELAY_MS);
   };
 
   // Inline mode: open when input is clicked
@@ -154,7 +157,7 @@ const AirportTransferPicker = ({
     if (!isOpen) {
       setIsOpen(true);
       setCheckedCodes([]);
-      setDisplayCount(30);
+      setDisplayCount(CONFIG.INITIAL_DISPLAY_COUNT);
     }
   };
 
@@ -167,7 +170,7 @@ const AirportTransferPicker = ({
     }
     setIsOpen(false);
     setSearchText('');
-    setDisplayCount(30);
+    setDisplayCount(CONFIG.INITIAL_DISPLAY_COUNT);
     setCheckedCodes([]);
   };
 
@@ -181,7 +184,7 @@ const AirportTransferPicker = ({
 
   const handleListScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
-    if (el.scrollHeight - el.scrollTop - el.clientHeight < 100) {
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < CONFIG.SCROLL_LOAD_THRESHOLD) {
       setDisplayCount(prev => prev + 30);
     }
   };
@@ -201,11 +204,11 @@ const AirportTransferPicker = ({
             value={searchText}
             onChange={e => {
               setSearchText(e.target.value);
-              setDisplayCount(30);
+              setDisplayCount(CONFIG.INITIAL_DISPLAY_COUNT);
               if (!isOpen) setIsOpen(true);
             }}
             onClick={handleInputClick}
-            placeholder="Search airports to add..."
+            placeholder={TEXTS.transferPicker.searchAirports}
           />
           {isOpen && <span className="atp-counter">{checkedCodes.length}/{maxSelect}</span>}
         </div>
@@ -213,7 +216,7 @@ const AirportTransferPicker = ({
           <>
             <div className="atp-dropdown" onScroll={handleListScroll} onMouseLeave={() => onClearPreview?.()}>
               {displayedAirports.length === 0 ? (
-                <div className="atp-no-results">No airports found</div>
+                <div className="atp-no-results">{TEXTS.transferPicker.noAirports}</div>
               ) : (
                 displayedAirports.map(airport => {
                   const isPreChecked = preCheckedCodes.includes(airport.code);
@@ -250,7 +253,7 @@ const AirportTransferPicker = ({
             </div>
             {checkedCodes.length > 0 && (
               <button className="atp-confirm-btn" onClick={handleConfirm}>
-                Add {checkedCodes.length === 1 ? checkedCodes[0] : `${checkedCodes.length} airports`} to search
+                {checkedCodes.length === 1 ? `${checkedCodes[0]} ${TEXTS.transferPicker.toSearch}` : TEXTS.transferPicker.addAirports(checkedCodes.length)}
               </button>
             )}
           </>
@@ -271,7 +274,7 @@ const AirportTransferPicker = ({
               value={searchText}
               onChange={e => {
                 setSearchText(e.target.value);
-                setDisplayCount(30);
+                setDisplayCount(CONFIG.INITIAL_DISPLAY_COUNT);
               }}
               placeholder={displayName}
             />
@@ -279,7 +282,7 @@ const AirportTransferPicker = ({
           </div>
           <div className="atp-dropdown" onScroll={handleListScroll} onMouseLeave={() => onClearPreview?.()}>
             {displayedAirports.length === 0 ? (
-              <div className="atp-no-results">No airports found</div>
+              <div className="atp-no-results">{TEXTS.transferPicker.noAirports}</div>
             ) : (
               displayedAirports.map(airport => {
                 const checked = checkedCodes.includes(airport.code);
@@ -314,15 +317,15 @@ const AirportTransferPicker = ({
           </div>
           {checkedCodes.length > 0 && (
             <button className="atp-confirm-btn" onClick={handleConfirm}>
-              Add {checkedCodes.length === 1 ? checkedCodes[0] : `${checkedCodes.length} airports`} to search
+              {checkedCodes.length === 1 ? `${checkedCodes[0]} ${TEXTS.transferPicker.toSearch}` : TEXTS.transferPicker.addAirports(checkedCodes.length)}
             </button>
           )}
         </>
       ) : (
-        <div className="atp-display" onClick={handleOpen} title="Click to add airports to search">
+        <div className="atp-display" onClick={handleOpen} title={TEXTS.transferPicker.clickToAdd}>
           <span className="atp-icon"></span>
           <span className="atp-name">{displayName}</span>
-          <span className="atp-hint">▾</span>
+          <span className="atp-hint">{UI_SYMBOLS.DROPDOWN}</span>
         </div>
       )}
     </div>

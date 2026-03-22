@@ -1,6 +1,8 @@
+import { UI_SYMBOLS } from '../../constants/ui';
 import React, { useState, useCallback } from 'react';
 import type { Country, City, Airport } from '../../types';
 import { highlightText } from './searchUtils';
+import { TEXTS } from '../../constants/text';
 
 interface CountryCacheEntry {
   cities: City[];
@@ -85,9 +87,9 @@ const Phase1 = React.memo(({
             <button
               className="expand-button"
               onClick={(e) => handleToggleCity(city.code, city.name, e)}
-              title={isCityExpanded ? "Collapse" : "Expand to show airports"}
+              title={isCityExpanded ? TEXTS.search.collapse : TEXTS.search.expandToShowAirports}
             >
-              {isCityExpanded ? '▼' : '▶'}
+              {isCityExpanded ? UI_SYMBOLS.EXPAND_DOWN : UI_SYMBOLS.EXPAND_RIGHT}
             </button>
           )}
           <div
@@ -124,14 +126,14 @@ const Phase1 = React.memo(({
                 ))}
               </>
             ) : (
-              <div className="no-items">No airports available for {city.name}</div>
+              <div className="no-items">{TEXTS.search.noAirportsForCity(city.name)}</div>
             )}
           </div>
         )}
 
         {isCityExpanded && !cachedAirports && loadingExpand && (
           <div className="nested-list">
-            <div className="no-items">Loading airports for {city.name}...</div>
+            <div className="no-items">{TEXTS.search.loadingAirportsForCity(city.name)}</div>
           </div>
         )}
       </div>
@@ -143,9 +145,9 @@ const Phase1 = React.memo(({
       <button
         className="expand-button"
         onClick={handleToggleCountry}
-        title={isExpanded ? "Collapse" : "Expand to show cities"}
+        title={isExpanded ? TEXTS.search.collapse : TEXTS.search.expandToShowCities}
       >
-        {isExpanded ? '▼' : '▶'}
+        {isExpanded ? UI_SYMBOLS.EXPAND_DOWN : UI_SYMBOLS.EXPAND_RIGHT}
       </button>
 
       <div
@@ -168,12 +170,12 @@ const Phase1 = React.memo(({
 
           {!countryCache ? (
             loadingExpand ? (
-              <div className="no-items">Loading cities for {country.name}...</div>
+              <div className="no-items">{TEXTS.search.loadingCitiesForCountry(country.name)}</div>
             ) : (
-              <div className="no-items">Click expand to load cities for {country.name}</div>
+              <div className="no-items">{TEXTS.search.clickExpandCities(country.name)}</div>
             )
           ) : cachedCities.length === 0 ? (
-            <div className="no-items">No cities available</div>
+            <div className="no-items">{TEXTS.search.noCities}</div>
           ) : (
             <>
               <div className="debug-info" style={{ display: 'none' }}>
@@ -202,11 +204,9 @@ const Phase1 = React.memo(({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: '#666',
+                    color: 'var(--text-muted)',
                     fontSize: '12px'
-                  }}>
-                    Scroll for more cities
-                  </div>
+                  }}>{TEXTS.search.scrollMore}</div>
                 </div>
               )}
             </>

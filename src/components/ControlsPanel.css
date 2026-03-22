@@ -288,7 +288,7 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--text-inverse);
   transition: transform 0.2s;
   display: block;
 }
