@@ -1,12 +1,13 @@
+import { CONFIG } from '../constants/config';
 import apiClient from './client';
 import type { AirportFeatureProps, CityFeatureProps, RouteFeatureProps, CountryAirport } from '../types';
 import type { FeatureCollection, Point, LineString } from 'geojson';
 
 export const getAirportsGeoJSON = (): Promise<FeatureCollection<Point, AirportFeatureProps>> =>
-  apiClient.get('/airports/geojson', { params: { flightable_only: true } }).then(r => r.data);
+  apiClient.get('/airports/geojson', { params: { flightable_only: CONFIG.FLIGHTABLE_ONLY } }).then(r => r.data);
 
 export const getCitiesGeoJSON = (): Promise<FeatureCollection<Point, CityFeatureProps>> =>
-  apiClient.get('/cities/geojson', { params: { has_airport_only: true } }).then(r => r.data);
+  apiClient.get('/cities/geojson', { params: { has_airport_only: CONFIG.HAS_AIRPORT_ONLY } }).then(r => r.data);
 
 export const getRoutesGeoJSON = (): Promise<FeatureCollection<LineString, RouteFeatureProps>> =>
   apiClient.get('/routes/geojson').then(r => r.data);

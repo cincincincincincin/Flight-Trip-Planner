@@ -21,9 +21,9 @@
   position: relative;
   overflow: hidden;
   background:
-    url('https://images.pexels.com/photos/1169754/pexels-photo-1169754.jpeg')
+    var(--map-bg-image)
       center center / cover no-repeat,
-    #c5d9e3;
+    var(--bg-map-fallback, #c5d9e3);
 }
 
 /* ── Floating overlay bar ────────────────────────────────────── */
@@ -85,13 +85,13 @@
 
 .sign-in-btn {
   background: var(--accent);
-  color: #fff;
+  color: var(--text-inverse);
   border-color: transparent;
 }
 
 .sign-in-btn:hover {
-  background: #1560e0;
-  color: #fff;
+  background: var(--accent-dark);
+  color: var(--text-inverse);
   border-color: transparent;
 }
 
