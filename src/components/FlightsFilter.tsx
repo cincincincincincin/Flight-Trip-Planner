@@ -1,5 +1,5 @@
 import { CONFIG } from '../constants/config';
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import type { Flight } from '../types';
 import { useFilterStore } from '../stores/filterStore';
 import { useAirportsQuery } from '../hooks/queries';
@@ -35,6 +35,19 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
   const [destQuery, setDestQuery] = useState('');
   // Change 1: Track input focus state
   const [inputFocused, setInputFocused] = useState(false);
+  const chipsRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = chipsRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY === 0) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
   const [expandedCountriesP1, setExpandedCountriesP1] = useState<Set<string>>(new Set());
   const [expandedCitiesP1, setExpandedCitiesP1] = useState<Set<string>>(new Set());
   const [expandedCountriesP2, setExpandedCountriesP2] = useState<Set<string>>(new Set());
@@ -123,15 +136,19 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
     return Array.from(countriesMap.values()).sort((a, b) => a.code.localeCompare(b.code));
   }, [destScopeFlights, airportCityMap, airportCountryMap, airportNameMap]);
 
-  // Airlines from flights scoped to active destination filter
+  // Airlines from flights scoped to active destination filter — grouped by name
   const airlines = useMemo(() => {
-    const m = new Map<string, { code: string; name: string }>();
+    const m = new Map<string, { codes: string[]; name: string }>();
     airlineScopeFlights.forEach(f => {
-      if (f.airline_code && !m.has(f.airline_code)) {
-        m.set(f.airline_code, { code: f.airline_code, name: f.airline_name || f.airline_code });
-      }
+      if (!f.airline_code) return;
+      const name = f.airline_name || f.airline_code;
+      if (!m.has(name)) m.set(name, { codes: [], name });
+      const entry = m.get(name)!;
+      if (!entry.codes.includes(f.airline_code)) entry.codes.push(f.airline_code);
     });
-    return Array.from(m.values()).sort((a, b) => a.name.localeCompare(b.name) || a.code.localeCompare(b.code));
+    return Array.from(m.values())
+      .map(a => ({ ...a, codes: a.codes.sort() }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [airlineScopeFlights]);
 
   const q = destQuery.toLowerCase().trim();
@@ -295,8 +312,13 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
     }
   }, [destinationFilter, destData, isEffectivelySelected, setDestinationFilter]);
 
-  const toggleAirline = useCallback((code: string) => {
-    setAirlineFilter(airlineFilter.includes(code) ? airlineFilter.filter(c => c !== code) : [...airlineFilter, code]);
+  const toggleAirline = useCallback((codes: string[]) => {
+    const allSelected = codes.every(c => airlineFilter.includes(c));
+    if (allSelected) {
+      setAirlineFilter(airlineFilter.filter(c => !codes.includes(c)));
+    } else {
+      setAirlineFilter([...airlineFilter, ...codes.filter(c => !airlineFilter.includes(c))]);
+    }
   }, [airlineFilter, setAirlineFilter]);
 
   // Change 5: renderAirport, renderCity, renderCountry use selectItem and isEffectivelySelected
@@ -411,7 +433,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
         <div className="ff-body">
           {/* Selected chips */}
           {activeFilterCount > 0 && (
-            <div className="ff-chips">
+            <div className="ff-chips" ref={chipsRef}>
               {/* Change 6: Show full names in chips */}
               {destinationFilter.countries.map(code => {
                 const country = destData.find(c => c.code === code);
@@ -426,10 +448,9 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
                 const ap = destData.flatMap(c => c.cities).flatMap(ci => ci.airports).find(a => a.code === code);
                 return <span key={`a-${code}`} className="ff-chip">{apName} ({code}) <button onClick={() => selectItem('airport', code, ap?.cityCode, ap?.countryCode)}>{UI_SYMBOLS.CLOSE}</button></span>;
               })}
-              {airlineFilter.map(code => {
-                const a = airlines.find(al => al.code === code);
-                return <span key={`al-${code}`} className="ff-chip">{a?.name || code} <button onClick={() => toggleAirline(code)}>{UI_SYMBOLS.CLOSE}</button></span>;
-              })}
+              {airlines.filter(a => a.codes.some(c => airlineFilter.includes(c))).map(a => (
+                <span key={`al-${a.name}`} className="ff-chip">{a.name} <button onClick={() => toggleAirline(a.codes)}>{UI_SYMBOLS.CLOSE}</button></span>
+              ))}
             </div>
           )}
 
@@ -468,9 +489,9 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
               <div className="ff-section-title">{t.panel.airlines}</div>
               <div className="ff-airlines">
                 {airlines.map(a => (
-                  <label key={a.code} className="ff-airline-item">
-                    <input type="checkbox" checked={airlineFilter.includes(a.code)} onChange={() => toggleAirline(a.code)} />
-                    <span>{a.name} <span className="ff-code">({a.code})</span></span>
+                  <label key={a.name} className="ff-airline-item">
+                    <input type="checkbox" checked={a.codes.some(c => airlineFilter.includes(c))} onChange={() => toggleAirline(a.codes)} />
+                    <span>{a.name} <span className="ff-code">({a.codes.join(', ')})</span></span>
                   </label>
                 ))}
               </div>

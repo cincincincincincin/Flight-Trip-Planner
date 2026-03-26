@@ -340,7 +340,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
     />
   ), [phase3Cache, handleItemClick, query, searchMode]);
 
-  const renderPhaseSection = useCallback((phaseNumber: 1 | 2 | 3, title: string, icon: string, renderFunction: (item: Country) => React.ReactNode) => {
+  const renderPhaseSection = useCallback((phaseNumber: 1 | 2 | 3, renderFunction: (item: Country) => React.ReactNode) => {
     const items = phaseData[phaseNumber];
     const showSection = items.length > 0 || (phaseNumber === currentPhase && hasMore[phaseNumber]);
     if (!showSection) return null;
@@ -349,15 +349,6 @@ const Search = ({ onSelectItem }: SearchProps) => {
 
     return (
       <div className="search-section" data-phase={phaseNumber}>
-        <div className="section-header">
-          <h4>
-            {icon} {title}{showConsoleLogs && ` (${items.length})`}
-            {showConsoleLogs && searchMode === 'contains' && t.search.containsSearch}
-            {showConsoleLogs && !isCurrentPhase && items.length > 0 && t.search.loaded}
-          </h4>
-          {loading.search && isCurrentPhase && hasMore[phaseNumber] &&
-            <span className="loading-indicator">{t.search.loading}</span>}
-        </div>
         <div className="section-content">
           {items.length > 0 ? (
             <>
@@ -469,9 +460,6 @@ const Search = ({ onSelectItem }: SearchProps) => {
                 <>
                   {query.trim().length === 3 && exactAirport && (
                     <div className="search-section">
-                      <div className="section-header">
-                        <h4>{t.search.airportCode}</h4>
-                      </div>
                       <div className="section-content">
                         <div
                           className="search-item airport-item"
@@ -486,9 +474,9 @@ const Search = ({ onSelectItem }: SearchProps) => {
                       </div>
                     </div>
                   )}
-                  {renderPhaseSection(1, t.search.countries, "", renderPhase1Country)}
-                  {renderPhaseSection(2, t.search.cities, "", renderPhase2Country)}
-                  {renderPhaseSection(3, t.search.airports, "", renderPhase3Country)}
+                  {renderPhaseSection(1, renderPhase1Country)}
+                  {renderPhaseSection(2, renderPhase2Country)}
+                  {renderPhaseSection(3, renderPhase3Country)}
 
                   {showConsoleLogs && searchMode === 'contains' && hasResults && (
                     <div className="debug-info" style={{
