@@ -3,7 +3,7 @@ import type { Flight } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useFlightOffersQuery, useAirportsQuery, useAirportInfoQuery } from '../hooks/queries';
 import './FlightCard.css';
-import { TEXTS } from '../constants/text';
+import { useTexts } from '../hooks/useTexts';
 import { CONFIG } from '../constants/config';
 import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
 import { UI_SYMBOLS } from '../constants/ui';
@@ -27,6 +27,7 @@ interface FlightCardProps {
 }
 
 const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHighlight, onAddToTrip, hideAddToTrip = false, displayTimezone, airportTimezone }, ref) => {
+  const t = useTexts();
   const { currency, travelDate } = useSettingsStore();
   const [showPrices, setShowPrices] = useState(false);
   const { data: airportsData } = useAirportsQuery();
@@ -37,6 +38,17 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
     airportsData.features.forEach(f => {
       if (f.properties.code && f.geometry?.coordinates) {
         map[f.properties.code] = f.geometry.coordinates as [number, number];
+      }
+    });
+    return map;
+  }, [airportsData]);
+
+  const airportCityNameMap = useMemo<Record<string, string>>(() => {
+    if (!airportsData) return {};
+    const map: Record<string, string> = {};
+    airportsData.features.forEach(f => {
+      if (f.properties.code && f.properties.city_name) {
+        map[f.properties.code] = f.properties.city_name;
       }
     });
     return map;
@@ -79,12 +91,12 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
   }, [offersResponse, flight.scheduled_departure_utc]);
 
   const formatTime = (dateString: string, tz?: string) => {
-    if (!dateString) return TEXTS.card.na;
+    if (!dateString) return t.card.na;
     return new Date(dateString).toLocaleTimeString(FORMAT_LOCALES.GB, { ...FORMAT_OPTIONS.TIME_24H, ...(tz ? { timeZone: tz } : {}) });
   };
 
   const formatDate = (dateString: string, tz?: string) => {
-    if (!dateString) return TEXTS.card.na;
+    if (!dateString) return t.card.na;
     return new Date(dateString).toLocaleDateString(FORMAT_LOCALES.GB, { ...FORMAT_OPTIONS.DATE_SHORT, ...(tz ? { timeZone: tz } : {}) });
   };
 
@@ -145,7 +157,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
       return formatTime(flight.scheduled_departure_local);
     if (flight.scheduled_departure_utc && displayTimezone)
       return formatTime(flight.scheduled_departure_utc, displayTimezone);
-    return TEXTS.card.na;
+    return t.card.na;
   })();
 
   // Arrival time: always show in the destination airport's own local time.
@@ -249,7 +261,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
       ? new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
           .toLocaleDateString(FORMAT_LOCALES.US, FORMAT_OPTIONS.DATE_LONG_YEAR)
       : '';
-    const query = `${airlineName} ${origin} ${dest} ${date}${TEXTS.card.oneWay}`;
+    const query = `${airlineName} ${origin} ${dest} ${date}${t.card.oneWay}`;
     return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
   };
 
@@ -274,21 +286,21 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
               </span>
             )}
           </div>
-          <div className="airport-name">{flight.origin_city_name || TEXTS.card.origin}</div>
+          <div className="airport-name">{airportCityNameMap[flight.origin_airport_code] || flight.origin_city_name || t.card.origin}</div>
         </div>
 
         <div className="flight-path"></div>
 
         <div className="airport destination">
           <div className="airport-code">{flight.destination_airport_code}</div>
-          <div className="airport-name">{flight.destination_city_name || TEXTS.card.destination}</div>
+          <div className="airport-name">{airportCityNameMap[flight.destination_airport_code] || flight.destination_city_name || t.card.destination}</div>
         </div>
       </div>
 
       <div className="flight-times">
         <div className="times-row">
           <div className="time departure">
-            <div className="time-label">{TEXTS.card.departure}</div>
+            <div className="time-label">{t.card.departure}</div>
             <div className="time-value">{depTimeStr}</div>
             <div className="date-value">{depDateStr}</div>
           </div>
@@ -298,14 +310,14 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
               <span className="arr-estimated-time">
                 {estimatedDuration}
                 <span className="arr-estimated-tooltip">
-                  {TEXTS.card.estimatedTooltip}
+                  {t.card.estimatedTooltip}
                 </span>
               </span>
             </div>
           )}
           {arrTimeStr && (
             <div className="time arrival">
-              <div className="time-label">{TEXTS.card.arrival}</div>
+              <div className="time-label">{t.card.arrival}</div>
               <div className="time-value">
                 {isArrivalEstimated ? (
                   <>
@@ -318,7 +330,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
                       <span className="arr-estimated-time">
                         {UI_SYMBOLS.ESTIMATED}{arrTimeStr}
                         <span className="arr-estimated-tooltip">
-                          {TEXTS.card.estimatedTooltip}
+                          {t.card.estimatedTooltip}
                         </span>
                       </span>
                     </span>
@@ -344,15 +356,15 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
 
       {(flight.departure_terminal || flight.departure_gate) && (
         <div className="flight-details">
-          {flight.departure_terminal && <span className="detail">{TEXTS.card.terminal} {flight.departure_terminal}</span>}
-          {flight.departure_gate && <span className="detail">{TEXTS.card.gate} {flight.departure_gate}</span>}
+          {flight.departure_terminal && <span className="detail">{t.card.terminal} {flight.departure_terminal}</span>}
+          {flight.departure_gate && <span className="detail">{t.card.gate} {flight.departure_gate}</span>}
         </div>
       )}
 
       <div className="flight-actions">
         {!hideAddToTrip && (
           <button className="add-to-trip-button" onClick={() => onAddToTrip?.(flight)}>
-            {TEXTS.card.addTrip}
+            {t.card.addTrip}
           </button>
         )}
         <div className="flight-actions-row">
@@ -361,22 +373,22 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
             target="_blank"
             rel="noopener noreferrer"
             className="search-online-button"
-          >{TEXTS.card.searchOnline}</a>
+          >{t.card.searchOnline}</a>
           <button
             className={`price-button ${showPrices ? 'active' : ''}`}
             onClick={() => setShowPrices(prev => !prev)}
             disabled={priceLoading}
           >
-            {priceLoading ? TEXTS.card.loading : showPrices ? TEXTS.card.hidePrices : TEXTS.card.showPrices}
+            {priceLoading ? t.card.loading : showPrices ? t.card.hidePrices : t.card.showPrices}
           </button>
         </div>
       </div>
 
       {showPrices && (
         <div className="price-section">
-          {priceLoading && <div className="price-loading">{TEXTS.card.loadingPrices}</div>}
-          {priceError && <div className="price-error">{TEXTS.card.failedPrices}</div>}
-          {noPricesAvailable && <div className="price-error">{TEXTS.card.noPrices}</div>}
+          {priceLoading && <div className="price-loading">{t.card.loadingPrices}</div>}
+          {priceError && <div className="price-error">{t.card.failedPrices}</div>}
+          {noPricesAvailable && <div className="price-error">{t.card.noPrices}</div>}
           {priceData && (
             <div className="price-info">
               <div className="price-amount">
@@ -386,10 +398,10 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
               {priceData.duration_to && (
                 <>
                   <div className="price-detail">
-                    {TEXTS.card.flightTime} {Math.floor(priceData.duration_to / 60)}h {priceData.duration_to % 60}m
+                    {t.card.flightTime} {Math.floor(priceData.duration_to / 60)}h {priceData.duration_to % 60}m
                   </div>
                   <div className="price-detail">
-                    {TEXTS.card.estArrival} {(() => {
+                    {t.card.estArrival} {(() => {
                       const depTime = new Date(flight.scheduled_departure_utc ?? '');
                       const arrTime = new Date(depTime.getTime() + priceData.duration_to * 60000);
                       return arrTime.toLocaleTimeString(FORMAT_LOCALES.GB, FORMAT_OPTIONS.TIME_24H);
@@ -403,10 +415,11 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
                   target="_blank"
                   rel="noopener noreferrer"
                   className="book-button"
-                >{TEXTS.card.bookTicket}</a>
+                >{t.card.bookTicket}</a>
               )}
             </div>
           )}
+          <div className="price-attribution">{t.card.ticketDataBy} <a href="https://www.aviasales.com" target="_blank" rel="noopener noreferrer" className="attribution-link">Aviasales</a></div>
         </div>
       )}
     </div>

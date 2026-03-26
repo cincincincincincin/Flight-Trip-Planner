@@ -9,7 +9,7 @@ import { useFilterStore } from '../stores/filterStore';
 import { useAirportsQuery } from '../hooks/queries';
 import type { Flight } from '../types';
 import './FlightsList.css';
-import { TEXTS } from '../constants/text';
+import { useTexts } from '../hooks/useTexts';
 import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
 import { CONFIG } from '../constants/config';
 
@@ -34,6 +34,7 @@ interface RawFlightsResponse {
 
 const FlightsList = forwardRef<unknown, FlightsListProps>(
   ({ airportCodes, timezone, initialFromDatetime, airportTimezones, originalAirportCode, tripArrivalTimeUTC, onAddToTrip }, ref) => {
+    const t = useTexts();
     // ── Stores ────────────────────────────────────────────────────────────────
     const { travelDate, minTransferHours, minManualTransferHours, showRefreshButton } = useSettingsStore();
     const { setHighlightedAirports, setHighlightedCities, setDisplayedFlights, appendFlights } = useSelectionStore();
@@ -563,13 +564,13 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
 
     // ── Formatters ────────────────────────────────────────────────────────────
     const formatLastFetched = (timestamp: string | null) => {
-      if (!timestamp) return TEXTS.flights.never;
+      if (!timestamp) return t.flights.never;
       const date = new Date(timestamp);
       const diffMins = Math.floor((Date.now() - date.getTime()) / 60000);
-      if (diffMins < 1) return TEXTS.flights.justNow;
-      if (diffMins < 60) return TEXTS.flights.minutesAgo(diffMins);
+      if (diffMins < 1) return t.flights.justNow;
+      if (diffMins < 60) return t.flights.minutesAgo(diffMins);
       const diffHours = Math.floor(diffMins / 60);
-      if (diffHours < 24) return TEXTS.flights.hoursAgo(diffHours);
+      if (diffHours < 24) return t.flights.hoursAgo(diffHours);
       return date.toLocaleDateString(FORMAT_LOCALES.GB, {
         day: '2-digit',
         month: 'short',
@@ -588,14 +589,14 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
             <div className="loading-more">
               <div className="spinner"></div>
               {loadingCodes.map(code => (
-                <div key={code}>{TEXTS.flights.loadingFrom(code)}</div>
+                <div key={code}>{t.flights.loadingFrom(code)}</div>
               ))}
             </div>
           )}
           {anyLoading && !multiAirport && (
             <div className="loading-more">
               <div className="spinner"></div>
-              <div>{TEXTS.panel.loadingFlights}</div>
+              <div>{t.panel.loadingFlights}</div>
             </div>
           )}
         </>
@@ -609,7 +610,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
           <div className="flights-error">
             <div className="error-icon"></div>
             <div className="error-message">{error}</div>
-            <button onClick={handleRefresh} className="retry-button">{TEXTS.buttons.tryAgain}</button>
+            <button onClick={handleRefresh} className="retry-button">{t.buttons.tryAgain}</button>
           </div>
         </div>
       );
@@ -620,13 +621,16 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       <div className="flights-list">
         <div className="flights-header">
           <div className="flights-info">
-            <h4>{TEXTS.panel.departingFlights}</h4>
+            <div className="flights-title-row">
+              <h4>{t.panel.departingFlights}</h4>
+              <span className="data-attribution">{t.flights.scheduleDataBy} <a href="https://www.aerodatabox.com" target="_blank" rel="noopener noreferrer" className="attribution-link">AeroDataBox</a></span>
+            </div>
             {lastFetched && (
-              <div className="last-fetched">{TEXTS.flights.lastUpdated} {formatLastFetched(lastFetched)}</div>
+              <div className="last-fetched">{t.flights.lastUpdated} {formatLastFetched(lastFetched)}</div>
             )}
           </div>
           {showRefreshButton && (
-            <button onClick={handleRefresh} disabled={anyLoading} className="refresh-button">{TEXTS.buttons.refresh}</button>
+            <button onClick={handleRefresh} disabled={anyLoading} className="refresh-button">{t.buttons.refresh}</button>
           )}
         </div>
 
@@ -635,13 +639,13 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
             <div className="no-flights-icon"></div>
             <div className="no-flights-message">
               {isFilterActive && todayFlights.length > 0
-                ? TEXTS.flights.noFlightsMatchFilters
-                : TEXTS.flights.noFlightsForDate(travelDate)}
+                ? t.flights.noFlightsMatchFilters
+                : t.flights.noFlightsForDate(travelDate)}
             </div>
             <div className="no-flights-hint">
               {isFilterActive && todayFlights.length > 0
-                ? TEXTS.flights.tryAdjustFilters
-                : TEXTS.flights.tryDifferentDate}
+                ? t.flights.tryAdjustFilters
+                : t.flights.tryDifferentDate}
             </div>
           </div>
         ) : (

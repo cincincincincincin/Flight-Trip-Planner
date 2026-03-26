@@ -5,9 +5,10 @@ import { saveTrip, updateTrip } from '../../api/trips';
 import { useTripStore } from '../../stores/tripStore';
 import TripNameModal from '../TripNameModal';
 import './SaveTripButton.css';
-import { TEXTS } from '../../constants/text';
+import { useTexts } from '../../hooks/useTexts';
 
 const SaveTripButton: React.FC = () => {
+  const t = useTexts();
   const { tripState, tripRoutes, savedTripId, savedTripStateJSON, setSavedTrip, editMode, isLoadedTrip } = useTripStore();
   const qc = useQueryClient();
   const [showNameModal, setShowNameModal] = useState(false);
@@ -61,7 +62,7 @@ const SaveTripButton: React.FC = () => {
 
   const handleNameConfirm = (name: string) => {
     setShowNameModal(false);
-    const autoName = `${TEXTS.auth.autoNamePrefix}${new Date().toLocaleDateString()}`;
+    const autoName = `${t.auth.autoNamePrefix}${new Date().toLocaleDateString()}`;
     saveMutation.mutate({ name: name || autoName, stateJSON: currentStateJSON! });
   };
 
@@ -71,16 +72,16 @@ const SaveTripButton: React.FC = () => {
         className="save-trip-btn"
         onClick={handleClick}
         disabled={isPending}
-        title={isUpdate ? TEXTS.auth.updateTripTitle : TEXTS.auth.saveTripTitle}
+        title={isUpdate ? t.auth.updateTripTitle : t.auth.saveTripTitle}
       >
-        {isPending ? TEXTS.auth.saving : isUpdate ? TEXTS.auth.updateTrip : TEXTS.auth.saveTrip}
+        {isPending ? t.auth.saving : isUpdate ? t.auth.updateTrip : t.auth.saveTrip}
       </button>
 
       {showNameModal && createPortal(
         <TripNameModal
-          initialName={`${TEXTS.auth.autoNamePrefix}${new Date().toLocaleDateString()}`}
-          title={TEXTS.auth.nameYourTrip}
-          confirmLabel={TEXTS.buttons.save}
+          initialName={`${t.auth.autoNamePrefix}${new Date().toLocaleDateString()}`}
+          title={t.auth.nameYourTrip}
+          confirmLabel={t.buttons.save}
           onConfirm={handleNameConfirm}
           onCancel={() => setShowNameModal(false)}
         />,

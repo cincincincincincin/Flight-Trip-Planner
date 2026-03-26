@@ -4,7 +4,7 @@ import type { Airport } from '../types';
 import { useAirportsQuery } from '../hooks/queries';
 import './AirportTransferPicker.css';
 import { UI_SYMBOLS } from '../constants/ui';
-import { TEXTS } from '../constants/text';
+import { useTexts } from '../hooks/useTexts';
 
 interface AirportTransferPickerProps {
   currentAirport: Airport;
@@ -34,6 +34,7 @@ const AirportTransferPicker = ({
   inline = false,
   preCheckedCodes = [],
 }: AirportTransferPickerProps) => {
+  const t = useTexts();
   const { data: airportsData } = useAirportsQuery();
   const [isOpen, setIsOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
@@ -208,7 +209,7 @@ const AirportTransferPicker = ({
               if (!isOpen) setIsOpen(true);
             }}
             onClick={handleInputClick}
-            placeholder={TEXTS.transferPicker.searchAirports}
+            placeholder={t.transferPicker.searchAirports}
           />
           {isOpen && <span className="atp-counter">{checkedCodes.length}/{maxSelect}</span>}
         </div>
@@ -216,7 +217,7 @@ const AirportTransferPicker = ({
           <>
             <div className="atp-dropdown" onScroll={handleListScroll} onMouseLeave={() => onClearPreview?.()}>
               {displayedAirports.length === 0 ? (
-                <div className="atp-no-results">{TEXTS.transferPicker.noAirports}</div>
+                <div className="atp-no-results">{t.transferPicker.noAirports}</div>
               ) : (
                 displayedAirports.map(airport => {
                   const isPreChecked = preCheckedCodes.includes(airport.code);
@@ -253,7 +254,7 @@ const AirportTransferPicker = ({
             </div>
             {checkedCodes.length > 0 && (
               <button className="atp-confirm-btn" onClick={handleConfirm}>
-                {checkedCodes.length === 1 ? `${checkedCodes[0]} ${TEXTS.transferPicker.toSearch}` : TEXTS.transferPicker.addAirports(checkedCodes.length)}
+                {checkedCodes.length === 1 ? `${checkedCodes[0]} ${t.transferPicker.toSearch}` : t.transferPicker.addAirports(checkedCodes.length)}
               </button>
             )}
           </>
@@ -282,7 +283,7 @@ const AirportTransferPicker = ({
           </div>
           <div className="atp-dropdown" onScroll={handleListScroll} onMouseLeave={() => onClearPreview?.()}>
             {displayedAirports.length === 0 ? (
-              <div className="atp-no-results">{TEXTS.transferPicker.noAirports}</div>
+              <div className="atp-no-results">{t.transferPicker.noAirports}</div>
             ) : (
               displayedAirports.map(airport => {
                 const checked = checkedCodes.includes(airport.code);
@@ -317,12 +318,12 @@ const AirportTransferPicker = ({
           </div>
           {checkedCodes.length > 0 && (
             <button className="atp-confirm-btn" onClick={handleConfirm}>
-              {checkedCodes.length === 1 ? `${checkedCodes[0]} ${TEXTS.transferPicker.toSearch}` : TEXTS.transferPicker.addAirports(checkedCodes.length)}
+              {checkedCodes.length === 1 ? `${checkedCodes[0]} ${t.transferPicker.toSearch}` : t.transferPicker.addAirports(checkedCodes.length)}
             </button>
           )}
         </>
       ) : (
-        <div className="atp-display" onClick={handleOpen} title={TEXTS.transferPicker.clickToAdd}>
+        <div className="atp-display" onClick={handleOpen} title={t.transferPicker.clickToAdd}>
           <span className="atp-icon"></span>
           <span className="atp-name">{displayName}</span>
           <span className="atp-hint">{UI_SYMBOLS.DROPDOWN}</span>

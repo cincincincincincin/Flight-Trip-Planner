@@ -1,47 +1,60 @@
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { MAP_STYLES } from '../constants/mapStyles';
 import { CONFIG } from '../constants/config';
-import { create } from 'zustand';
 import type { Viewport } from '../types';
 
-interface MapState {
+export interface MapState {
   showAirports: boolean;
-  showCities: boolean;
-  showRoutes: boolean;
+  // showCities: boolean;
+  // showRoutes: boolean;
   mapStyle: string;
   globeMode: boolean;
   viewport: Viewport;
   controlsPanelOpen: boolean;
-  viewMode: 'airports' | 'cities';
+  // viewMode: 'airports' | 'cities';
   flyToZoom: number | null;
   setShowAirports: (v: boolean) => void;
-  setShowCities: (v: boolean) => void;
-  setShowRoutes: (v: boolean) => void;
+  // setShowCities: (v: boolean) => void;
+  // setShowRoutes: (v: boolean) => void;
   setMapStyle: (v: string) => void;
   setGlobeMode: (v: boolean) => void;
   setViewport: (v: Viewport) => void;
   setControlsPanelOpen: (v: boolean) => void;
-  setViewMode: (v: 'airports' | 'cities') => void;
+  // setViewMode: (v: 'airports' | 'cities') => void;
   setFlyToZoom: (zoom: number | null) => void;
 }
 
-export const useMapStore = create<MapState>(set => ({
-  showAirports: true,
-  showCities: false,
-  showRoutes: false,
-  mapStyle: MAP_STYLES.LIGHT,
-  globeMode: false,
-  viewport: { center: CONFIG.DEFAULT_MAP_CENTER, zoom: CONFIG.DEFAULT_MAP_ZOOM, pitch: 0, bearing: 0 },
-  controlsPanelOpen: false,
-  viewMode: 'airports',
-  flyToZoom: null,
+export const useMapStore = create<MapState>()(
+  persist(
+    (set) => ({
+      showAirports: true,
+      // showCities: false,
+      // showRoutes: false,
+      mapStyle: MAP_STYLES.LIGHT,
+      globeMode: false,
+      viewport: { center: CONFIG.DEFAULT_MAP_CENTER, zoom: CONFIG.DEFAULT_MAP_ZOOM, pitch: 0, bearing: 0 },
+      controlsPanelOpen: false,
+      // viewMode: 'airports',
+      flyToZoom: null,
 
-  setShowAirports: v => set({ showAirports: v }),
-  setShowCities: v => set({ showCities: v }),
-  setShowRoutes: v => set({ showRoutes: v }),
-  setMapStyle: v => set({ mapStyle: v }),
-  setGlobeMode: v => set({ globeMode: v }),
-  setViewport: v => set({ viewport: v }),
-  setControlsPanelOpen: v => set({ controlsPanelOpen: v }),
-  setViewMode: v => set({ viewMode: v }),
-  setFlyToZoom: zoom => set({ flyToZoom: zoom }),
-}));
+      setShowAirports: v => set({ showAirports: v }),
+      // setShowCities: v => set({ showCities: v }),
+      // setShowRoutes: v => set({ showRoutes: v }),
+      setMapStyle: v => set({ mapStyle: v }),
+      setGlobeMode: v => set({ globeMode: v }),
+      setViewport: v => set({ viewport: v }),
+      setControlsPanelOpen: v => set({ controlsPanelOpen: v }),
+      // setViewMode: v => set({ viewMode: v }),
+      setFlyToZoom: zoom => set({ flyToZoom: zoom }),
+    }),
+    {
+      name: 'ftp-map',
+      // Zapisujemy tylko styl mapy i tryb globu — viewport i stan UI pomijamy
+      partialize: (state) => ({
+        mapStyle: state.mapStyle,
+        globeMode: state.globeMode,
+      }),
+    }
+  )
+);

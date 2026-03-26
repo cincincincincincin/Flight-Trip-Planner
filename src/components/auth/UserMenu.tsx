@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import './UserMenu.css';
-import { TEXTS } from '../../constants/text';
+import { useTexts } from '../../hooks/useTexts';
 import { UI_SYMBOLS } from '../../constants/ui';
 
 interface UserMenuProps {
@@ -9,6 +9,7 @@ interface UserMenuProps {
 }
 
 const UserMenu: React.FC<UserMenuProps> = ({ onOpenSavedTrips }) => {
+  const t = useTexts();
   const { user, signOut } = useAuthStore();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -24,7 +25,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ onOpenSavedTrips }) => {
 
   if (!user) return null;
 
-  const label = user.email?.split('@')[0] ?? TEXTS.common.userFallback;
+  const label = user.email?.split('@')[0] ?? t.common.userFallback;
 
   return (
     <div className="user-menu" ref={ref}>
@@ -33,8 +34,8 @@ const UserMenu: React.FC<UserMenuProps> = ({ onOpenSavedTrips }) => {
       </button>
       {open && (
         <div className="user-menu__dropdown">
-          <button onClick={() => { onOpenSavedTrips(); setOpen(false); }}>{TEXTS.savedTrips.title}</button>
-          <button onClick={() => { signOut(); setOpen(false); }}>{TEXTS.buttons.signOut}</button>
+          <button onClick={() => { onOpenSavedTrips(); setOpen(false); }}>{t.savedTrips.title}</button>
+          <button onClick={() => { signOut(); setOpen(false); }}>{t.buttons.signOut}</button>
         </div>
       )}
     </div>

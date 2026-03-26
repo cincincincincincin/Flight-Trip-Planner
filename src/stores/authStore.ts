@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
+import { loadPreferencesOnLogin, clearPreferencesOnLogout } from '../utils/preferencesSync';
 
 interface AuthState {
   session: Session | null;
@@ -58,5 +59,11 @@ supabase.auth.onAuthStateChange((event, session) => {
   // Clean up the URL hash after implicit OAuth redirect
   if (event === 'SIGNED_IN' && window.location.hash.includes('access_token')) {
     window.history.replaceState({}, '', window.location.pathname);
+  }
+  if (event === 'SIGNED_IN') {
+    loadPreferencesOnLogin();
+  }
+  if (event === 'SIGNED_OUT') {
+    clearPreferencesOnLogout();
   }
 });

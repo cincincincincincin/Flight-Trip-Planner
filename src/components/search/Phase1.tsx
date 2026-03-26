@@ -2,7 +2,9 @@ import { UI_SYMBOLS } from '../../constants/ui';
 import React, { useState, useCallback } from 'react';
 import type { Country, City, Airport } from '../../types';
 import { highlightText } from './searchUtils';
-import { TEXTS } from '../../constants/text';
+import { useTexts } from '../../hooks/useTexts';
+import { getLocalizedName } from '../../utils/i18n';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 interface CountryCacheEntry {
   cities: City[];
@@ -38,6 +40,8 @@ const Phase1 = React.memo(({
   query,
   searchMode
 }: Phase1Props) => {
+  const t = useTexts();
+  const language = useSettingsStore(s => s.language);
   const [isExpanded, setIsExpanded] = useState(false);
   const [expandedCities, setExpandedCities] = useState(new Set<string>());
 
@@ -81,13 +85,13 @@ const Phase1 = React.memo(({
     const cachedAirports = citiesCache[city.code]?.airports;
 
     return (
-      <div key={`phase1-city-${city.code}`} className="city-item-wrapper">
-        <div className="search-item city-item">
-          {(city.has_flightable_airport || cachedAirports) && (
+      <div key={`phase1-city-${city.code}`} className="city-item-wrapper" data-city-code={city.code}>
+        <div className={`search-item city-item${isCityExpanded ? ' city-item--expanded' : ''}`}>
+          {(
             <button
               className="expand-button"
               onClick={(e) => handleToggleCity(city.code, city.name, e)}
-              title={isCityExpanded ? TEXTS.search.collapse : TEXTS.search.expandToShowAirports}
+              title={isCityExpanded ? t.search.collapse : t.search.expandToShowAirports}
             >
               {isCityExpanded ? UI_SYMBOLS.EXPAND_DOWN : UI_SYMBOLS.EXPAND_RIGHT}
             </button>
@@ -96,19 +100,14 @@ const Phase1 = React.memo(({
             className="item-main"
             onClick={() => handleItemClick(city)}
           >
-            <span className="item-name">{city.name}</span>
-            {city.has_flightable_airport && <span className="item-badge"></span>}
+            <span className="item-name">{getLocalizedName(city, language)}</span>
+            <span className="item-badge"></span>
           </div>
           <span className="item-code">({city.code})</span>
         </div>
 
         {isCityExpanded && cachedAirports && (
           <div className="nested-list">
-            <div
-              className="visibility-marker"
-              data-city-code={city.code}
-              style={{ height: '1px', width: '1px', position: 'absolute', top: '0', left: '0', opacity: '0' }}
-            />
             {cachedAirports.length > 0 ? (
               <>
                 {cachedAirports.map(airport => (
@@ -118,73 +117,63 @@ const Phase1 = React.memo(({
                     onClick={() => handleItemClick(airport)}
                   >
                     <div className="item-main">
-                      <span className="item-name">{airport.name}</span>
-                      {airport.flightable && <span className="item-badge"></span>}
+                      <span className="item-name">{getLocalizedName(airport, language)}</span>
+                      <span className="item-badge"></span>
                     </div>
                     <span className="item-code">({airport.code})</span>
                   </div>
                 ))}
               </>
             ) : (
-              <div className="no-items">{TEXTS.search.noAirportsForCity(city.name)}</div>
+              <div className="no-items">{t.search.noAirportsForCity(city.name)}</div>
             )}
           </div>
         )}
 
         {isCityExpanded && !cachedAirports && loadingExpand && (
           <div className="nested-list">
-            <div className="no-items">{TEXTS.search.loadingAirportsForCity(city.name)}</div>
+            <div className="no-items">{t.search.loadingAirportsForCity(city.name)}</div>
           </div>
         )}
       </div>
     );
-  }, [expandedCities, citiesCache, loadingExpand, handleItemClick, handleToggleCity]);
+  }, [expandedCities, citiesCache, loadingExpand, handleItemClick, handleToggleCity, language]);
 
   return (
-    <div className="search-item country-item">
-      <button
-        className="expand-button"
-        onClick={handleToggleCountry}
-        title={isExpanded ? TEXTS.search.collapse : TEXTS.search.expandToShowCities}
-      >
-        {isExpanded ? UI_SYMBOLS.EXPAND_DOWN : UI_SYMBOLS.EXPAND_RIGHT}
-      </button>
+    <div className="country-wrapper" data-country-code={country.code}>
+      <div className={`search-item country-item${isExpanded ? ' country-item--expanded' : ''}`}>
+        <button
+          className="expand-button"
+          onClick={handleToggleCountry}
+          title={isExpanded ? t.search.collapse : t.search.expandToShowCities}
+        >
+          {isExpanded ? UI_SYMBOLS.EXPAND_DOWN : UI_SYMBOLS.EXPAND_RIGHT}
+        </button>
 
-      <div
-        className="item-main"
-        onClick={() => handleItemClick(country)}
-      >
-        <span className="item-name">
-          {highlightText(country.name, query, searchMode)}
-        </span>
+        <div
+          className="item-main"
+          onClick={() => handleItemClick(country)}
+        >
+          <span className="item-name">
+            {highlightText(getLocalizedName(country, language), query, searchMode)}
+          </span>
+        </div>
+        <span className="item-code">({country.code})</span>
       </div>
-      <span className="item-code">({country.code})</span>
 
       {isExpanded && (
         <div className="nested-list">
-          <div
-            className="visibility-marker"
-            data-country-code={country.code}
-            style={{ height: '1px', width: '1px', position: 'absolute', top: '0', left: '0', opacity: '0' }}
-          />
 
           {!countryCache ? (
             loadingExpand ? (
-              <div className="no-items">{TEXTS.search.loadingCitiesForCountry(country.name)}</div>
+              <div className="no-items">{t.search.loadingCitiesForCountry(country.name)}</div>
             ) : (
-              <div className="no-items">{TEXTS.search.clickExpandCities(country.name)}</div>
+              <div className="no-items">{t.search.clickExpandCities(country.name)}</div>
             )
           ) : cachedCities.length === 0 ? (
-            <div className="no-items">{TEXTS.search.noCities}</div>
+            <div className="no-items">{t.search.noCities}</div>
           ) : (
             <>
-              <div className="debug-info" style={{ display: 'none' }}>
-                Showing {cachedCities.length} cities for {country.name}
-                {citiesPagination?.total ? ` (${citiesPagination.total} total)` : ''}
-                {citiesPagination?.hasMore ?
-                  ` - scroll for more` :
-                  ' - all cities loaded'}
-              </div>
               {cachedCities.map(renderCity)}
 
               {citiesPagination?.hasMore && (
@@ -192,12 +181,7 @@ const Phase1 = React.memo(({
                   id={`cities-trigger-${country.code}`}
                   className="cities-load-more-trigger"
                   data-country-code={country.code}
-                  style={{
-                    height: '1px',
-                    marginTop: '10px',
-                    position: 'relative',
-                    top: '-50px'
-                  }}
+                  style={{ height: '1px', marginTop: '10px', position: 'relative', top: '-50px' }}
                 >
                   <div style={{
                     height: '50px',
@@ -206,7 +190,7 @@ const Phase1 = React.memo(({
                     justifyContent: 'center',
                     color: 'var(--text-muted)',
                     fontSize: '12px'
-                  }}>{TEXTS.search.scrollMore}</div>
+                  }}>{t.search.scrollMore}</div>
                 </div>
               )}
             </>

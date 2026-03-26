@@ -4,8 +4,10 @@ import type { Flight } from '../types';
 import { useFilterStore } from '../stores/filterStore';
 import { useAirportsQuery } from '../hooks/queries';
 import './FlightsFilter.css';
-import { TEXTS } from '../constants/text';
+import { useTexts } from '../hooks/useTexts';
 import { UI_SYMBOLS } from '../constants/ui';
+import { getLocalizedName } from '../utils/i18n';
+import { useSettingsStore } from '../stores/settingsStore';
 
 interface DestAirport { code: string; name: string; cityCode?: string; countryCode?: string; }
 interface DestCity { code: string; name: string; countryCode?: string; airports: DestAirport[]; }
@@ -17,14 +19,17 @@ interface FlightsFilterProps {
   onToggle: () => void;
 }
 
-// Change 2: Full country names using Intl.DisplayNames (module level)
-const regionNames = (() => {
-  try { return new Intl.DisplayNames(['en'], { type: 'region' }); }
-  catch { return null; }
-})();
-const getCountryName = (code: string): string => regionNames?.of(code) || code;
-
 const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onToggle }) => {
+  const t = useTexts();
+  const language = useSettingsStore(s => s.language);
+  const getCountryName = useMemo(() => {
+    try {
+      const regionNames = new Intl.DisplayNames([language], { type: 'region' });
+      return (code: string) => regionNames.of(code) || code;
+    } catch {
+      return (code: string) => code;
+    }
+  }, [language]);
   const { destinationFilter, airlineFilter, setDestinationFilter, setAirlineFilter, clearFilters } = useFilterStore();
   const { data: airportsData } = useAirportsQuery();
   const [destQuery, setDestQuery] = useState('');
@@ -300,7 +305,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
     return (
       <div key={ap.code} className={`ff-item ff-airport ${selected ? 'ff-selected' : ''}`}
         onClick={() => selectItem('airport', ap.code, ap.cityCode, ap.countryCode)}>
-        <span>{ap.name} <span className="ff-code">({ap.code})</span></span>
+        <span>{getLocalizedName(ap, language)} <span className="ff-code">({ap.code})</span></span>
         {selected && <span className="ff-check">{UI_SYMBOLS.CHECK}</span>}
       </div>
     );
@@ -315,7 +320,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
             <button className="ff-expand-btn" onClick={onCityToggle}>{expanded ? UI_SYMBOLS.EXPAND_DOWN : UI_SYMBOLS.EXPAND_RIGHT}</button>
           )}
           <div className="ff-item-left" onClick={() => selectItem('city', ci.code, undefined, ci.countryCode)}>
-            <span>{ci.name || ci.code} {ci.code !== CONFIG.NO_CITY_PLACEHOLDER && <span className="ff-code">({ci.code})</span>}</span>
+            <span>{getLocalizedName(ci, language) || ci.code} {ci.code !== CONFIG.NO_CITY_PLACEHOLDER && <span className="ff-code">({ci.code})</span>}</span>
             {selected && <span className="ff-check">{UI_SYMBOLS.CHECK}</span>}
           </div>
         </div>
@@ -347,7 +352,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
             </button>
           )}
           <div className="ff-item-left" onClick={() => selectItem('country', country.code)}>
-            <span>{country.name} <span className="ff-code">({country.code})</span></span>
+            <span>{getLocalizedName(country, language)} <span className="ff-code">({country.code})</span></span>
             {isCountrySelected && <span className="ff-check">{UI_SYMBOLS.CHECK}</span>}
           </div>
         </div>
@@ -373,7 +378,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
     if (countries.length === 0 && phase === 1 && q) return null;
     return (
       <div className="ff-section">
-        <div className="ff-section-label">{title}</div>
+        {phase !== 1 && <div className="ff-section-label">{title}</div>}
         {phase === 1 && countries.map(c => renderCountry(c, 1, expandedCitiesP1, setExpandedCitiesP1, expandedCountriesP1.has(c.code), setExpandedCountriesP1))}
         {phase === 2 && countries.map(c => renderCountry(c, 2, expandedCountriesP2, setExpandedCountriesP2))}
         {phase === 3 && countries.map(c => renderCountry(c, 3, new Set(countries.flatMap(co => co.cities.map(ci => ci.code))), () => {}))}
@@ -385,7 +390,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
     return (
       <div className="flights-filter">
         <button className="ff-toggle-btn" onClick={onToggle}>
-          {TEXTS.filter.title}{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+          {t.filter.title}{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
         </button>
       </div>
     );
@@ -395,10 +400,10 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
     <div className="flights-filter">
       <div className={`ff-header${activeFilterCount > 0 ? ' ff-header--has-clear' : ''}`}>
         <button className="ff-toggle-btn" onClick={onToggle}>
-          {isOpen ? UI_SYMBOLS.EXPAND_UP : UI_SYMBOLS.EXPAND_DOWN} {TEXTS.filter.title}{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+          {isOpen ? UI_SYMBOLS.EXPAND_UP : UI_SYMBOLS.EXPAND_DOWN} {t.filter.title}{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
         </button>
         {activeFilterCount > 0 && (
-          <button className="ff-clear-btn" onClick={clearFilters}>{TEXTS.buttons.clear}</button>
+          <button className="ff-clear-btn" onClick={clearFilters}>{t.buttons.clear}</button>
         )}
       </div>
 
@@ -410,11 +415,11 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
               {/* Change 6: Show full names in chips */}
               {destinationFilter.countries.map(code => {
                 const country = destData.find(c => c.code === code);
-                return <span key={`c-${code}`} className="ff-chip">{country?.name || code} <button onClick={() => selectItem('country', code)}>{UI_SYMBOLS.CLOSE}</button></span>;
+                return <span key={`c-${code}`} className="ff-chip">{country ? getLocalizedName(country, language) : code} <button onClick={() => selectItem('country', code)}>{UI_SYMBOLS.CLOSE}</button></span>;
               })}
               {destinationFilter.cities.map(code => {
                 const city = destData.flatMap(c => c.cities).find(ci => ci.code === code);
-                return <span key={`ci-${code}`} className="ff-chip">{city?.name || code} <button onClick={() => selectItem('city', code, undefined, city?.countryCode)}>{UI_SYMBOLS.CLOSE}</button></span>;
+                return <span key={`ci-${code}`} className="ff-chip">{city ? getLocalizedName(city, language) : code} <button onClick={() => selectItem('city', code, undefined, city?.countryCode)}>{UI_SYMBOLS.CLOSE}</button></span>;
               })}
               {destinationFilter.airports.map(code => {
                 const apName = airportNameMap[code] || code;
@@ -430,12 +435,12 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
 
           {/* Destination search */}
           <div className="ff-dest-section">
-            <div className="ff-section-title">{TEXTS.panel.destinations}</div>
+            <div className="ff-section-title">{t.panel.destinations}</div>
             {/* Change 1 & 7: onFocus/onBlur on input, results only shown when focused or query non-empty */}
             <input
               className="ff-search-input"
               type="text"
-              placeholder={TEXTS.filter.searchDestinations}
+              placeholder={t.filter.searchDestinations}
               value={destQuery}
               onChange={e => setDestQuery(e.target.value)}
               onFocus={() => setInputFocused(true)}
@@ -446,13 +451,13 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
                 {/* Exact airport code */}
                 {exactAirport && (
                   <div className="ff-section">
-                    <div className="ff-section-label">{TEXTS.search.airportCode}</div>
+                    <div className="ff-section-label">{t.search.airportCode}</div>
                     {renderAirport(exactAirport)}
                   </div>
                 )}
-                {renderSection(TEXTS.filter.countries, phase1, 1)}
-                {q && renderSection(TEXTS.filter.cities, phase2, 2)}
-                {q && renderSection(TEXTS.filter.airports, phase3, 3)}
+                {renderSection(t.filter.countries, phase1, 1)}
+                {q && renderSection(t.filter.cities, phase2, 2)}
+                {q && renderSection(t.filter.airports, phase3, 3)}
               </div>
             )}
           </div>
@@ -460,7 +465,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
           {/* Airline filter */}
           {airlines.length > 0 && (
             <div className="ff-airline-section">
-              <div className="ff-section-title">{TEXTS.panel.airlines}</div>
+              <div className="ff-section-title">{t.panel.airlines}</div>
               <div className="ff-airlines">
                 {airlines.map(a => (
                   <label key={a.code} className="ff-airline-item">

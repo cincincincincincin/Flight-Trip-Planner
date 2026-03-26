@@ -7,8 +7,9 @@ import Phase3 from './search/Phase3';
 import { useSearchData } from './search/useSearchData';
 import { useSettingsStore } from '../stores/settingsStore';
 import './Search.css';
-import { TEXTS } from '../constants/text';
+import { useTexts } from '../hooks/useTexts';
 import { UI_SYMBOLS } from '../constants/ui';
+import { getLocalizedName } from '../utils/i18n';
 
 interface SearchProps {
   onSelectItem: (item: SelectedItem) => void;
@@ -39,7 +40,7 @@ class SearchErrorBoundary extends React.Component<React.PropsWithChildren, Searc
     if (this.state.hasError) {
       return (
         <div className="error-boundary">
-          <h3>{TEXTS.search.error}</h3>
+          <h3>Search error</h3>
           <p>{this.state.error?.toString()}</p>
         </div>
       );
@@ -49,15 +50,20 @@ class SearchErrorBoundary extends React.Component<React.PropsWithChildren, Searc
 }
 
 const Search = ({ onSelectItem }: SearchProps) => {
+  const t = useTexts();
   const { showConsoleLogs } = useSettingsStore();
+  const language = useSettingsStore(s => s.language);
   const [query, setQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [visibleExpanded, setVisibleExpanded] = useState<{ country: string | null; city: string | null }>({ country: null, city: null });
+  const [visibleSection, setVisibleSection] = useState<number | null>(null);
+  const [visibleCountry, setVisibleCountry] = useState<string | null>(null);
+  const [visibleCity, setVisibleCity] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const visibleCountryRef = useRef<string | null>(null);
+  const visibleCityRef = useRef<string | null>(null);
   const mainObserverRef = useRef<IntersectionObserver | null>(null);
   const nestedObserversRef = useRef<Record<string, IntersectionObserver>>({});
-  const visibilityObserversRef = useRef<Record<string, IntersectionObserver>>({});
   const savedScrollForQueryRef = useRef<{ query: string; position: number }>({ query: '', position: 0 });
 
   const {
@@ -247,52 +253,52 @@ const Search = ({ onSelectItem }: SearchProps) => {
     };
   }, [isSearchOpen, phaseData[1], countriesCache, handleLoadMoreCities]);
 
-  // Visibility observer for tracking expanded countries/cities
-  useEffect(() => {
-    if (!isSearchOpen || !containerRef.current) return;
+  // Keep refs in sync to avoid stale closures in observer callbacks
+  visibleCountryRef.current = visibleCountry;
+  visibleCityRef.current = visibleCity;
 
-    const handleVisibilityIntersection = (entries: IntersectionObserverEntry[]) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          const countryCode = entry.target.getAttribute('data-country-code');
-          const cityCode = entry.target.getAttribute('data-city-code');
-          if (countryCode) {
-            setVisibleExpanded(prev => ({ ...prev, country: countryCode }));
-          }
-          if (cityCode) {
-            setVisibleExpanded(prev => ({ ...prev, city: cityCode }));
-          }
-        } else {
-          const countryCode = entry.target.getAttribute('data-country-code');
-          const cityCode = entry.target.getAttribute('data-city-code');
-          if (countryCode && visibleExpanded.country === countryCode) {
-            setVisibleExpanded(prev => ({ ...prev, country: null }));
-          }
-          if (cityCode && visibleExpanded.city === cityCode) {
-            setVisibleExpanded(prev => ({ ...prev, city: null }));
-          }
+  // Unified scroll spy: tracks visible section, country, and city by position
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!isSearchOpen || !container) return;
+    const update = () => {
+      const cTop = container.getBoundingClientRect().top;
+      const header = container.querySelector<HTMLElement>('.results-header');
+      const refY = cTop + (header?.offsetHeight ?? 0);
+
+      // Section tracking (which phase is at the top)
+      let section: number | null = null;
+      container.querySelectorAll<HTMLElement>('.search-section[data-phase]').forEach(s => {
+        if (s.getBoundingClientRect().top <= refY + 10) {
+          section = parseInt(s.getAttribute('data-phase') || '1');
         }
       });
+      setVisibleSection(section);
+
+      // Country: active when top ≤ refY AND the last visible text (nested-list bottom) > refY
+      let country: string | null = null;
+      container.querySelectorAll<HTMLElement>('[data-country-code]').forEach(el => {
+        const r = el.getBoundingClientRect();
+        const nestedList = el.querySelector<HTMLElement>(':scope > .nested-list');
+        const textBottom = nestedList ? nestedList.getBoundingClientRect().bottom : r.bottom;
+        if (r.top <= refY && textBottom > refY) country = el.getAttribute('data-country-code');
+      });
+      setVisibleCountry(prev => prev === country ? prev : country);
+
+      // City: active when top ≤ refY AND the last visible text (nested-list bottom) > refY
+      let city: string | null = null;
+      container.querySelectorAll<HTMLElement>('[data-city-code]').forEach(el => {
+        const r = el.getBoundingClientRect();
+        const nestedList = el.querySelector<HTMLElement>(':scope > .nested-list');
+        const textBottom = nestedList ? nestedList.getBoundingClientRect().bottom : r.bottom;
+        if (r.top <= refY && textBottom > refY) city = el.getAttribute('data-city-code');
+      });
+      setVisibleCity(prev => prev === city ? prev : city);
     };
-
-    const observer = new IntersectionObserver(handleVisibilityIntersection, {
-      root: containerRef.current,
-      rootMargin: CONFIG.VISIBILITY_OBSERVER_ROOT_MARGIN,
-      threshold: 0
-    });
-
-    const visibilityMarkers = containerRef.current.querySelectorAll('.visibility-marker');
-    visibilityMarkers.forEach(marker => { observer.observe(marker); });
-
-    visibilityObserversRef.current.visibilityObserver = observer;
-
-    return () => {
-      if (visibilityObserversRef.current.visibilityObserver) {
-        visibilityObserversRef.current.visibilityObserver.disconnect();
-        delete visibilityObserversRef.current.visibilityObserver;
-      }
-    };
-  }, [isSearchOpen, visibleExpanded]);
+    update();
+    container.addEventListener('scroll', update, { passive: true });
+    return () => container.removeEventListener('scroll', update);
+  }, [isSearchOpen, phaseData[1].length, phaseData[2].length, phaseData[3].length]);
 
   const renderPhase1Country = useCallback((country: Country) => (
     <Phase1
@@ -342,22 +348,22 @@ const Search = ({ onSelectItem }: SearchProps) => {
     const isCurrentPhase = currentPhase === phaseNumber;
 
     return (
-      <div className="search-section">
+      <div className="search-section" data-phase={phaseNumber}>
         <div className="section-header">
           <h4>
             {icon} {title}{showConsoleLogs && ` (${items.length})`}
-            {showConsoleLogs && searchMode === 'contains' && TEXTS.search.containsSearch}
-            {showConsoleLogs && !isCurrentPhase && items.length > 0 && TEXTS.search.loaded}
+            {showConsoleLogs && searchMode === 'contains' && t.search.containsSearch}
+            {showConsoleLogs && !isCurrentPhase && items.length > 0 && t.search.loaded}
           </h4>
           {loading.search && isCurrentPhase && hasMore[phaseNumber] &&
-            <span className="loading-indicator">{TEXTS.search.loading}</span>}
+            <span className="loading-indicator">{t.search.loading}</span>}
         </div>
         <div className="section-content">
           {items.length > 0 ? (
             <>
               {showConsoleLogs && phaseNumber === 1 && query.trim() !== '' && (
                 <div className="debug-info" style={{ fontSize: '10px', color: 'var(--text-muted)', padding: '5px 16px' }}>
-                  {TEXTS.search.debugPhase1(items.length)}
+                  {t.search.debugPhase1(items.length)}
                 </div>
               )}
               {items.map(renderFunction)}
@@ -383,27 +389,42 @@ const Search = ({ onSelectItem }: SearchProps) => {
     return isSearchOpen && (hasResults || loading.search || query.trim() !== '');
   }, [isSearchOpen, hasResults, loading.search, query]);
 
-  const getVisibleExpandedName = useCallback(() => {
-    if (visibleExpanded.country) {
-      const allCountries = [...phaseData[1], ...phaseData[2], ...phaseData[3]];
-      const country = allCountries.find(c => c.code === visibleExpanded.country);
-      if (country) {
-        if (visibleExpanded.city) {
-          const countryCache = countriesCache[visibleExpanded.country] ||
-                              phase2Cache[visibleExpanded.country] ||
-                              phase3Cache[visibleExpanded.country];
-          if (countryCache?.cities) {
-            const city = countryCache.cities.find(c => c.code === visibleExpanded.city);
-            if (city) return `${country.name} › ${city.name}`;
-          }
-        }
-        return country.name;
+  const dynamicLabel = useMemo(() => {
+    // 3-char exact airport code
+    if (query.trim().length === 3 && exactAirport) return t.search.airportCode;
+
+    // Inside large city (>1 airport) — show city name
+    if (visibleCity) {
+      const airports = citiesCache[visibleCity]?.airports;
+      if (airports && airports.length > 1) {
+        const allCities = [...phaseData[1], ...phaseData[2], ...phaseData[3]]
+          .flatMap(c => {
+            const cache = countriesCache[c.code] || phase2Cache[c.code] || phase3Cache[c.code];
+            return cache?.cities ?? (c as any).cities ?? [];
+          });
+        const city = allCities.find((ci: any) => ci.code === visibleCity);
+        if (city) return getLocalizedName(city, language);
       }
     }
-    return null;
-  }, [visibleExpanded, phaseData, countriesCache, phase2Cache, phase3Cache]);
 
-  const visibleExpandedName = getVisibleExpandedName();
+    // Inside large country (>1 city) — show country name
+    if (visibleCountry) {
+      const countryCache = countriesCache[visibleCountry] || phase2Cache[visibleCountry] || phase3Cache[visibleCountry];
+      const cityCount = countryCache?.cities?.length ?? 0;
+      if (cityCount > 1) {
+        const allCountries = [...phaseData[1], ...phaseData[2], ...phaseData[3]];
+        const country = allCountries.find(c => c.code === visibleCountry);
+        if (country) return getLocalizedName(country, language);
+      }
+    }
+
+    // Section-based fallback
+    if (visibleSection === 3) return t.search.airports;
+    if (visibleSection === 2) return t.search.cities;
+    if (visibleSection === 1) return t.search.countries;
+    return t.search.searchResults;
+  }, [query, exactAirport, visibleCity, visibleCountry, visibleSection,
+      citiesCache, countriesCache, phase2Cache, phase3Cache, phaseData, language, t]);
 
   return (
     <SearchErrorBoundary>
@@ -412,7 +433,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
           <input
             type="text"
             className="search-input"
-            placeholder={TEXTS.search.placeholder}
+            placeholder={t.search.placeholder}
             value={query}
             onChange={handleQueryChange}
             onFocus={handleSearchFocus}
@@ -428,35 +449,28 @@ const Search = ({ onSelectItem }: SearchProps) => {
             <div className="results-header">
               <div className="header-main">
                 <h3>
-                  {TEXTS.search.searchResults}
-                  {showConsoleLogs && searchMode === 'contains' && TEXTS.search.containsSearch}
-                  {showConsoleLogs && isMainScrollPaused && activeNestedScrolls.size > 0 && TEXTS.search.scrolling(activeNestedScrolls.size)}
+                  {dynamicLabel}
+                  {showConsoleLogs && searchMode === 'contains' && t.search.containsSearch}
+                  {showConsoleLogs && isMainScrollPaused && activeNestedScrolls.size > 0 && t.search.scrolling(activeNestedScrolls.size)}
                 </h3>
                 <button
                   className="close-results"
                   onClick={() => setIsSearchOpen(false)}
                 >{UI_SYMBOLS.CLOSE}</button>
               </div>
-
-              {visibleExpandedName && (
-                <div className="visible-expanded-indicator">
-                  <span className="indicator-icon">📍</span>
-                  <span className="indicator-text">{visibleExpandedName}</span>
-                </div>
-              )}
             </div>
 
             <div className="results-content">
               {!hasResults && !exactAirport && !loading.search && query.trim() !== '' ? (
                 <div className="no-results">
-                  {TEXTS.search.noResultsFound(query)}
+                  {t.search.noResultsFound(query)}
                 </div>
               ) : (
                 <>
                   {query.trim().length === 3 && exactAirport && (
                     <div className="search-section">
                       <div className="section-header">
-                        <h4>{TEXTS.search.airportCode}</h4>
+                        <h4>{t.search.airportCode}</h4>
                       </div>
                       <div className="section-content">
                         <div
@@ -464,17 +478,17 @@ const Search = ({ onSelectItem }: SearchProps) => {
                           onClick={() => handleItemClick(exactAirport)}
                         >
                           <div className="item-main">
-                            <span className="item-name"><b>{exactAirport.name}</b></span>
-                            {exactAirport.flightable && <span className="item-badge"></span>}
+                            <span className="item-name"><b>{getLocalizedName(exactAirport, language)}</b></span>
+                            <span className="item-badge"></span>
                           </div>
                           <span className="item-code">({exactAirport.code})</span>
                         </div>
                       </div>
                     </div>
                   )}
-                  {renderPhaseSection(1, TEXTS.search.countries, "", renderPhase1Country)}
-                  {renderPhaseSection(2, TEXTS.search.cities, "", renderPhase2Country)}
-                  {renderPhaseSection(3, TEXTS.search.airports, "", renderPhase3Country)}
+                  {renderPhaseSection(1, t.search.countries, "", renderPhase1Country)}
+                  {renderPhaseSection(2, t.search.cities, "", renderPhase2Country)}
+                  {renderPhaseSection(3, t.search.airports, "", renderPhase3Country)}
 
                   {showConsoleLogs && searchMode === 'contains' && hasResults && (
                     <div className="debug-info" style={{
@@ -492,7 +506,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
               )}
 
               {loading.expand && (
-                <div className="global-loading">{TEXTS.search.loadingDetails}</div>
+                <div className="global-loading">{t.search.loadingDetails}</div>
               )}
             </div>
 
@@ -510,8 +524,8 @@ const Search = ({ onSelectItem }: SearchProps) => {
                     HasMore: {hasMore[currentPhase] ? 'Yes' : 'No'} |
                     MainScroll: {isMainScrollPaused ? 'PAUSED' : 'ACTIVE'} |
                     ActiveNested: {activeNestedScrolls.size} |
-                    Visible: {visibleExpanded.country ? `Country:${visibleExpanded.country}` : '-'}
-                    {visibleExpanded.city ? `, City:${visibleExpanded.city}` : ''}
+                    Visible: {visibleCountry ? `Country:${visibleCountry}` : '-'}
+                    {visibleCity ? `, City:${visibleCity}` : ''}
                   </small>
                 </div>
               </div>

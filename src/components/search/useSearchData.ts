@@ -3,6 +3,7 @@ import axios from 'axios';
 import { search, getCountryCities, getCityAirports, getAirport } from '../../api/search';
 import { CONFIG } from '../../constants/config';
 import type { Country, City, Airport, SearchPhaseInfo, Airport as AirportType } from '../../types';
+import { useSettingsStore } from '../../stores/settingsStore';
 
 interface CountryCacheEntry {
   cities: City[];
@@ -32,6 +33,13 @@ interface UseSearchDataParams {
 }
 
 export function useSearchData({ query, containerRef }: UseSearchDataParams) {
+  const language = useSettingsStore(s => s.language);
+  const showConsoleLogs = useSettingsStore(s => s.showConsoleLogs);
+  const showConsoleLogsRef = useRef(showConsoleLogs);
+  useEffect(() => { showConsoleLogsRef.current = showConsoleLogs; }, [showConsoleLogs]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const log = useCallback((...args: any[]) => { if (showConsoleLogsRef.current) console.log(...args); }, []);
+
   const [loading, setLoading] = useState({ search: false, expand: false });
   const [currentPhase, setCurrentPhase] = useState<1 | 2 | 3>(1);
   const [offset, setOffset] = useState(0);
@@ -51,6 +59,8 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
   const [activeNestedScrolls, setActiveNestedScrolls] = useState(new Set<string>());
   const [searchMode, setSearchMode] = useState<'prefix' | 'contains'>('prefix');
   const [exactAirport, setExactAirport] = useState<AirportType | null>(null);
+
+  const languageRef = useRef(language);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -77,6 +87,11 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
     phase3CacheRef.current = phase3Cache;
   }, [countriesCache, citiesCache, phase2Cache, phase3Cache]);
 
+  // Keep language ref in sync
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
+
   // Exact airport lookup for 3-letter queries
   useEffect(() => {
     const q = query.trim();
@@ -92,15 +107,15 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
       exactAirportAbortRef.current.abort();
     }
     exactAirportAbortRef.current = new AbortController();
-    getAirport(q.toUpperCase(), { signal: exactAirportAbortRef.current.signal })
+    getAirport(q.toUpperCase(), { signal: exactAirportAbortRef.current.signal, params: { lang: languageRef.current } })
       .then(data => setExactAirport(data))
       .catch(err => {
         if (!axios.isCancel(err)) setExactAirport(null);
       });
-  }, [query]);
+  }, [query, language]);
 
   const resetSearch = useCallback(() => {
-    console.log('[SEARCH] Resetting search');
+    log('[SEARCH] Resetting search');
 
     setPhaseData({ 1: [], 2: [], 3: [] });
     setHasMore({ 1: false, 2: false, 3: false });
@@ -134,7 +149,7 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
   const performSearch = useCallback(async (searchQuery: string, searchOffset = 0, append = false) => {
     const trimmedQuery = searchQuery.trim();
 
-    console.log('[SEARCH] performSearch:', { query: trimmedQuery, offset: searchOffset, append, currentPhase });
+    log('[SEARCH] performSearch:', { query: trimmedQuery, offset: searchOffset, append, currentPhase });
 
     if (!append) {
       resetSearch();
@@ -146,10 +161,10 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
       abortControllerRef.current = new AbortController();
 
       const data = await search(
-        { q: trimmedQuery, offset: searchOffset, limit: CONFIG.SEARCH_LIMITS.main },
+        { q: trimmedQuery, offset: searchOffset, limit: CONFIG.SEARCH_LIMITS.main, lang: languageRef.current },
         { signal: abortControllerRef.current.signal }
       );
-      console.log('[SEARCH] Search response:', {
+      log('[SEARCH] Search response:', {
         phase: data.phase,
         mode: data.search_mode,
         itemsCount: data.data.length,
@@ -219,6 +234,18 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
     }
   }, [resetSearch, currentPhase]);
 
+  // Re-search when language changes (only if query is non-empty)
+  useEffect(() => {
+    if (!query.trim()) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    performSearch(query, 0, false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [language]);
+
   const loadMoreMain = useCallback((
     currentPhaseVal: 1 | 2 | 3,
     offsetVal: number,
@@ -229,7 +256,7 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
     queryVal: string,
   ) => {
     if (loading.search || isMainScrollPausedVal) {
-      console.log('[SEARCH] loadMoreMain: Skipping - loading or paused');
+      log('[SEARCH] loadMoreMain: Skipping - loading or paused');
       return;
     }
 
@@ -246,11 +273,11 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
     }
 
     if (!shouldLoadMore) {
-      console.log('[SEARCH] No more data to load');
+      log('[SEARCH] No more data to load');
       return;
     }
 
-    console.log('[SEARCH] Loading more, offset:', offsetVal);
+    log('[SEARCH] Loading more, offset:', offsetVal);
     performSearch(queryVal, offsetVal, true);
   }, [loading.search, performSearch]);
 
@@ -261,11 +288,11 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
     isScrollTrigger = false,
   ) => {
     if (loadingRef.current.phase1Countries[countryCode]) {
-      console.log('[SEARCH] expandCountryPhase1: Already loading', countryCode);
+      log('[SEARCH] expandCountryPhase1: Already loading', countryCode);
       return;
     }
 
-    console.log('[SEARCH] Expanding country for PHASE 1:', { countryCode, countryName, citiesOffset, isScrollTrigger });
+    log('[SEARCH] Expanding country for PHASE 1:', { countryCode, countryName, citiesOffset, isScrollTrigger });
 
     if (containerRef.current && !isScrollTrigger) {
       scrollBeforeActionRef.current = containerRef.current.scrollTop;
@@ -284,6 +311,7 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
       const { data: cities, pagination } = await getCountryCities(countryCode, {
         limit: CONFIG.SEARCH_LIMITS.cities,
         offset: citiesOffset,
+        lang: languageRef.current,
       });
 
       citiesOffsetRef.current = {
@@ -320,7 +348,7 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
           const newSet = new Set(prev);
           newSet.delete(countryCode);
           if (newSet.size === 0) {
-            console.log('[SEARCH] All nested scrolls completed, resuming main scroll');
+            log('[SEARCH] All nested scrolls completed, resuming main scroll');
             setIsMainScrollPaused(false);
           }
           return newSet;
@@ -342,12 +370,12 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
 
   const expandCity = useCallback(async (cityCode: string, cityName: string, countryCode: string) => {
     if (loadingRef.current.phase1Cities[cityCode]) {
-      console.log('[SEARCH] expandCity: Already loading', cityCode);
+      log('[SEARCH] expandCity: Already loading', cityCode);
       return;
     }
     if (citiesCacheRef.current[cityCode]) return;
 
-    console.log('[SEARCH] Expanding city:', { cityCode, cityName, countryCode });
+    log('[SEARCH] Expanding city:', { cityCode, cityName, countryCode });
 
     if (containerRef.current) {
       scrollBeforeActionRef.current = containerRef.current.scrollTop;
@@ -359,7 +387,7 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
     setLoading(prev => ({ ...prev, expand: true }));
 
     try {
-      const { data } = await getCityAirports(cityCode, { limit: CONFIG.SEARCH_LIMITS.airports, offset: 0 });
+      const { data } = await getCityAirports(cityCode, { limit: CONFIG.SEARCH_LIMITS.airports, offset: 0, lang: languageRef.current });
       setCitiesCache(prev => {
         if (prev[cityCode]) return prev;
         return { ...prev, [cityCode]: { airports: data, fetchedAt: Date.now() } };
@@ -388,11 +416,11 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
   const handleLoadMoreCities = useCallback((countryCode: string, countryName: string) => {
     const countryCache = countriesCacheRef.current[countryCode];
     if (!countryCache?.pagination?.hasMore) {
-      console.log('[SEARCH] handleLoadMoreCities: No more cities to load');
+      log('[SEARCH] handleLoadMoreCities: No more cities to load');
       return;
     }
     const currentOffset = countryCache.pagination.offset || 0;
-    console.log('[SEARCH] Loading more cities for country:', { countryCode, countryName, currentOffset });
+    log('[SEARCH] Loading more cities for country:', { countryCode, countryName, currentOffset });
     expandCountryPhase1(countryCode, countryName, currentOffset, true);
   }, [expandCountryPhase1]);
 

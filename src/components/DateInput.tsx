@@ -2,7 +2,7 @@ import { CONFIG } from '../constants/config';
 import { UI_SYMBOLS } from '../constants/ui';
 import { useState, useRef, useEffect } from 'react';
 import './DateInput.css';
-import { TEXTS } from '../constants/text';
+import { useTexts } from '../hooks/useTexts';
 import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
 
 interface DateInputProps {
@@ -13,6 +13,7 @@ interface DateInputProps {
 }
 
 const DateInput = ({ value, onChange, timezone, minDate: minDateProp }: DateInputProps) => {
+  const t = useTexts();
   const [displayValue, setDisplayValue] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -450,7 +451,7 @@ const DateInput = ({ value, onChange, timezone, minDate: minDateProp }: DateInpu
           value={displayValue}
           onKeyDown={handleKeyDown}
           onClick={handleInputClick}
-          placeholder={TEXTS.date.placeholder}
+          placeholder={t.date.placeholder}
           className="date-text-input"
           readOnly
         />
@@ -467,13 +468,13 @@ const DateInput = ({ value, onChange, timezone, minDate: minDateProp }: DateInpu
           </div>
 
           <div className="calendar-weekdays">
-            <div className="weekday">{TEXTS.days.mon}</div>
-            <div className="weekday">{TEXTS.days.tue}</div>
-            <div className="weekday">{TEXTS.days.wed}</div>
-            <div className="weekday">{TEXTS.days.thu}</div>
-            <div className="weekday">{TEXTS.days.fri}</div>
-            <div className="weekday">{TEXTS.days.sat}</div>
-            <div className="weekday">{TEXTS.days.sun}</div>
+            <div className="weekday">{t.days.mon}</div>
+            <div className="weekday">{t.days.tue}</div>
+            <div className="weekday">{t.days.wed}</div>
+            <div className="weekday">{t.days.thu}</div>
+            <div className="weekday">{t.days.fri}</div>
+            <div className="weekday">{t.days.sat}</div>
+            <div className="weekday">{t.days.sun}</div>
           </div>
 
           <div className="calendar-grid">

@@ -16,13 +16,13 @@
 
 .search-input {
   width: 100%;
-  height: 38px;
-  padding: 0 36px 0 14px;
+  height: 46px;
+  padding: 0 40px 0 16px;
   border-radius: var(--r-md);
   border: 1px solid var(--border-light);
   background: var(--bg-glass-hi);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 16px;
   font-family: var(--font-sans);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -81,12 +81,13 @@
 
 .header-main h3 {
   margin: 0;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
   font-family: var(--font-display);
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.10em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .close-results {
@@ -157,22 +158,82 @@
   font-family: var(--font-mono);
 }
 
-.section-content { padding: 0 6px 4px; }
+.section-content { padding: 4px 0; }
+
+/* ── Nesting level variables (mirrors FlightsFilter) ─────────── */
+.search-container {
+  --s-l1: var(--bg-hover);         /* cities in expanded country */
+  --s-l2: rgba(0, 0, 0, 0.09);     /* city row in expanded state */
+  --s-l3: rgba(0, 0, 0, 0.12);     /* airports in expanded city  */
+  --s-hover: rgba(0, 0, 0, 0.15);  /* hover on any row           */
+}
 
 /* ── Search item ─────────────────────────────────────────────── */
 .search-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
+  gap: 4px;
+  padding: 10px 12px;
   cursor: pointer;
   transition: background 0.10s;
-  border-bottom: 1px solid var(--border);
 }
 
-.search-item:last-child { border-bottom: none; }
-.search-item:hover { background: var(--bg-hover); }
+/* ── Country wrapper ─────────────────────────────────────────── */
+.country-wrapper {
+  border-bottom: 1px solid var(--border);
+}
+.country-wrapper:last-child { border-bottom: none; }
 
+/* Country row: bold */
+.search-item.country-item { font-weight: 600; }
+
+/* Country expanded: L1 background */
+.search-item.country-item--expanded { background: var(--s-l1); }
+
+/* Hover country row → all cities + airports cascade */
+.search-item.country-item:hover                              { background: var(--s-hover); }
+.search-item.country-item:hover ~ .nested-list .search-item { background: var(--s-hover); }
+
+/* Country's cities nested list */
+.country-wrapper > .nested-list {
+  border-left: 2px solid var(--c-teal-b);
+  margin-left: 8px;
+}
+
+/* City row: L2 background + full-width extension */
+.country-wrapper > .nested-list > .city-item-wrapper > .search-item.city-item {
+  background: var(--s-l2);
+  margin-left: -10px;
+  padding-left: 18px;
+}
+
+/* City expanded: L2 */
+.search-item.city-item--expanded {
+  background: var(--s-l2) !important;
+}
+
+/* Hover city row → airports in that city cascade */
+.city-item-wrapper > .search-item.city-item:hover                              { background: var(--s-hover) !important; }
+.city-item-wrapper > .search-item.city-item:hover ~ .nested-list .search-item { background: var(--s-hover); }
+
+/* City's airports nested list */
+.city-item-wrapper > .nested-list {
+  border-left: 2px solid var(--c-coral-b);
+  margin-left: 14px;
+}
+
+/* Airport row: L3 + full-width + button-equiv left indent (same as ff-nested .ff-airport) */
+.city-item-wrapper > .nested-list > .search-item.airport-item {
+  background: var(--s-l3);
+  margin-left: -26px;
+  padding-left: 52px;
+}
+
+.city-item-wrapper > .nested-list > .search-item.airport-item:hover {
+  background: var(--s-hover);
+}
+
+/* ── Item internals ──────────────────────────────────────────── */
 .item-main {
   display: flex;
   align-items: center;
@@ -184,7 +245,7 @@
 .item-icon { font-size: 12px; flex-shrink: 0; }
 
 .item-name {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-primary);
   flex: 1;
   min-width: 0;
@@ -193,95 +254,32 @@
   white-space: nowrap;
 }
 
+/* Cities and airports: slightly smaller font */
+.search-item.city-item .item-name,
+.search-item.airport-item .item-name { font-size: 13px; }
+
 .item-code {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-muted);
   flex-shrink: 0;
+  margin-left: auto;
+  padding-left: 8px;
 }
 
-.item-badge {
-  font-size: 10px;
-  flex-shrink: 0;
-}
+.item-badge { font-size: 10px; flex-shrink: 0; }
 
-/* ── Country/city expand button ──────────────────────────────── */
+/* ── Expand button ───────────────────────────────────────────── */
 .expand-btn,
 .expand-button {
   border: none;
   background: none;
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: 14px;
   cursor: pointer;
   flex-shrink: 0;
-  padding: 0 4px;
+  padding: 0 6px;
 }
-
-/* Country items: wrap so nested-list goes below */
-.search-item.country-item {
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.search-item.country-item .nested-list {
-  flex-basis: 100%;
-  width: 100%;
-}
-
-/* ── Nested lists (vertical lines) ──────────────────────────── */
-.search-item.country-item .nested-list {
-  border-left: 2px solid var(--c-teal-b);
-  margin-left: 8px;
-}
-
-.city-item-wrapper .nested-list {
-  border-left: 2px solid var(--c-coral-b);
-  margin-left: 14px;
-}
-
-/* ── Cities nested list ──────────────────────────────────────── */
-.cities-list {
-  margin: 2px 0 2px 16px;
-  border-left: 2px solid var(--c-teal-b);
-  padding-left: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.city-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  transition: background 0.12s;
-}
-
-.city-item:hover { background: var(--bg-hover); }
-
-/* ── Airports nested list ────────────────────────────────────── */
-.airports-list {
-  margin: 2px 0 2px 16px;
-  border-left: 2px solid var(--c-coral-b);
-  padding-left: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.airport-item-inner {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  transition: background 0.12s;
-}
-
-.airport-item-inner:hover { background: var(--bg-hover); }
 
 /* ── Footer ──────────────────────────────────────────────────── */
 .results-footer {

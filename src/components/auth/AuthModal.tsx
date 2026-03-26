@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import './AuthModal.css';
-import { TEXTS } from '../../constants/text';
+import { useTexts } from '../../hooks/useTexts';
 import { UI_SYMBOLS } from '../../constants/ui';
 
 type Mode = 'login' | 'register';
@@ -11,6 +11,7 @@ interface AuthModalProps {
 }
 
 const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
+  const t = useTexts();
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,7 +35,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
     if (err) {
       setError(err);
     } else if (mode === 'register') {
-      setInfo(TEXTS.auth.checkEmail);
+      setInfo(t.auth.checkEmail);
     } else {
       onClose();
     }
@@ -51,12 +52,12 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
       <div className="auth-modal" onClick={e => e.stopPropagation()}>
         <button className="auth-modal__close" onClick={onClose}>{UI_SYMBOLS.CLOSE}</button>
 
-        <h2>{mode === 'login' ? TEXTS.buttons.signIn : TEXTS.auth.createAccount}</h2>
+        <h2>{mode === 'login' ? t.buttons.signIn : t.auth.createAccount}</h2>
 
         <form onSubmit={handleSubmit} className="auth-modal__form">
           <input
             type="email"
-            placeholder={TEXTS.auth.email}
+            placeholder={t.auth.email}
             value={email}
             onChange={e => setEmail(e.target.value)}
             required
@@ -64,7 +65,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
           />
           <input
             type="password"
-            placeholder={TEXTS.auth.password}
+            placeholder={t.auth.password}
             value={password}
             onChange={e => setPassword(e.target.value)}
             required
@@ -75,16 +76,16 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
           {info  && <p className="auth-modal__info">{info}</p>}
 
           <button type="submit" disabled={busy} className="auth-modal__submit">
-            {busy ? TEXTS.auth.pleaseWait : mode === 'login' ? TEXTS.buttons.signIn : TEXTS.auth.register}
+            {busy ? t.auth.pleaseWait : mode === 'login' ? t.buttons.signIn : t.auth.register}
           </button>
         </form>
 
-        <button className="auth-modal__google" onClick={handleGoogle} disabled={busy}>{TEXTS.auth.continueGoogle}</button>
+        <button className="auth-modal__google" onClick={handleGoogle} disabled={busy}>{t.auth.continueGoogle}</button>
 
         <p className="auth-modal__switch">
           {mode === 'login'
-            ? <><span>{TEXTS.auth.noAccount}</span> <button type="button" onClick={() => setMode('register')}>{TEXTS.buttons.register}</button></>
-            : <><span>{TEXTS.auth.haveAccount}</span> <button type="button" onClick={() => setMode('login')}>{TEXTS.buttons.signIn}</button></>
+            ? <><span>{t.auth.noAccount}</span> <button type="button" onClick={() => setMode('register')}>{t.buttons.register}</button></>
+            : <><span>{t.auth.haveAccount}</span> <button type="button" onClick={() => setMode('login')}>{t.buttons.signIn}</button></>
           }
         </p>
       </div>

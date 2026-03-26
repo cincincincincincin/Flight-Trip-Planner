@@ -1,8 +1,5 @@
 import apiClient from './client';
-import type { AirportInfo, FlightsResponse, FlightOffersResponse } from '../types';
-
-export const getAirportInfo = (code: string): Promise<AirportInfo> =>
-  apiClient.get(`/flights/airport/${code}/info`).then(r => r.data);
+import type { FlightsResponse, FlightOffersResponse } from '../types';
 
 export const getFlights = (airportCode: string, params: Record<string, unknown>): Promise<FlightsResponse> =>
   apiClient.get(`/flights/airport/${airportCode}`, { params }).then(r => r.data);

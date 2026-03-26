@@ -4,8 +4,8 @@ import type { Airport, City, SearchResponse, CityWithPagination } from '../types
 export const getAirport = (code: string, config?: object): Promise<Airport> =>
   apiClient.get(`/search/airport/${code}`, config).then(r => r.data.data);
 
-export const getCity = (code: string): Promise<City> =>
-  apiClient.get(`/search/city/${code}`).then(r => r.data.data);
+export const getCity = (code: string, lang = 'en'): Promise<City> =>
+  apiClient.get(`/search/city/${code}`, { params: { lang } }).then(r => r.data.data);
 
 export const getCountryCenter = (code: string): Promise<{ lat: number; lng: number }> =>
   apiClient.get(`/search/country/${code}/center`).then(r => r.data);

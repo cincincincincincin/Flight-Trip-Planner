@@ -1,4 +1,6 @@
 export const CONFIG = {
+  /** Cache duration for airport info requests */
+  CACHE_AIRPORT_INFO_MS: 300000,
 
   // ──────────────────────────────────────────────────────────────────────────
   // AirportTransferPicker.tsx
@@ -62,11 +64,6 @@ export const CONFIG = {
   // ──────────────────────────────────────────────────────────────────────────
   // api/geo.ts – default query parameters
   // ──────────────────────────────────────────────────────────────────────────
-
-  /** Filter airports to only those that have scheduled commercial flights */
-  FLIGHTABLE_ONLY: true,
-  /** Filter locations to only those that contain at least one airport */
-  HAS_AIRPORT_ONLY: true,
 
   // ──────────────────────────────────────────────────────────────────────────
   // DateInput.tsx
@@ -305,19 +302,12 @@ export const CONFIG = {
   // ColorSettings.tsx – slider ranges for map style tuning
   // ──────────────────────────────────────────────────────────────────────────
 
-  /** Min / max / step ranges for each map style slider in the colour-settings panel */
-  SIZE_SLIDER_RANGES: {
-    routeLineWidth:            { min: 1,  max: 10, step: 0.5, label: 'Animated route line max width' },
-    routeLineHoverWidth:       { min: 2,  max: 20, step: 0.5, label: 'Hover animated route line width' },
-    tripRouteWidth:            { min: 1,  max: 10, step: 0.5, label: 'Trip permanent route line width' },
-    tripRouteHoverWidth:       { min: 2,  max: 20, step: 0.5, label: 'Hover trip permanent route width' },
-    highlightedAirportRadius:      { min: 2,  max: 25, step: 0.5, label: 'Target airport max radius' },
-    highlightedAirportHoverRadius: { min: 5,  max: 40, step: 0.5, label: 'Hover target airport radius' },
-    generalAirportRadius:          { min: 1,  max: 15, step: 0.5, label: 'General airport max radius' },
-    generalAirportHoverRadius:     { min: 4,  max: 30, step: 0.5, label: 'Hover general airport radius' },
-    highlightedLabelSize:          { min: 10, max: 30, step: 1,   label: 'Target airport label size' },
-    highlightedLabelHoverSize:     { min: 12, max: 40, step: 1,   label: 'Hover target label size' },
-    generalAirportLabelSize:       { min: 8,  max: 25, step: 1,   label: 'General airport label size' },
-    generalLabelHoverSize:         { min: 10, max: 35, step: 1,   label: 'Hover general label size' },
-  },
 };
+
+/** Dostępne waluty do wyboru przez użytkownika */
+export const CURRENCIES = [
+  { code: 'PLN', label: 'PLN – Polish Złoty' },
+  { code: 'USD', label: 'USD – US Dollar' },
+  { code: 'EUR', label: 'EUR – Euro' },
+  { code: 'GBP', label: 'GBP – British Pound' },
+] as const;

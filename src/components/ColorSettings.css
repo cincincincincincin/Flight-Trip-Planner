@@ -150,6 +150,9 @@
   font-size: 11px;
   color: var(--text-secondary);
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .color-row-hint {
@@ -329,6 +332,23 @@
 
 .size-at-zoom {
   color: var(--c-teal);
+}
+
+/* ── Size group (name + info + slider) ───────────────────────── */
+.size-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 6px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 4px;
+}
+
+.size-group .size-value {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--c-teal);
+  white-space: nowrap;
 }
 
 /* ── Zoom info row ───────────────────────────────────────────── */

@@ -7,6 +7,11 @@
   flex-direction: column;
   gap: 0;
   flex-shrink: 0;
+  /* Nesting level backgrounds (black overlays on light theme) */
+  --ff-l1: var(--bg-hover);        /* expanded country header + all cities */
+  --ff-l2: rgba(0, 0, 0, 0.09);    /* expanded city header */
+  --ff-l3: rgba(0, 0, 0, 0.12);    /* airports in expanded city */
+  --ff-hover: rgba(0, 0, 0, 0.15); /* hover on any row */
 }
 
 /* ── Header ──────────────────────────────────────────────────── */
@@ -31,12 +36,12 @@
 
 .ff-toggle-btn {
   width: 100%;
-  padding: 6px clamp(10px, 1.2vw, 14px);
+  padding: 10px clamp(12px, 1.4vw, 16px);
   background: var(--bg-raised);
   border: 1px solid var(--border-light);
   border-radius: var(--r-sm);
   color: var(--text-secondary);
-  font-size: clamp(10px, 1vw, 12px);
+  font-size: clamp(13px, 1.2vw, 15px);
   font-weight: 600;
   font-family: var(--font-display);
   cursor: pointer;
@@ -132,10 +137,10 @@
 
 .ff-search-input {
   width: 100%;
-  padding: 7px 10px;
+  padding: 10px 12px;
   border: 1px solid var(--accent-border);
   border-radius: var(--r-sm);
-  font-size: 12px;
+  font-size: 16px;
   outline: none;
   background: var(--bg-raised);
   color: var(--text-primary);
@@ -187,9 +192,9 @@
 .ff-item {
   display: flex;
   align-items: center;
-  padding: 5px 10px;
+  padding: 10px 12px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-primary);
   transition: background 0.10s;
   gap: 4px;
@@ -211,9 +216,9 @@
   border: none;
   background: none;
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: 14px;
   cursor: pointer;
-  padding: 0 4px;
+  padding: 0 6px;
   flex-shrink: 0;
 }
 
@@ -236,31 +241,63 @@
 
 .ff-country { font-weight: 600; }
 
-.ff-country--expanded { background: var(--bg-hover); }
-.ff-country--expanded:hover { background: var(--bg-active, var(--bg-hover)); filter: brightness(0.93); }
+/* Country when expanded: permanent bg L1 */
+.ff-country--expanded { background: var(--ff-l1); }
+
+/* All cities in expanded country: same permanent bg L1 */
+.ff-country--expanded + .ff-cities-list .ff-city { background: var(--ff-l1); }
+
+/* Expanded city: permanent bg L2 (same specificity as above, comes after → wins) */
+.ff-country--expanded + .ff-cities-list .ff-city--expanded { background: var(--ff-l2); }
+
+/* Hover on any country: ff-hover (same spec as ff-item:hover, comes after → wins) */
+.ff-country:hover { background: var(--ff-hover); }
+
+/* Hover on country → all cities + airports */
+.ff-country:hover + .ff-cities-list .ff-city { background: var(--ff-hover); }
+.ff-country:hover + .ff-cities-list .ff-airport { background: var(--ff-hover); }
+
+/* Hover on any city */
+.ff-country--expanded + .ff-cities-list .ff-city:hover { background: var(--ff-hover); }
+
+/* Hover on expanded city (same spec as above, comes after → wins for expanded) */
+.ff-country--expanded + .ff-cities-list .ff-city--expanded:hover { background: var(--ff-hover); }
 
 .ff-cities-list {
   border-left: 2px solid var(--c-teal-b);
   margin-left: 8px;
 }
 
-.ff-city--expanded { background: var(--bg-hover); filter: brightness(0.92); }
-.ff-city--expanded:hover { filter: brightness(0.85); }
-
 .ff-nested {
   margin-left: 14px;
   border-left: 2px solid var(--c-coral-b);
 }
 
+/* Airports in expanded city: L3 — darker than city (L2), lighter than hover */
+.ff-city--expanded + .ff-nested .ff-airport { background: var(--ff-l3); }
+
+/* Hover on expanded city → airports */
+.ff-city--expanded:hover + .ff-nested .ff-airport { background: var(--ff-hover); }
+
+/* Hover directly on airport */
+.ff-city--expanded + .ff-nested .ff-airport:hover { background: var(--ff-hover); }
+
 .ff-city {
-  font-size: 11px;
-  padding-left: 8px;
+  font-size: 13px;
+  padding-left: 18px;  /* 8px original + 10px compensates for -10px margin */
+  margin-left: -10px;  /* extend past cities-list border (2px) + margin (8px) → full-width row */
 }
 
 .ff-airport {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text-secondary);
-  padding-left: 4px;
+  padding-left: 4px;   /* kept for exact-match airports outside ff-nested */
+}
+
+/* Airports inside expanded city: full-width row + indent equiv to one expand button */
+.ff-nested .ff-airport {
+  margin-left: -26px;  /* extend past nested border (2px) + margin (14px) + cities-list border (2px) + margin (8px) */
+  padding-left: 52px;  /* 4px original + 26px compensation + 22px button-equiv indent */
 }
 
 /* ── Airlines section ────────────────────────────────────────── */
@@ -278,12 +315,12 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 8px;
+  padding: 10px 10px;
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text-primary);
   transition: all 0.12s;
 }
@@ -295,8 +332,8 @@
 
 .ff-airline-item input[type="checkbox"] {
   accent-color: var(--accent);
-  width: 13px;
-  height: 13px;
+  width: 16px;
+  height: 16px;
   cursor: pointer;
   flex-shrink: 0;
 }

@@ -176,6 +176,48 @@
   border-radius: calc(var(--r-sm) - 1px);
 }
 
+/* ── Language selector ───────────────────────────────────────── */
+.language-selector {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+}
+
+.language-toggle {
+  display: flex;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+
+.language-option {
+  flex: 1;
+  padding: 6px 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.language-option:hover {
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+}
+
+.language-option.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+  border-radius: calc(var(--r-sm) - 1px);
+}
+
 /* ── Currency selector ───────────────────────────────────────── */
 .currency-selector {
   background: var(--bg-raised);

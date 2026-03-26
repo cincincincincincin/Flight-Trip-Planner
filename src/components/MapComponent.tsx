@@ -9,17 +9,17 @@ import { useTripStore } from '../stores/tripStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useColorStore } from '../stores/colorStore';
 import { useFilterStore } from '../stores/filterStore';
-import { useAirportsQuery, useCitiesQuery, useRoutesQuery } from '../hooks/queries';
+import { useAirportsQuery, useCitiesQuery } from '../hooks/queries';
 import { generateGreatCircle, getHaloColorForTextColor, getTextColorForHaloColor, isBlackOrWhiteColor } from './map/utils';
 import { getAirport } from '../api/search';
 import { addAirportsLayer } from './map/airportsLayer';
-import { addCitiesLayer } from './map/citiesLayer';
-import { addRoutesLayer } from './map/routesLayer';
+// import { addCitiesLayer } from './map/citiesLayer';
+// import { addRoutesLayer } from './map/routesLayer';
 import { buildGCPaths, addRoutesToAnimation, clearRouteAnimation, startPreviewAnimation } from './map/routeAnimations';
 import type { GCPath } from './map/routeAnimations';
 import './MapComponent.css';
 import './FlightCard.css';
-import { TEXTS } from '../constants/text';
+import { useTexts } from '../hooks/useTexts';
 import { UI_SYMBOLS } from '../constants/ui';
 import { MAP_STYLES, isArcGISUrl } from '../constants/mapStyles';
 import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
@@ -120,8 +120,10 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   onSelectItem,
   rightPanelRef,
 }, ref) => {
+  const t = useTexts();
+
   // Stores
-  const { showAirports, showCities, showRoutes, mapStyle, globeMode, flyToZoom, setFlyToZoom } = useMapStore();
+  const { showAirports, /* showCities, */ mapStyle, globeMode, flyToZoom, setFlyToZoom } = useMapStore();
   const { highlightedAirports, selectedAirportCode, selectedAirportCodes, highlightedCities, flightsData, displayedFlights, explorationItems } = useSelectionStore();
   const { tripState, tripRoutes, previewAirportCode, manualTransferAirportCodes } = useTripStore();
   const { travelDate, timezone } = useSettingsStore();
@@ -177,8 +179,8 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
 
   // React Query – geo data
   const { data: airportsData } = useAirportsQuery();
-  const { data: citiesData } = useCitiesQuery(showCities);
-  const { data: routesData } = useRoutesQuery(showRoutes);
+  // const { data: citiesData } = useCitiesQuery(showCities);
+  // const { data: routesData } = useRoutesQuery(false);
 
   // Derived
   const tripVisibleAirportCodes = useMemo(() => {
@@ -1083,7 +1085,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   };
 
   const formatDate = (dateString: string | null | undefined) => {
-    if (!dateString) return TEXTS.card.na;
+    if (!dateString) return t.card.na;
     return new Date(dateString).toLocaleDateString(FORMAT_LOCALES.GB, FORMAT_OPTIONS.DATE_SHORT);
   };
 
@@ -1160,9 +1162,11 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     safeRemoveSource('transfer-preview-route');
     safeRemoveSource('manual-transfer-preview');
 
+    /*
     if (routesData && showRoutes) {
       addRoutesLayer(map.current, routesData, onSelectItemRef);
     }
+    */
 
     // Permanent trip route source + layer
     map.current.addSource('trip-permanent-routes', {
@@ -1253,9 +1257,9 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       addAirportsLayer(map.current, airportsData, mapStyle);
     }
 
-    if (citiesData && showCities) {
-      addCitiesLayer(map.current, citiesData, mapStyle, onSelectItemRef, hoveredAirportCodeRef);
-    }
+    // if (citiesData && showCities) {
+    //   addCitiesLayer(map.current, citiesData, mapStyle, onSelectItemRef, hoveredAirportCodeRef);
+    // }
 
     // Ensure hover layers are always on top of routes and city labels.
     const bringToFront = (ids: string[]) => {
@@ -1475,8 +1479,8 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
         } catch { return dateStr; }
       };
 
-      const srcAirportName = airportNamesMap.current[srcCode] || srcCode || TEXTS.common.unknown;
-      const destAirportName = airportNamesMap.current[destCode] || destCode;
+      const srcAirportName = airportNamesMap.current[srcCode] ?? srcCode ?? t.common.unknown;
+      const destAirportName = airportNamesMap.current[destCode] ?? destCode;
       const srcCityName = displayFlights[0]?.origin_city_name || srcAirportName;
       const destCityName = displayFlights[0]?.destination_city_name || destAirportName;
 
@@ -1598,10 +1602,10 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
             <div class="mc-popup-header-city right">${destAirportName}</div>
           </div>
           <div>
-            ${shownFlights.length > 0 ? flightRows : `<div class="mc-popup-no-flights">${TEXTS.card.noFlightsForDate}</div>`}
+            ${shownFlights.length > 0 ? flightRows : `<div class="mc-popup-no-flights">${t.card.noFlightsForDate}</div>`}
           </div>
           ${extraCount > 0
-            ? `<div class="mc-popup-dots">...</div><div class="mc-popup-extra">${TEXTS.card.clickRouteToFilter}</div>`
+            ? `<div class="mc-popup-dots">...</div><div class="mc-popup-extra">${t.card.clickRouteToFilter}</div>`
             : ''
           }
         </div>
@@ -1701,16 +1705,16 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     setLayerVisibility('airports-labels-highlighted', showAirports);
     setLayerVisibility('airports-labels-hover', showAirports);
     setLayerVisibility('airports-labels-hover-general', showAirports);
-    setLayerVisibility('cities-circles', showCities);
-    setLayerVisibility('cities-labels', showCities);
-    setLayerVisibility('cities-highlighted', showCities);
-    setLayerVisibility('cities-labels-highlighted', showCities);
-    setLayerVisibility('routes-lines', showRoutes);
-    setLayerVisibility('selected-routes', showAirports || showCities);
+    // setLayerVisibility('cities-circles', showCities);
+    // setLayerVisibility('cities-labels', showCities);
+    // setLayerVisibility('cities-highlighted', showCities);
+    // setLayerVisibility('cities-labels-highlighted', showCities);
+    // setLayerVisibility('routes-lines', showRoutes);
+    setLayerVisibility('selected-routes', showAirports /*|| showCities*/);
 
     applyAirportFilters();
     applyColors();
-  }, [mapLoaded, airportsData, citiesData, routesData, mapStyle, showAirports, showCities, showRoutes, safeRemoveLayer, safeRemoveSource, applyAirportFilters, applyColors, rightPanelRef]);
+  }, [mapLoaded, airportsData, /*citiesData,*/ mapStyle, showAirports, /*showCities,*/ safeRemoveLayer, safeRemoveSource, applyAirportFilters, applyColors, rightPanelRef]);
 
   // Update airport layer filters when highlightedAirports changes (no source rebuild)
   useEffect(() => {
@@ -2160,11 +2164,13 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
         applyHover(lastDetectedCodeRef.current, { x, y });
       }, CONFIG.HOVER_STOP_DELAY_MS);
 
+      /*
       if (!code && showRoutes && Date.now() >= hoverLockUntilRef.current && !hoveredAirportCodeRef.current) {
         routeHoverAtPointRef.current?.({ x, y });
       } else if (code && showRoutes) {
         clearRouteHoverRef.current?.({ keepLabels: true });
       }
+      */
     };
 
     const handleMouseLeave = () => {
@@ -2173,7 +2179,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       if (mouseStopTimerRef.current !== null) { clearTimeout(mouseStopTimerRef.current); mouseStopTimerRef.current = null; }
       if (hoverClearTimerRef.current !== null) { clearTimeout(hoverClearTimerRef.current); hoverClearTimerRef.current = null; }
       applyHover(null);
-      if (showRoutes) clearRouteHoverRef.current?.();
+      // if (showRoutes) clearRouteHoverRef.current?.();
     };
       
     const handleClick = (e: MouseEvent) => {
@@ -2295,7 +2301,8 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   useEffect(() => {
     if (!mapLoaded) return;
     addLayers();
-  }, [mapLoaded, airportsData, citiesData, routesData, mapStyle, addLayers]);
+  }, [mapLoaded, airportsData, /*citiesData,*/ mapStyle, addLayers]);
+
 
   // When style changes, auto-adjust all label colors to be opposite of style-default halo colors
   // BUT: only if labels are currently black/white (user hasn't customized them yet)
@@ -2387,13 +2394,13 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     setLayerVisibility('airports-labels-highlighted', showAirports);
     setLayerVisibility('airports-labels-hover', showAirports);
     setLayerVisibility('airports-labels-hover-general', showAirports);
-    setLayerVisibility('cities-circles', showCities);
-    setLayerVisibility('cities-labels', showCities);
-    setLayerVisibility('cities-highlighted', showCities);
-    setLayerVisibility('cities-labels-highlighted', showCities);
-    setLayerVisibility('routes-lines', showRoutes);
-    setLayerVisibility('selected-routes', showAirports || showCities);
-  }, [showAirports, showCities, showRoutes, mapLoaded]);
+    // setLayerVisibility('cities-circles', showCities);
+    // setLayerVisibility('cities-labels', showCities);
+    // setLayerVisibility('cities-highlighted', showCities);
+    // setLayerVisibility('cities-labels-highlighted', showCities);
+    // setLayerVisibility('routes-lines', showRoutes);
+    setLayerVisibility('selected-routes', showAirports /*|| showCities*/);
+  }, [showAirports, /*showCities,*/ mapLoaded]);
 
   // Route animation — draws routes for all displayed flights, handles additions/removals/timezone changes.
   // Uses src:dest pairs (not dest-only) so new sources for existing destinations are drawn correctly.
@@ -2531,8 +2538,8 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
         fontFamily: 'Arial, sans-serif', padding: '20px', textAlign: 'center'
       }}>
         <div>
-          <h3 style={{ marginBottom: '10px', color: THEME_COLORS.errorRed }}>{TEXTS.errors.mapNotLoaded}</h3>
-          <p>{TEXTS.errors.webglNotSupported}</p>
+          <h3 style={{ marginBottom: '10px', color: THEME_COLORS.errorRed }}>{t.errors.mapNotLoaded}</h3>
+          <p>{t.errors.webglNotSupported}</p>
         </div>
       </div>
     );

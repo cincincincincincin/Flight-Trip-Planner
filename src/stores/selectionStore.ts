@@ -28,7 +28,7 @@ interface SelectionState {
   setDisplayedFlights: (v: Flight[]) => void;
   appendFlights: (newFlights: Flight[]) => void;
   clearSelection: () => void;
-  addExplorationItem: (item: Omit<ExplorationItem, 'id'>, viewMode: 'airports' | 'cities') => void;
+  addExplorationItem: (item: Omit<ExplorationItem, 'id'>/*, viewMode: 'airports' | 'cities' */) => void;
   removeExplorationItem: (id: string) => void;
   clearExploration: () => void;
 }
@@ -66,35 +66,29 @@ export const useSelectionStore = create<SelectionState>(set => ({
     explorationItems: [],
   }),
 
-  addExplorationItem: (item, viewMode) => set(state => {
+  addExplorationItem: (item/*, viewMode */) => set(state => {
+    // Check if it's already in the list
+    if (state.explorationItems.some((i: ExplorationItem) => i.code === item.code && i.type === item.type)) {
+      return state;
+    }
+
     const id = Date.now().toString() + Math.random().toString(36).slice(2);
     const newItem: ExplorationItem = { ...item, id };
-
-    // Remove existing entry with same code to avoid duplicates
+    
     let items = state.explorationItems.filter(i => i.code !== item.code);
+    const getTotal = (itms: ExplorationItem[]) => new Set(itms.flatMap(i => i.airportCodes)).size;
 
-    const getTotal = (itms: ExplorationItem[]) =>
-      new Set(itms.flatMap(i => i.airportCodes)).size;
+    // Always use airport mode eviction logic
+    const newCodes = new Set(newItem.airportCodes);
+    items = items.map(i => ({ ...i, airportCodes: i.airportCodes.filter(c => !newCodes.has(c)) }))
+                 .filter(i => i.airportCodes.length > 0);
 
-    if (viewMode === 'cities') {
-      // In city mode, evict whole cities (oldest first) until under limit
-      while (items.length > 0 && getTotal(items) + newItem.airportCodes.length > 6) {
+    while (items.length > 0 && getTotal(items) + newItem.airportCodes.length > 6) {
+      const oldest = items[0];
+      if (oldest.airportCodes.length <= 1) {
         items.shift();
-      }
-    } else {
-      // In airport mode, evict individual airports (oldest first)
-      const newCodes = new Set(newItem.airportCodes);
-      // Remove newItem codes from existing items
-      items = items.map(i => ({ ...i, airportCodes: i.airportCodes.filter(c => !newCodes.has(c)) }))
-                   .filter(i => i.airportCodes.length > 0);
-      // Evict oldest until fits
-      while (items.length > 0 && getTotal(items) + newItem.airportCodes.length > 6) {
-        const oldest = items[0];
-        if (oldest.airportCodes.length <= 1) {
-          items.shift();
-        } else {
-          items[0] = { ...oldest, airportCodes: oldest.airportCodes.slice(1) };
-        }
+      } else {
+        items[0] = { ...oldest, airportCodes: oldest.airportCodes.slice(1) };
       }
     }
 

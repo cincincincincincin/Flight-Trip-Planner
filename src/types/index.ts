@@ -2,21 +2,22 @@
 export interface Airport {
   code: string;
   name: string;
+  name_translations?: Record<string, string>;
   city_name?: string;
   city_code?: string;
   country_name?: string;
   country_code?: string;
-  flightable?: boolean;
   coordinates?: { lat: number; lon?: number; lng?: number };
+  urls?: { webSite?: string; wikipedia?: string; twitter?: string; liveAtc?: string; flightRadar?: string; googleMaps?: string };
   type: 'airport';
 }
 
 export interface City {
   code: string;
   name: string;
+  name_translations?: Record<string, string>;
   country_name?: string;
   country_code?: string;
-  has_flightable_airport?: boolean;
   airports?: Airport[];
   type: 'city';
 }
@@ -24,6 +25,7 @@ export interface City {
 export interface Country {
   code: string;
   name: string;
+  name_translations?: Record<string, string>;
   type: 'country';
   cities?: City[];
 }
@@ -79,7 +81,7 @@ export interface AirportFeatureProps {
   city_code?: string;
   country_code?: string;
   country_name?: string;
-  flightable?: boolean;
+  time_zone?: string | null;
 }
 
 export interface CityFeatureProps {

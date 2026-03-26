@@ -6,7 +6,7 @@ import type { Flight } from '../types';
 import { useTripStore } from '../stores/tripStore';
 import { useAirportsQuery, useAirportInfosQuery } from '../hooks/queries';
 import './TripItinerary.css';
-import { TEXTS } from '../constants/text';
+import { useTexts } from '../hooks/useTexts';
 import { CONFIG } from '../constants/config';
 import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
 import { UI_SYMBOLS } from '../constants/ui';
@@ -94,6 +94,7 @@ interface TripItineraryProps {
 }
 
 const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTrip, onClose, showSaveButton }) => {
+  const t = useTexts();
   const { tripState, undo, redo, pastTrips, futureTrips, isLoadedTrip, editMode } = useTripStore();
   const { data: airportsData } = useAirportsQuery();
 
@@ -233,15 +234,15 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
           onClick={() => { undo(); onUndo?.(); }}
           disabled={editMode ? !canUndoInEditMode : pastTrips.length === 0}
           className="trip-action-btn trip-action-btn--undo"
-          title={TEXTS.buttons.undo}
+          title={t.buttons.undo}
         >
-          {UI_SYMBOLS.UNDO} {TEXTS.buttons.undo}
+          {UI_SYMBOLS.UNDO} {t.buttons.undo}
         </button>
 
         {/* MIDDLE: Close (view mode) or Save/Update (edit/normal mode) */}
         <div className="trip-itinerary-middle">
           {isViewMode
-            ? <button className="trip-action-btn trip-action-btn--close" onClick={onClose}>{UI_SYMBOLS.CLOSE} {TEXTS.buttons.close}</button>
+            ? <button className="trip-action-btn trip-action-btn--close" onClick={onClose}>{UI_SYMBOLS.CLOSE} {t.buttons.close}</button>
             : showSaveButton && <SaveTripButton />
           }
         </div>
@@ -252,15 +253,15 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
             onClick={onEditTrip}
             disabled={tripEnded || !onEditTrip}
             className="trip-action-btn trip-action-btn--edit"
-            title={tripEnded ? TEXTS.trip.tripEnded : TEXTS.trip.editTrip}
-          >{TEXTS.buttons.edit}</button>
+            title={tripEnded ? t.trip.tripEnded : t.trip.editTrip}
+          >{t.buttons.edit}</button>
         ) : (
           <button
             onClick={() => { redo(); onRedo?.(); }}
             disabled={futureTrips.length === 0}
             className="trip-action-btn trip-action-btn--redo"
           >
-            {TEXTS.buttons.redo} {UI_SYMBOLS.REDO}
+            {t.buttons.redo} {UI_SYMBOLS.REDO}
           </button>
         )}
       </div>
@@ -310,12 +311,12 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
               <React.Fragment key={i}>
                 {timeAvailableMs !== null && timeAvailableCity && (
                   <div className="trip-time-available">
-                    {UI_SYMBOLS.CLOCK} {TEXTS.trip.timeInCity(timeAvailableCity)}: {formatDurationMs(timeAvailableMs)}
+                    {UI_SYMBOLS.CLOCK} {t.trip.timeInCity(timeAvailableCity)}: {formatDurationMs(timeAvailableMs)}
                   </div>
                 )}
                 {isManual ? (
                   <div className="trip-time-transfer">
-                    {TEXTS.trip.transfer}{timeToTransferMs !== null ? formatDurationMs(timeToTransferMs) : UI_SYMBOLS.DASH}
+                    {t.trip.transfer}{timeToTransferMs !== null ? formatDurationMs(timeToTransferMs) : UI_SYMBOLS.DASH}
                   </div>
                 ) : (
                   <div
@@ -385,7 +386,7 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
           className="trip-estimated-tooltip"
           style={{ top: estimatedTooltipPos.top, left: estimatedTooltipPos.left }}
         >
-          {TEXTS.card.estimatedTooltip}
+          {t.card.estimatedTooltip}
         </div>,
         document.body
       )}

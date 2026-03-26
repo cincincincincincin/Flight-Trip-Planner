@@ -3,54 +3,10 @@ import ReactDOM from 'react-dom';
 import { useColorStore, type ColorKey, type SizeKey } from '../stores/colorStore';
 import { useMapStore } from '../stores/mapStore';
 import './ColorSettings.css';
-import { TEXTS } from '../constants/text';
+import { useTexts } from '../hooks/useTexts';
 import { CONFIG } from '../constants/config';
 import { THEME_COLORS } from '../constants/theme';
 
-function interpolateZoomValue(minVal: number, maxVal: number, z: number, zMin: number, zMax: number): number {
-  const minZoom = Math.max(CONFIG.MIN_ZOOM, Math.min(zMin, zMax));
-  const maxZoom = Math.min(CONFIG.MAX_ZOOM, Math.max(zMin, zMax));
-  if (minZoom === maxZoom) return maxVal;
-  const clamped = Math.max(minZoom, Math.min(z, maxZoom));
-  const t = (clamped - minZoom) / (maxZoom - minZoom);
-  return minVal + (maxVal - minVal) * t;
-}
-
-
-
-const MAP_AIRPORT_ROWS: { key: ColorKey; label: string; hoverKey: ColorKey; labelKey: ColorKey; labelHoverKey: ColorKey }[] = [
-  { key: 'generalAirport',     label: TEXTS.colorSettings.generalAirports,     hoverKey: 'generalAirportHover',     labelKey: 'generalLabelColor',      labelHoverKey: 'generalLabelHoverColor' },
-  { key: 'destinationAirport', label: TEXTS.colorSettings.destinationAirports, hoverKey: 'destinationAirportHover', labelKey: 'destinationLabelColor',  labelHoverKey: 'destinationLabelHoverColor' },
-  { key: 'tripAirport',        label: TEXTS.colorSettings.tripAirports,        hoverKey: 'tripAirportHover',        labelKey: 'tripLabelColor',         labelHoverKey: 'tripLabelHoverColor' },
-];
-
-const FC_HIGHLIGHT_ROWS: { bgKey: ColorKey; borderKey: ColorKey; label: string }[] = [
-  { bgKey: 'fcHighlightAirportBg',  borderKey: 'fcHighlightAirportBorder',  label: TEXTS.colorSettings.sameAirport },
-  { bgKey: 'fcHighlightCityBg',     borderKey: 'fcHighlightCityBorder',     label: TEXTS.colorSettings.sameCity },
-  { bgKey: 'fcHighlightCountryBg',  borderKey: 'fcHighlightCountryBorder',  label: TEXTS.colorSettings.sameCountry },
-  { bgKey: 'fcHighlightSoonBg',     borderKey: 'fcHighlightSoonBorder',     label: TEXTS.colorSettings.departsTooSoon },
-];
-
-const MAP_ROUTE_ROWS: { key: ColorKey; label: string; hoverKey?: ColorKey; hint?: string }[] = [
-  { key: 'tripRoute',      label: TEXTS.colorSettings.tripRoute,      hoverKey: 'tripRouteHover' },
-  { key: 'transferRoute',  label: TEXTS.colorSettings.transferRoute,  hoverKey: 'transferRouteHover' },
-  { key: 'transferRoute',  label: TEXTS.colorSettings.transferPreview },
-];
-
-const SIZE_ROWS: { minKey: SizeKey; maxKey: SizeKey; label: string; min: number; max: number; step: number }[] = [
-  { minKey: 'generalAirportRadiusMin',        maxKey: 'generalAirportRadiusMax',        label: TEXTS.colorSettings.generalDotSize,              min: 0.5, max: 30, step: 0.5 },
-  { minKey: 'generalAirportHoverRadiusMin',   maxKey: 'generalAirportHoverRadiusMax',   label: TEXTS.colorSettings.generalDotHoverSize,        min: 0.5, max: 40, step: 0.5 },
-  { minKey: 'generalAirportLabelSizeMin',     maxKey: 'generalAirportLabelSizeMax',     label: TEXTS.colorSettings.generalLabelSize,            min: 6,   max: 40, step: 1 },
-  { minKey: 'generalLabelHoverSizeMin',       maxKey: 'generalLabelHoverSizeMax',       label: TEXTS.colorSettings.generalLabelHoverSize,      min: 6,   max: 48, step: 1 },
-  { minKey: 'highlightedAirportRadiusMin',    maxKey: 'highlightedAirportRadiusMax',    label: TEXTS.colorSettings.highlightedDotSize,          min: 0.5, max: 30, step: 0.5 },
-  { minKey: 'highlightedAirportHoverRadiusMin', maxKey: 'highlightedAirportHoverRadiusMax', label: TEXTS.colorSettings.highlightedDotHoverSize, min: 0.5, max: 40, step: 0.5 },
-  { minKey: 'highlightedLabelSizeMin',        maxKey: 'highlightedLabelSizeMax',        label: TEXTS.colorSettings.highlightedLabelSize,        min: 6,   max: 40, step: 1 },
-  { minKey: 'highlightedLabelHoverSizeMin',   maxKey: 'highlightedLabelHoverSizeMax',   label: TEXTS.colorSettings.highlightedLabelHoverSize,  min: 6,   max: 48, step: 1 },
-  { minKey: 'routeLineWidthMin',              maxKey: 'routeLineWidthMax',              label: TEXTS.colorSettings.routeLineWidth,              min: 0.2, max: 16, step: 0.2 },
-  { minKey: 'routeLineHoverWidthMin',         maxKey: 'routeLineHoverWidthMax',         label: TEXTS.colorSettings.routeLineHoverWidth,        min: 0.2, max: 20, step: 0.2 },
-  { minKey: 'tripRouteWidthMin',              maxKey: 'tripRouteWidthMax',              label: TEXTS.colorSettings.tripRouteWidth,         min: 0.2, max: 18, step: 0.2 },
-  { minKey: 'tripRouteHoverWidthMin',         maxKey: 'tripRouteHoverWidthMax',         label: TEXTS.colorSettings.tripRouteHoverWidth,   min: 0.2, max: 22, step: 0.2 },
-];
 
 // ─── Color helpers ─────────────────────────────────────────────────────────────
 
@@ -108,6 +64,7 @@ interface ScreenPickerProps {
 }
 
 const ScreenPickerOverlay: React.FC<ScreenPickerProps> = ({ onPick, onCancel }) => {
+  const t = useTexts();
   const [imgSrc, setImgSrc] = useState<string | null>(null);
   const pixelRef = useRef<{ data: Uint8ClampedArray; w: number; h: number; sx: number; sy: number } | null>(null);
   const [hoverColor, setHoverColor] = useState(THEME_COLORS.textBlack);
@@ -190,7 +147,7 @@ const ScreenPickerOverlay: React.FC<ScreenPickerProps> = ({ onPick, onCancel }) 
         ? <img src={imgSrc} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} draggable={false} />
         : <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ background: '#1e1e2e', color: 'white', padding: '12px 20px', borderRadius: 8, fontSize: 13 }}>
-              {TEXTS.colorSettings.picker.selectWindow}
+              {t.colorSettings.picker.selectWindow}
             </div>
           </div>
       }
@@ -211,7 +168,7 @@ const ScreenPickerOverlay: React.FC<ScreenPickerProps> = ({ onPick, onCancel }) 
             background: 'rgba(0,0,0,0.75)', color: 'white', fontSize: 12,
             padding: '4px 12px', borderRadius: 4, pointerEvents: 'none', whiteSpace: 'nowrap',
           }}>
-            {TEXTS.colorSettings.picker.clickToPick}
+            {t.colorSettings.picker.clickToPick}
           </div>
         </>
       )}
@@ -231,6 +188,7 @@ interface ColorPickerProps {
 const SV_W = CONFIG.COLOR_PICKER_SV_WIDTH, SV_H = CONFIG.COLOR_PICKER_SV_HEIGHT, STRIP_W = CONFIG.COLOR_PICKER_STRIP_WIDTH, STRIP_H = CONFIG.COLOR_PICKER_STRIP_HEIGHT;
 
 const ColorPicker: React.FC<ColorPickerProps> = ({ color, onChange, title }) => {
+  const t = useTexts();
   const [open, setOpen] = useState(false);
   const [screenPicking, setScreenPicking] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -425,9 +383,9 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ color, onChange, title }) => 
       <button
         className="cp-eyedropper"
         onClick={handleEyedropper}
-        title={'EyeDropper' in window ? TEXTS.controls.pickColor : TEXTS.controls.notSupportedBrowser}
+        title={'EyeDropper' in window ? t.controls.pickColor : t.controls.notSupportedBrowser}
         disabled={!('EyeDropper' in window)}
-      >{TEXTS.controls.eyedropper}</button>
+      >{t.controls.eyedropper}</button>
       <div className="cp-canvases">
         <canvas
           ref={svRef}
@@ -588,6 +546,42 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
   showOnlySizes = false,
   showSizes = true
 }) => {
+  const t = useTexts();
+
+  const MAP_AIRPORT_ROWS: { key: ColorKey; label: string; hoverKey: ColorKey; labelKey: ColorKey; labelHoverKey: ColorKey }[] = [
+    { key: 'generalAirport',     label: t.colorSettings.generalAirports,     hoverKey: 'generalAirportHover',     labelKey: 'generalLabelColor',      labelHoverKey: 'generalLabelHoverColor' },
+    { key: 'destinationAirport', label: t.colorSettings.destinationAirports, hoverKey: 'destinationAirportHover', labelKey: 'destinationLabelColor',  labelHoverKey: 'destinationLabelHoverColor' },
+    { key: 'tripAirport',        label: t.colorSettings.tripAirports,        hoverKey: 'tripAirportHover',        labelKey: 'tripLabelColor',         labelHoverKey: 'tripLabelHoverColor' },
+  ];
+
+  const FC_HIGHLIGHT_ROWS: { bgKey: ColorKey; borderKey: ColorKey; label: string }[] = [
+    { bgKey: 'fcHighlightAirportBg',  borderKey: 'fcHighlightAirportBorder',  label: t.colorSettings.sameAirport },
+    { bgKey: 'fcHighlightCityBg',     borderKey: 'fcHighlightCityBorder',     label: t.colorSettings.sameCity },
+    { bgKey: 'fcHighlightCountryBg',  borderKey: 'fcHighlightCountryBorder',  label: t.colorSettings.sameCountry },
+    { bgKey: 'fcHighlightSoonBg',     borderKey: 'fcHighlightSoonBorder',     label: t.colorSettings.departsTooSoon },
+  ];
+
+  const MAP_ROUTE_ROWS: { key: ColorKey; label: string; hoverKey?: ColorKey; hint?: string }[] = [
+    { key: 'tripRoute',      label: t.colorSettings.tripRoute,      hoverKey: 'tripRouteHover' },
+    { key: 'transferRoute',  label: t.colorSettings.transferRoute,  hoverKey: 'transferRouteHover' },
+    { key: 'transferRoute',  label: t.colorSettings.transferPreview },
+  ];
+
+  const SIZE_ROWS: { minKey: SizeKey; maxKey: SizeKey; label: string; min: number; max: number; step: number }[] = [
+    { minKey: 'generalAirportRadiusMin',        maxKey: 'generalAirportRadiusMax',        label: t.colorSettings.generalDotSize,              min: 0.5, max: 30, step: 0.5 },
+    { minKey: 'generalAirportHoverRadiusMin',   maxKey: 'generalAirportHoverRadiusMax',   label: t.colorSettings.generalDotHoverSize,        min: 0.5, max: 40, step: 0.5 },
+    { minKey: 'generalAirportLabelSizeMin',     maxKey: 'generalAirportLabelSizeMax',     label: t.colorSettings.generalLabelSize,            min: 6,   max: 40, step: 1 },
+    { minKey: 'generalLabelHoverSizeMin',       maxKey: 'generalLabelHoverSizeMax',       label: t.colorSettings.generalLabelHoverSize,      min: 6,   max: 48, step: 1 },
+    { minKey: 'highlightedAirportRadiusMin',    maxKey: 'highlightedAirportRadiusMax',    label: t.colorSettings.highlightedDotSize,          min: 0.5, max: 30, step: 0.5 },
+    { minKey: 'highlightedAirportHoverRadiusMin', maxKey: 'highlightedAirportHoverRadiusMax', label: t.colorSettings.highlightedDotHoverSize, min: 0.5, max: 40, step: 0.5 },
+    { minKey: 'highlightedLabelSizeMin',        maxKey: 'highlightedLabelSizeMax',        label: t.colorSettings.highlightedLabelSize,        min: 6,   max: 40, step: 1 },
+    { minKey: 'highlightedLabelHoverSizeMin',   maxKey: 'highlightedLabelHoverSizeMax',   label: t.colorSettings.highlightedLabelHoverSize,  min: 6,   max: 48, step: 1 },
+    { minKey: 'routeLineWidthMin',              maxKey: 'routeLineWidthMax',              label: t.colorSettings.routeLineWidth,              min: 0.2, max: 16, step: 0.2 },
+    { minKey: 'routeLineHoverWidthMin',         maxKey: 'routeLineHoverWidthMax',         label: t.colorSettings.routeLineHoverWidth,        min: 0.2, max: 20, step: 0.2 },
+    { minKey: 'tripRouteWidthMin',              maxKey: 'tripRouteWidthMax',              label: t.colorSettings.tripRouteWidth,         min: 0.2, max: 18, step: 0.2 },
+    { minKey: 'tripRouteHoverWidthMin',         maxKey: 'tripRouteHoverWidthMax',         label: t.colorSettings.tripRouteHoverWidth,   min: 0.2, max: 22, step: 0.2 },
+  ];
+
   const { startPoints, setStartPointColor, setColor, setSize, setZoomRange, resetColors, resetSizes, ...colors } = useColorStore();
 
   const [activeTooltip, setActiveTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
@@ -626,44 +620,44 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
       {!showOnlySizes && (
         <>
           <div className="color-settings-header">
-            <span className="color-settings-title">Colors</span>
-            <button className="color-settings-reset" onClick={resetColors}>{TEXTS.controls.resetAll}</button>
+            <span className="color-settings-title">{t.colorSettings.colors}</span>
+            <button className="color-settings-reset" onClick={resetColors}>{t.controls.resetAll}</button>
           </div>
 
           {/* ── Starting points ── */}
-          <div className="color-section-label">Starting points</div>
+          <div className="color-section-label">{t.colorSettings.startingPoints}</div>
           <div className="color-settings-col-headers color-settings-col-headers--sp7">
             <span className="color-col-label" style={{textAlign:'left'}}></span>
-            {helpBtn(TEXTS.colorSettings.help.airportDot)}
-            {helpBtn(TEXTS.colorSettings.help.airportDotHover)}
-            {helpBtn(TEXTS.colorSettings.help.routeLine)}
-            {helpBtn(TEXTS.colorSettings.help.routeLineHover)}
-            {helpBtn(TEXTS.colorSettings.help.labelColor)}
-            {helpBtn(TEXTS.colorSettings.help.labelHoverColor)}
+            {helpBtn(t.colorSettings.help.airportDot)}
+            {helpBtn(t.colorSettings.help.airportDotHover)}
+            {helpBtn(t.colorSettings.help.routeLine)}
+            {helpBtn(t.colorSettings.help.routeLineHover)}
+            {helpBtn(t.colorSettings.help.labelColor)}
+            {helpBtn(t.colorSettings.help.labelHoverColor)}
           </div>
           {startPoints.map((sp, i) => (
             <div key={i} className="color-row color-row--sp7">
-              <span className="color-row-label">{TEXTS.colorSettings.pointLabel(i + 1)}</span>
-              <ColorPicker color={sp.airport}          onChange={c => setStartPointColor(i, 'airport', c)}          title={`${TEXTS.colorSettings.pointLabel(i + 1)} - dot`} />
-              <ColorPicker color={sp.airportHover}     onChange={c => setStartPointColor(i, 'airportHover', c)}     title={`${TEXTS.colorSettings.pointLabel(i + 1)} - dot hover`} />
-              <ColorPicker color={sp.route}            onChange={c => setStartPointColor(i, 'route', c)}            title={`${TEXTS.colorSettings.pointLabel(i + 1)} - line`} />
-              <ColorPicker color={sp.routeHover}       onChange={c => setStartPointColor(i, 'routeHover', c)}       title={`${TEXTS.colorSettings.pointLabel(i + 1)} - line hover`} />
-              <ColorPicker color={sp.label}            onChange={c => setStartPointColor(i, 'label', c)}            title={`${TEXTS.colorSettings.pointLabel(i + 1)} - label`} />
-              <ColorPicker color={sp.labelHover}       onChange={c => setStartPointColor(i, 'labelHover', c)}       title={`${TEXTS.colorSettings.pointLabel(i + 1)} - label hover`} />
+              <span className="color-row-label">{t.colorSettings.pointLabel(i + 1)}</span>
+              <ColorPicker color={sp.airport}          onChange={c => setStartPointColor(i, 'airport', c)}          title={`${t.colorSettings.pointLabel(i + 1)} - dot`} />
+              <ColorPicker color={sp.airportHover}     onChange={c => setStartPointColor(i, 'airportHover', c)}     title={`${t.colorSettings.pointLabel(i + 1)} - dot hover`} />
+              <ColorPicker color={sp.route}            onChange={c => setStartPointColor(i, 'route', c)}            title={`${t.colorSettings.pointLabel(i + 1)} - line`} />
+              <ColorPicker color={sp.routeHover}       onChange={c => setStartPointColor(i, 'routeHover', c)}       title={`${t.colorSettings.pointLabel(i + 1)} - line hover`} />
+              <ColorPicker color={sp.label}            onChange={c => setStartPointColor(i, 'label', c)}            title={`${t.colorSettings.pointLabel(i + 1)} - label`} />
+              <ColorPicker color={sp.labelHover}       onChange={c => setStartPointColor(i, 'labelHover', c)}       title={`${t.colorSettings.pointLabel(i + 1)} - label hover`} />
             </div>
           ))}
 
           <hr className="color-divider" />
 
           {/* ── Map elements ── */}
-          <div className="color-section-label">Map elements</div>
-          <div className="color-subsection-label">Airports</div>
+          <div className="color-section-label">{t.colorSettings.mapElements}</div>
+          <div className="color-subsection-label">{t.colorSettings.airports}</div>
           <div className="color-settings-col-headers color-settings-col-headers--elem4">
             <span className="color-col-label" style={{textAlign:'left'}}></span>
-            {helpBtn(TEXTS.colorSettings.help.dotColor)}
-            {helpBtn(TEXTS.colorSettings.help.dotHoverColor)}
-            {helpBtn(TEXTS.colorSettings.help.labelColor)}
-            {helpBtn(TEXTS.colorSettings.help.labelHoverColor)}
+            {helpBtn(t.colorSettings.help.dotColor)}
+            {helpBtn(t.colorSettings.help.dotHoverColor)}
+            {helpBtn(t.colorSettings.help.labelColor)}
+            {helpBtn(t.colorSettings.help.labelHoverColor)}
           </div>
           {MAP_AIRPORT_ROWS.map(({ key, label, hoverKey, labelKey, labelHoverKey }) => (
             <div key={key} className="color-row color-row--elem4">
@@ -675,11 +669,11 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
             </div>
           ))}
 
-          <div className="color-subsection-label">Routes</div>
+          <div className="color-subsection-label">{t.colorSettings.routes}</div>
           <div className="color-settings-col-headers color-settings-col-headers--elem2">
             <span className="color-col-label" style={{textAlign:'left'}}></span>
-            {helpBtn(TEXTS.colorSettings.help.color)}
-            {helpBtn(TEXTS.colorSettings.help.hoverColor)}
+            {helpBtn(t.colorSettings.help.color)}
+            {helpBtn(t.colorSettings.help.hoverColor)}
           </div>
       {MAP_ROUTE_ROWS.map(({ key, label, hoverKey, hint }) => (
         <div key={`${label}-${key}`} className="color-row color-row--elem2">
@@ -696,11 +690,11 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
         </div>
       ))}
 
-          <div className="color-subsection-label">Flight card highlights</div>
+          <div className="color-subsection-label">{t.colorSettings.flightCardHighlights}</div>
           <div className="color-settings-col-headers color-settings-col-headers--elem2">
             <span className="color-col-label" style={{textAlign:'left'}}></span>
-            {helpBtn(TEXTS.colorSettings.help.bgColor)}
-            {helpBtn(TEXTS.colorSettings.help.borderColor)}
+            {helpBtn(t.colorSettings.help.bgColor)}
+            {helpBtn(t.colorSettings.help.borderColor)}
           </div>
           {FC_HIGHLIGHT_ROWS.map(({ bgKey, borderKey, label }) => (
             <div key={bgKey} className="color-row color-row--elem2">
@@ -717,13 +711,13 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
       {/* ── Sizes ── (tylko jeśli showSizes = true) */}
       {showSizes && (
         <>
-          <div className="color-section-label">Sizes</div>
+          <div className="color-section-label">{t.colorSettings.sizes}</div>
 
           {/* Zoom display + reset to default sizes */}
           <div className="size-row">
             <div className="size-row-header">
-              <span className="color-row-label">{TEXTS.colorSettings.zoomRange}</span>
-              <span className="size-value">{zoomRangeMin.toFixed(1)}–{zoomRangeMax.toFixed(1)}</span>
+              <span className="color-row-label">{t.colorSettings.zoomRange}</span>
+              <span className="size-value">{Math.min(zoomRangeMin, zoomRangeMax).toFixed(1)}–{Math.max(zoomRangeMin, zoomRangeMax).toFixed(1)}</span>
             </div>
             <RangeSlider
               min={CONFIG.MIN_ZOOM}
@@ -731,58 +725,38 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
               step={0.1}
               minVal={zoomRangeMin}
               maxVal={zoomRangeMax}
-              onMinChange={(v) => {
-                const low = Math.min(v, zoomRangeMax);
-                const high = Math.max(v, zoomRangeMax);
-                setZoomRange(low, high);
-              }}
-              onMaxChange={(v) => {
-                const low = Math.min(zoomRangeMin, v);
-                const high = Math.max(zoomRangeMin, v);
-                setZoomRange(low, high);
-              }}
+              onMinChange={(v) => setZoomRange(v, zoomRangeMax)}
+              onMaxChange={(v) => setZoomRange(zoomRangeMin, v)}
             />
           </div>
           <div className="zoom-info-row">
-            <span className="zoom-label">{TEXTS.controls.zoom}</span>
+            <span className="zoom-label">{t.controls.zoom}</span>
             <span className="zoom-value">{zoom.toFixed(2)}</span>
             <button className="zoom-copy-btn" onClick={resetSizes} title="Reset all size sliders to defaults">
-              {TEXTS.controls.resetSizes}
+              {t.controls.resetSizes}
             </button>
           </div>
 
           {SIZE_ROWS.map(({ minKey, maxKey, label, min, max, step }) => {
             const minVal = sizes[minKey] as number;
             const maxVal = sizes[maxKey] as number;
-            const current = interpolateZoomValue(minVal, maxVal, zoom, zoomRangeMin, zoomRangeMax);
             const precision = step < 1 ? 1 : 0;
+            const loZ = Math.min(zoomRangeMin, zoomRangeMax).toFixed(1);
+            const hiZ = Math.max(zoomRangeMin, zoomRangeMax).toFixed(1);
             return (
-              <div key={`${minKey}-${maxKey}`} className="size-row">
-                <div className="size-row-header">
-                  <span className="color-row-label">{label}</span>
-                  <span className="size-value">
-                    {minVal.toFixed(precision)}–{maxVal.toFixed(precision)}
-                    <span className="size-at-zoom"> @{zoom.toFixed(1)} → {current.toFixed(precision)}</span>
-                  </span>
-                </div>
+              <div key={`${minKey}-${maxKey}`} className="size-group">
+                <span className="color-row-label">{label}</span>
+                <span className="size-value">
+                  {minVal.toFixed(precision)} @{loZ} → {maxVal.toFixed(precision)} @{hiZ}
+                </span>
                 <RangeSlider
                   min={min}
                   max={max}
                   step={step}
                   minVal={minVal}
                   maxVal={maxVal}
-                  onMinChange={(v) => {
-                    const low = Math.min(v, maxVal);
-                    const high = Math.max(v, maxVal);
-                    setSize(minKey, low);
-                    if (high !== maxVal) setSize(maxKey, high);
-                  }}
-                  onMaxChange={(v) => {
-                    const low = Math.min(minVal, v);
-                    const high = Math.max(minVal, v);
-                    setSize(minKey, low);
-                    if (high !== maxVal) setSize(maxKey, high);
-                  }}
+                  onMinChange={(v) => setSize(minKey, v)}
+                  onMaxChange={(v) => setSize(maxKey, v)}
                 />
               </div>
             );

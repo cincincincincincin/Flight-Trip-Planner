@@ -36,10 +36,32 @@
   color: var(--text-primary);
 }
 
+.flights-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
 .last-fetched {
   font-size: 10px;
   font-family: var(--font-mono);
   color: var(--text-muted);
+}
+
+.data-attribution {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.attribution-link {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.attribution-link:hover {
+  color: var(--text-secondary);
+  text-decoration: underline;
 }
 
 .refresh-button {

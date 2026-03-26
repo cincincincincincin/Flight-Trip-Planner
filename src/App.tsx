@@ -16,7 +16,7 @@ import { useSettingsStore } from './stores/settingsStore';
 import { useAuthStore } from './stores/authStore';
 import { useFilterStore } from './stores/filterStore';
 import { useColorStore } from './stores/colorStore'; // for flight card highlight CSS vars
-import { TEXTS } from './constants/text';
+import { useTexts } from './hooks/useTexts';
 import './App.css';
 import { CONFIG } from './constants/config';
 import { MAP_ASSETS } from './constants/mapStyles';
@@ -53,6 +53,7 @@ function filterOutliersCoords(coords: [number, number][], maxDeg = CONFIG.OUTLIE
 const MemoizedMapComponent = memo(MapComponent);
 
 function App() {
+  const t = useTexts();
   const mapRef = useRef<any>(null);
   const rightPanelRef = useRef<any>(null);
   const handleAddToTripRef = useRef<((flight: any) => Promise<void>) | null>(null);
@@ -66,10 +67,10 @@ function App() {
 
   const {
     showAirports, setShowAirports,
-    showCities, setShowCities,
+    // showCities, setShowCities,
     viewport, setViewport,
     controlsPanelOpen, setControlsPanelOpen,
-    viewMode, setViewMode,
+    // viewMode, setViewMode,
   } = useMapStore();
 
   const {
@@ -238,19 +239,19 @@ function App() {
   }, [airportsData, flyToLocation]);
 
   const setDisplayMode = useCallback((mode: string) => {
-    if (mode === 'airports') {
-      setShowAirports(true);
-      setShowCities(false);
-      setViewMode('airports');
-      if (viewport.zoom < CONFIG.AIRPORT_ZOOM_THRESHOLD) {
-        mapRef.current?.flyTo({ zoom: CONFIG.AIRPORT_ZOOM_THRESHOLD, duration: CONFIG.FLY_DURATION, essential: true });
-      }
-    } else {
+    //if (mode === 'airports') {
+    setShowAirports(true);
+    // setShowCities(false);
+    // setViewMode('airports');
+    if (viewport.zoom < CONFIG.AIRPORT_ZOOM_THRESHOLD) {
+      mapRef.current?.flyTo({ zoom: CONFIG.AIRPORT_ZOOM_THRESHOLD, duration: CONFIG.FLY_DURATION, essential: true });
+    }
+    /*} else {
       setShowAirports(false);
       setShowCities(true);
       setViewMode('cities');
-    }
-  }, [viewport.zoom, setShowAirports, setShowCities, setViewMode]);
+    }*/
+  }, [viewport.zoom, setShowAirports /*, setShowCities, setViewMode*/]);
 
   const extractCoordinates = (item: any) => {
     if (!item?.data) return null;
@@ -272,14 +273,14 @@ function App() {
     if (type === 'airport') return [code];
     if (!airportsData) return [];
     return airportsData.features
-      .filter(f => f.properties.city_code === code && f.properties.flightable)
+      .filter(f => f.properties.city_code === code)
       .map(f => f.properties.code);
   }, [airportsData]);
 
   const fitToCountry = useCallback((countryCode: string) => {
     if (airportsData) {
       const coords = airportsData.features
-        .filter(f => f.properties.country_code === countryCode && f.properties.flightable)
+        .filter(f => f.properties.country_code === countryCode)
         .map(f => f.geometry.coordinates as [number, number]);
       if (coords.length > 0) {
         const continental = filterOutliersCoords(coords);
@@ -328,7 +329,7 @@ function App() {
         code: item.data.code,
         name: item.data.name || item.data.code,
         airportCodes: newCodes,
-      }, viewMode);
+      }/*, viewMode*/);
       if (!item.fromMap) fitBoundsToAirportCodes(allCodes);
       // If we were in country selection mode, switch the panel to the newly selected item
       if (selectedItem.type === 'country') {
@@ -365,7 +366,7 @@ function App() {
         code: item.data.code,
         name: item.data.name || item.data.code,
         airportCodes: [item.data.code],
-      }, viewMode);
+      }/*, viewMode*/);
       // Camera only for search selections — map clicks don't move camera
       if (item.fromMap) return;
     } else if (item.type === 'city') {
@@ -376,7 +377,7 @@ function App() {
         code: item.data.code,
         name: item.data.name || item.data.code,
         airportCodes: cityAirportCodes,
-      }, viewMode);
+      }/*, viewMode*/);
 
       if (!item.fromMap) {
         let coords = extractCoordinates(item);
@@ -415,7 +416,7 @@ function App() {
     if (coords) {
       flyToLocation(coords.lng, coords.lat, CONFIG.FALLBACK_ZOOM.AIRPORT);
     }
-  }, [setDisplayMode, flyToLocation, fitBoundsToAirportCodes, tripState, flightsData, travelDate, selectedItem, viewMode, addExplorationItem, explorationItems, getExplorationAirportCodes, setSelectedItem, setSelectedAirportCode, setHighlightedAirports, setFlightsData]);
+  }, [setDisplayMode, flyToLocation, fitBoundsToAirportCodes, tripState, flightsData, travelDate, selectedItem, /*viewMode,*/ addExplorationItem, explorationItems, getExplorationAirportCodes, setSelectedItem, setSelectedAirportCode, setHighlightedAirports, setFlightsData]);
 
   const handleAddToTrip = useCallback(async (flight: any) => {
     const destCode = flight.destination_airport_code;
@@ -618,11 +619,11 @@ function App() {
           try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(countryCode) || countryCode; } catch { return countryCode; }
         })();
     clearExploration();
-    addExplorationItem({ type: 'country', code: countryCode, name: resolvedName, airportCodes: codes }, viewMode);
+    addExplorationItem({ type: 'country', code: countryCode, name: resolvedName, airportCodes: codes }/*, viewMode*/);
     const firstFeat = airportsData.features.find(f => f.properties.code === codes[0]);
     if (firstFeat) setSelectedItem({ type: 'airport', data: firstFeat.properties as any });
     fitBoundsToAirportCodes(codes);
-  }, [airportsData, clearExploration, addExplorationItem, viewMode, setSelectedItem, fitBoundsToAirportCodes]);
+  }, [airportsData, clearExploration, addExplorationItem, /*viewMode,*/ setSelectedItem, fitBoundsToAirportCodes]);
 
   // Camera: when selectedAirportCodes grows (search only, not map clicks), fitBounds
   useEffect(() => {
@@ -645,9 +646,11 @@ function App() {
     fitBoundsToAirportCodes([...originCodes, ...highlightedAirports]);
   }, [highlightedAirports, selectedAirportCode, selectedAirportCodes, tripState, fitBoundsToAirportCodes]);
 
+  /*
   // Mode-switch effect: when switching to city mode, expand airport exploration items to full cities
   useEffect(() => {
-    if (viewMode !== 'cities' || !airportsData) return;
+// ... commented out city expansion effect ...
+if (viewMode !== 'cities' || !airportsData) return;
     if (explorationItems.length === 0) return;
     const needsExpansion = explorationItems.some(i => i.type === 'airport');
     if (!needsExpansion) return;
@@ -670,8 +673,8 @@ function App() {
         }
       }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode]);
+      }, [viewMode]);
+  */
 
   useEffect(() => {
     document.documentElement.style.setProperty('--map-bg-image', MAP_ASSETS.BACKGROUND_IMAGE);
@@ -693,11 +696,11 @@ function App() {
               className="open-controls-btn"
               onClick={() => setControlsPanelOpen(!controlsPanelOpen)}
             >
-              {controlsPanelOpen ? TEXTS.buttons.closeControls : TEXTS.buttons.openControls}
+              {controlsPanelOpen ? t.buttons.closeControls : t.buttons.openControls}
             </button>
             {!user && (
               <button className="sign-in-btn" onClick={() => setShowAuthModal(true)}>
-                {TEXTS.buttons.signIn}
+                {t.buttons.signIn}
               </button>
             )}
             {user && <UserMenu onOpenSavedTrips={() => setShowSavedTrips(true)} />}

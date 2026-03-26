@@ -1,3 +1,4 @@
+/*
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { FeatureCollection, LineString } from 'geojson';
 import type { RouteFeatureProps, SelectedItem } from '../../types';
@@ -51,3 +52,4 @@ export function addRoutesLayer(
     map.getCanvas().style.cursor = '';
   });
 }
+*/

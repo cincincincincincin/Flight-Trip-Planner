@@ -1,24 +1,32 @@
-import { useQuery, useQueries } from '@tanstack/react-query';
-import { getAirportsGeoJSON, getCitiesGeoJSON, getRoutesGeoJSON, getAirportsByCountry } from '../api/geo';
-import { getAirportInfo, getFlightOffers } from '../api/flights';
-import type { FlightOffersResponse } from '../types';
+import { useQuery } from '@tanstack/react-query';
+import { getAirportsGeoJSON, getCitiesGeoJSON, /* getRoutesGeoJSON, */ getAirportsByCountry } from '../api/geo';
+import { CONFIG } from '../constants/config';
+import { getFlightOffers } from '../api/flights';
+import type { AirportInfo, FlightOffersResponse } from '../types';
+import { useSettingsStore } from '../stores/settingsStore';
+import { useMemo } from 'react';
 
-// GeoJSON – essentially static data, cache forever
-export const useAirportsQuery = () =>
-  useQuery({
-    queryKey: ['airports'],
-    queryFn: getAirportsGeoJSON,
+// GeoJSON – essentially static data, cache per language
+export const useAirportsQuery = () => {
+  const language = useSettingsStore(s => s.language);
+  return useQuery({
+    queryKey: ['airports', language],
+    queryFn: () => getAirportsGeoJSON(language),
     staleTime: Infinity,
   });
+};
 
-export const useCitiesQuery = (enabled: boolean) =>
-  useQuery({
-    queryKey: ['cities'],
-    queryFn: getCitiesGeoJSON,
+export const useCitiesQuery = (enabled: boolean) => {
+  const language = useSettingsStore(s => s.language);
+  return useQuery({
+    queryKey: ['cities', language],
+    queryFn: () => getCitiesGeoJSON(language),
     enabled,
     staleTime: Infinity,
   });
+};
 
+/*
 export const useRoutesQuery = (enabled: boolean) =>
   useQuery({
     queryKey: ['routes'],
@@ -26,35 +34,53 @@ export const useRoutesQuery = (enabled: boolean) =>
     enabled,
     staleTime: Infinity,
   });
+*/
 
-// Airport timezone/date info – 5 min cache per airport code
-export const useAirportInfoQuery = (code: string | null) =>
-  useQuery({
-    queryKey: ['airportInfo', code],
-    queryFn: () => getAirportInfo(code!),
-    enabled: !!code,
-    staleTime: 5 * 60 * 1000,
+function computeAirportInfo(time_zone: string): AirportInfo {
+  const now = new Date();
+  const local = now.toLocaleString('sv-SE', {
+    timeZone: time_zone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
   });
+  const current_local_datetime = local.replace(' ', 'T');
+  return { time_zone, current_local_date: current_local_datetime.substring(0, 10), current_local_datetime };
+}
 
-// Batch airport info queries – returns array of results in same order as codes
-export const useAirportInfosQuery = (codes: string[]) =>
-  useQueries({
-    queries: codes.map(code => ({
-      queryKey: ['airportInfo', code] as const,
-      queryFn: () => getAirportInfo(code),
-      enabled: !!code,
-      staleTime: 5 * 60 * 1000,
-    })),
-  });
+// Airport timezone/date info – derived from GeoJSON data (no extra requests)
+export const useAirportInfoQuery = (code: string | null) => {
+  const { data: airportsData } = useAirportsQuery();
+  return useMemo(() => {
+    if (!code || !airportsData) return { data: undefined };
+    const tz = airportsData.features.find((f: { properties: { code: string; time_zone?: string | null } }) => f.properties.code === code)?.properties.time_zone;
+    if (!tz) return { data: undefined };
+    return { data: computeAirportInfo(tz) };
+  }, [code, airportsData]);
+};
 
-// All flightable airports for a country with timezone data – 24h cache (matches backend)
-export const useAirportsByCountryQuery = (countryCode: string | null) =>
-  useQuery({
-    queryKey: ['airportsByCountry', countryCode],
-    queryFn: () => getAirportsByCountry(countryCode!),
+// Batch airport info – derived from GeoJSON data (no extra requests)
+export const useAirportInfosQuery = (codes: string[]) => {
+  const { data: airportsData } = useAirportsQuery();
+  return useMemo(() => {
+    if (!airportsData) return codes.map(() => ({ data: undefined }));
+    return codes.map(code => {
+      const tz = airportsData.features.find((f: { properties: { code: string; time_zone?: string | null } }) => f.properties.code === code)?.properties.time_zone;
+      if (!tz) return { data: undefined };
+      return { data: computeAirportInfo(tz) };
+    });
+  }, [codes, airportsData]);
+};
+
+// Wszystkie lotniska dla danego kraju z danymi stref czasowych – cache 24h (zgodnie z backendem)
+export const useAirportsByCountryQuery = (countryCode: string | null) => {
+  const language = useSettingsStore(s => s.language);
+  return useQuery({
+    queryKey: ['airportsByCountry', countryCode, language],
+    queryFn: () => getAirportsByCountry(countryCode!, language),
     enabled: !!countryCode,
     staleTime: 24 * 60 * 60 * 1000,
   });
+};
 
 // Flight price offers – 5 min cache, disabled until explicitly triggered
 export const useFlightOffersQuery = (
@@ -67,5 +93,5 @@ export const useFlightOffersQuery = (
     queryKey: ['flightOffers', origin, dest, params],
     queryFn: () => getFlightOffers(origin!, dest!, params),
     enabled: !!enabled,
-    staleTime: 5 * 60 * 1000,
+    staleTime: CONFIG.CACHE_AIRPORT_INFO_MS,
   });

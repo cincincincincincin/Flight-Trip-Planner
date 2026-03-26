@@ -394,6 +394,23 @@
 
 .price-error { color: var(--red); }
 
+.price-attribution {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.price-attribution .attribution-link {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.price-attribution .attribution-link:hover {
+  color: var(--text-secondary);
+  text-decoration: underline;
+}
+
 .price-info {
   display: flex;
   flex-direction: column;
