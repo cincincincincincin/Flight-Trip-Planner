@@ -1,9 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import axios from 'axios';
-import { search, getCountryCities, getCityAirports, getAirport } from '../../api/search';
-import { CONFIG } from '../../constants/config';
-import type { Country, City, Airport, SearchPhaseInfo, Airport as AirportType } from '../../types';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { search, getCountryCities, getCityAirports, getAirport } from '../api/search';
+import { CONFIG } from '../constants/config';
+import type { Country, City, Airport, SearchPhaseInfo, Airport as AirportType } from '../types';
+import { useSettingsStore } from '../stores/settingsStore';
 
 interface CountryCacheEntry {
   cities: City[];

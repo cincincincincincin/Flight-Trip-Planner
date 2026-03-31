@@ -3,86 +3,26 @@ import type { Flight, Airport, City, CountryAirport } from '../types';
 import FlightsList from './FlightsList';
 import FlightsFilter from './FlightsFilter';
 import DateInput from './DateInput';
-import AirportTransferPicker from './AirportTransferPicker';
+import ExplorationList from './rightPanel/ExplorationList';
+import TripAirportSection from './rightPanel/TripAirportSection';
+import PendingCountryPicker from './rightPanel/PendingCountryPicker';
+import CountryModeSection from './rightPanel/CountryModeSection';
+import { useExplorationGroups } from './rightPanel/useExplorationGroups';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useTripStore } from '../stores/tripStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useFilterStore } from '../stores/filterStore';
-import { useMapStore } from '../stores/mapStore';
 import { useAirportInfoQuery, useAirportInfosQuery, useAirportsQuery, useAirportsByCountryQuery } from '../hooks/queries';
 import { getCityAirports, getCountryCities } from '../api/search';
+import { useTravelDate } from '../hooks/useTravelDate';
 import './RightPanel.css';
 import { useTexts } from '../hooks/useTexts';
 import type { Language } from '../constants/text';
 import { UI_SYMBOLS } from '../constants/ui';
 import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
 import { CONFIG } from '../constants/config';
-
-
-const haversineKm = (lon1: number, lat1: number, lon2: number, lat2: number): number => {
-  const R = CONFIG.EARTH_RADIUS_KM;
-  const toRad = (d: number) => d * CONFIG.DEG_TO_RAD;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
-};
-
-const BROWSER_TIMEZONE = (() => {
-  try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return null; }
-})();
-
-function buildTzGroups(airports: Array<{ code: string; name: string; time_zone?: string | null }>) {
-  // Key by UTC offset in minutes to deduplicate same-offset IANA timezones (e.g. America/Detroit vs America/New_York)
-  const groups = new Map<string | number, { tz: string; airports: Array<{ code: string; name: string }>; currentDT: string; utcLabel: string; currentDateStr: string; currentTimeStr: string }>();
-  const now = new Date();
-  const utcStr = now.toLocaleString(FORMAT_LOCALES.SE, { timeZone: 'UTC' });
-  for (const airport of airports) {
-    const tz = airport.time_zone ?? CONFIG.UNKNOWN_TIMEZONE;
-    if (tz === CONFIG.UNKNOWN_TIMEZONE) {
-      if (!groups.has(CONFIG.UNKNOWN_TIMEZONE)) {
-        groups.set(CONFIG.UNKNOWN_TIMEZONE, { tz: CONFIG.UNKNOWN_TIMEZONE, airports: [], currentDT: CONFIG.UNKNOWN_TZ_DUMMY, utcLabel: CONFIG.UNKNOWN_TZ_UTCLABEL, currentDateStr: '', currentTimeStr: '' });
-      }
-      groups.get(CONFIG.UNKNOWN_TIMEZONE)!.airports.push(airport);
-      continue;
-    }
-    const localStr = now.toLocaleString(FORMAT_LOCALES.SE, { timeZone: tz });
-    const diffMin = Math.round((new Date(localStr.replace(' ', 'T')).getTime() - new Date(utcStr.replace(' ', 'T')).getTime()) / 60000);
-    if (!groups.has(diffMin)) {
-      const diffH = diffMin / CONFIG.MINUTES_IN_HOUR;
-      const sign = diffH >= 0 ? '+' : '-';
-      const absH = Math.abs(diffH);
-      const h = Math.floor(absH);
-      const m = Math.round((absH - h) * CONFIG.MINUTES_IN_HOUR);
-      const utcLabel = `UTC${sign}${h}${m > 0 ? ':' + String(m).padStart(2, '0') : ''}`;
-      const currentDateStr = now.toLocaleDateString(FORMAT_LOCALES.GB, { timeZone: tz, weekday: 'short', day: '2-digit', month: '2-digit' });
-      const currentTimeStr = now.toLocaleTimeString(FORMAT_LOCALES.GB, { timeZone: tz, hour: '2-digit', minute: '2-digit' });
-      groups.set(diffMin, { tz, airports: [], currentDT: localStr, utcLabel, currentDateStr, currentTimeStr });
-    }
-    groups.get(diffMin)!.airports.push(airport);
-  }
-  return Array.from(groups.values()).sort((a, b) => a.currentDT.localeCompare(b.currentDT));
-}
-
-function resolveTimezone(
-  airportCodes: string[],
-  tzMap: Record<string, string>,
-  lastAddedCode: string | null,
-): string | null {
-  const known = airportCodes.filter(c => tzMap[c]);
-  if (known.length === 0) return null;
-
-  const tzCount: Record<string, number> = {};
-  for (const code of known) tzCount[tzMap[code]] = (tzCount[tzMap[code]] || 0) + 1;
-
-  const maxCount = Math.max(...Object.values(tzCount));
-  const leading = Object.entries(tzCount).filter(([, c]) => c === maxCount).map(([tz]) => tz);
-
-  if (leading.length === 1) return leading[0];
-  if (BROWSER_TIMEZONE && tzCount[BROWSER_TIMEZONE]) return BROWSER_TIMEZONE;
-  if (lastAddedCode && tzMap[lastAddedCode]) return tzMap[lastAddedCode];
-  return leading[0];
-}
+import { haversineKm } from '../utils/math';
+import { BROWSER_TIMEZONE, buildTzGroups, resolveTimezone } from '../utils/timezoneUtils';
 
 interface RightPanelProps {
   onClose: () => void;
@@ -98,7 +38,7 @@ interface RightPanelProps {
 
 const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip, onPreviewAirport, onClearPreview, pendingCountryPicker, onClearCountryPicker, onFitBounds, onCountryAirportsConfirmed, onSwitchToCountryView }, ref) => {
   const t = useTexts();
-  const { selectedItem, flightsData, setSelectedAirportCodes, explorationItems, removeExplorationItem, addExplorationItem, clearExploration } = useSelectionStore();
+  const { selectedItem, flightsData, setSelectedAirportCodes, explorationItems, removeExplorationItem, addExplorationItem } = useSelectionStore();
   const { tripState, setManualTransferAirportCodes } = useTripStore();
   const { travelDate, setTravelDate, setTimezone, minTransferHours, minManualTransferHours, language } = useSettingsStore();
   const { clearFilters } = useFilterStore();
@@ -244,10 +184,6 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   const [selectedTimezoneOverride, setSelectedTimezoneOverride] = useState<string | null>(null);
   const [selectedTimezoneAirportCode, setSelectedTimezoneAirportCode] = useState<string | null>(null);
   const [, setNowTick] = useState(0);
-  // Track previous resolved timezone to sync travelDate when it auto-switches
-  const prevResolvedTZRef = useRef<string | null | undefined>(undefined);
-  const travelDateForTZRef = useRef(travelDate);
-  useEffect(() => { travelDateForTZRef.current = travelDate; }, [travelDate]);
 
   // ── Airport info for timezone ──────────────────────────────────────────────
   const primaryAirportCode = useMemo(() => {
@@ -351,7 +287,6 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     setSelectedTimezoneOverride(null);
     setSelectedTimezoneAirportCode(null);
     setCountryActiveTZ(null);
-    prevResolvedTZRef.current = undefined; // reset so next auto-TZ change is treated as initial
   }, [selectedItem, clearFilters]);
 
   // ── Reset pendingSelectedAirports when pendingCountryPicker changes ────────
@@ -491,93 +426,12 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     onClose();
   }, [clearFilters, onClose]);
 
-  // ── Travel date ────────────────────────────────────────────────────────────
-  const prevSelectedItemKeyRef = useRef<string | null>(null);
-  const prevTimezoneRef = useRef<string | null>(null);
-  const prevExplorationItemsCountRef = useRef<number>(0);
-
-  useEffect(() => {
-    if (!timezone) return;
-    // When the user manually overrides the timezone (via the TZ switch button),
-    // preserve the current travelDate — we just shift the display window to the new TZ.
-    // Only reset travelDate when selectedItem or arrival time changes.
-    if (selectedTimezoneOverride) return;
-
-    const overrideDatetime = selectedItem?.type === 'airport' ? selectedItem.overrideFromDatetime : undefined;
-    const key = selectedItem
-      ? `${selectedItem.type}:${(selectedItem.data as { code?: string })?.code ?? ''}:${overrideDatetime ?? ''}`
-      : null;
-    if (key !== prevSelectedItemKeyRef.current) {
-      prevSelectedItemKeyRef.current = key;
-      // selectedItem changed, reset date
-      if (effectiveArrivalTimeUTC) {
-        setTravelDate(new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }));
-      } else {
-        setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }));
-      }
-      prevTimezoneRef.current = timezone;
-      prevExplorationItemsCountRef.current = explorationItems.length;
-      return;
-    }
-
-    // Check if airport(s) were removed (explorationItems decreased)
-    const itemsWereRemoved = explorationItems.length < prevExplorationItemsCountRef.current;
-    const timezoneChanged = timezone !== prevTimezoneRef.current;
-
-    if (itemsWereRemoved && timezoneChanged && prevTimezoneRef.current) {
-      // Smart date handling: check if the old timezone's "today" matches the current travelDate
-      const oldTzToday = new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: prevTimezoneRef.current });
-
-      if (travelDate === oldTzToday) {
-        // User was viewing today in the old timezone, update to today in new timezone
-        setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }));
-      }
-      // If travelDate was not today in the old timezone (user selected a different date),
-      // keep the travelDate and only change the timezone
-    } else if (!itemsWereRemoved && timezoneChanged) {
-      // Timezone changed but airports weren't removed - reset date to today/arrival date
-      if (effectiveArrivalTimeUTC) {
-        setTravelDate(new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }));
-      } else {
-        setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }));
-      }
-    }
-
-    prevTimezoneRef.current = timezone;
-    prevExplorationItemsCountRef.current = explorationItems.length;
-  }, [selectedItem, timezone, explorationItems.length, setTravelDate, effectiveArrivalTimeUTC, selectedTimezoneOverride, travelDate]);
-
-  // (countryDisplayTZ moved above timezone declaration)
-
-  // ── Sync travelDate when resolvedTimezone auto-switches (e.g. Melbourne added) ──
-  useEffect(() => {
-    if (selectedItem?.type === 'country') return; // country mode has its own logic
-    if (selectedTimezoneOverride) return; // user explicitly chose a TZ, don't interfere
-    const prevTZ = prevResolvedTZRef.current;
-    prevResolvedTZRef.current = resolvedTimezone;
-    if (prevTZ === undefined || resolvedTimezone === prevTZ || !resolvedTimezone) return;
-    // Only update travelDate if it was "today" in the previous timezone
-    const todayInPrevTZ = prevTZ ? new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: prevTZ }) : null;
-    if (!todayInPrevTZ || travelDateForTZRef.current === todayInPrevTZ) {
-      setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: resolvedTimezone }));
-    }
-  }, [resolvedTimezone, selectedTimezoneOverride, selectedItem?.type, setTravelDate]);
-
-  // ── Set travelDate when country display TZ changes ─────────────────────────
-  const prevCountryDisplayTZRef = useRef<string | null | undefined>(undefined);
-  useEffect(() => {
-    if (selectedItem?.type !== 'country') return;
-    if (countryDisplayTZ === prevCountryDisplayTZRef.current) return;
-    prevCountryDisplayTZRef.current = countryDisplayTZ;
-    if (countryDisplayTZ) {
-      setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: countryDisplayTZ }));
-    }
-  }, [selectedItem?.type, countryDisplayTZ, setTravelDate]);
-
-  // Reset the ref when country changes so the effect fires again
-  useEffect(() => {
-    if (selectedItem?.type !== 'country') prevCountryDisplayTZRef.current = undefined;
-  }, [selectedItem]);
+  // ── Travel date management ─────────────────────────────────────────────────
+  useTravelDate({
+    selectedItem, timezone, explorationItems, effectiveArrivalTimeUTC,
+    selectedTimezoneOverride, resolvedTimezone, countryDisplayTZ,
+    travelDate, setTravelDate,
+  });
 
   const initialFromDatetime = useMemo(() => {
     if (flightAirportCodes.length > 1) return null;
@@ -761,174 +615,9 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   }, [explorationItems, transferAirports, selectedTimezoneOverride, airportTimezoneMap, resolvedTimezone, travelDate, setTravelDate]);
 
   // ── Exploration groups (airport mode) ─────────────────────────────────────
-  // Compute city-groups and country-groups from explorationItems
-  interface ExplorationDisplayItem {
-    kind: 'airport' | 'city-group' | 'country-group';
-    itemId?: string;        // for single airports
-    code: string;
-    name: string;
-    airportCodes: string[];
-    cityCode?: string;      // for airport items
-    countryCode?: string;
-    // city-group / country-group
-    isExpanded?: boolean;
-    childCities?: Array<{ cityCode: string; cityName: string; airports: Array<{ id: string; code: string; name: string }> }>;
-    missingAirports?: Array<{ code: string; name: string }>; // for partial cities in city mode
-  }
-
-  const explorationDisplayItems = useMemo((): ExplorationDisplayItem[] => {
-    if (!airportsData || explorationItems.length === 0) return [];
-
-    // Country-type items: already have name + all codes stored directly
-    if (explorationItems.some(i => i.type === 'country')) {
-      return explorationItems.map(item => {
-        if (item.type === 'country') {
-          const byCity = new Map<string, Array<{ id: string; code: string; name: string }>>();
-          for (const code of item.airportCodes) {
-            const feat = airportsData.features.find(f => f.properties.code === code);
-            const cityCode = feat?.properties.city_code || '';
-            if (!byCity.has(cityCode)) byCity.set(cityCode, []);
-            byCity.get(cityCode)!.push({ id: item.id, code, name: feat?.properties.name ?? code });
-          }
-          const childCities = Array.from(byCity.entries()).map(([cityCode, aps]) => ({
-            cityCode,
-            cityName: cityInfoMap[cityCode]?.name || cityCode,
-            airports: aps,
-          }));
-          return {
-            kind: 'country-group' as const,
-            code: item.code,
-            name: item.name,
-            airportCodes: item.airportCodes,
-            isExpanded: expandedCityGroups.has(item.code),
-            childCities,
-          };
-        }
-        // fallback for mixed lists (shouldn't happen in practice)
-        return {
-          kind: 'airport' as const,
-          itemId: item.id,
-          code: item.code,
-          name: item.name,
-          airportCodes: item.airportCodes,
-        };
-      });
-    }
-
-
-
-    // Airport mode: group airports by city
-    // Collect all airport codes across all exploration items
-    const allAirportItems: Array<{ id: string; code: string; name: string; cityCode: string; countryCode: string }> = [];
-    for (const item of explorationItems) {
-      for (const code of item.airportCodes) {
-        const feat = airportsData.features.find(f => f.properties.code === code);
-        allAirportItems.push({
-          id: item.id,
-          code,
-          name: feat?.properties.name ?? code,
-          cityCode: feat?.properties.city_code || '',
-          countryCode: feat?.properties.country_code || '',
-        });
-      }
-    }
-
-    // Group by city
-    const byCity = new Map<string, typeof allAirportItems>();
-    for (const ap of allAirportItems) {
-      if (!byCity.has(ap.cityCode)) byCity.set(ap.cityCode, []);
-      byCity.get(ap.cityCode)!.push(ap);
-    }
-
-    // Determine which cities are complete
-    const completeCityCodes = new Set<string>();
-    for (const [cityCode, aps] of byCity.entries()) {
-      if (!cityCode) continue;
-      const total = cityInfoMap[cityCode]?.airportCount ?? 0;
-      if (total > 0 && aps.length === total) completeCityCodes.add(cityCode);
-    }
-
-    // Determine which countries are complete (all cities complete)
-    const byCountry = new Map<string, Set<string>>(); // country → set of cities
-    for (const [cityCode] of byCity.entries()) {
-      if (!cityCode) continue;
-      const cc = cityInfoMap[cityCode]?.country_code || '';
-      if (!byCountry.has(cc)) byCountry.set(cc, new Set());
-      byCountry.get(cc)!.add(cityCode);
-    }
-    const completeCountryCodes = new Set<string>();
-    for (const [cc] of byCountry.entries()) {
-      if (!cc) continue;
-      const totalCountryAirports = countryInfoMap[cc]?.airportCount ?? 0;
-      const coveredAirports = allAirportItems.filter(ap => ap.countryCode === cc).length;
-      if (totalCountryAirports > 0 && coveredAirports === totalCountryAirports) {
-        completeCountryCodes.add(cc);
-      }
-    }
-
-    // Build display items: countries > cities > airports
-    const result: ExplorationDisplayItem[] = [];
-    const processedCountries = new Set<string>();
-    const processedCities = new Set<string>();
-
-    // Country groups first
-    for (const cc of completeCountryCodes) {
-      processedCountries.add(cc);
-      const citiesForCountry = Array.from(byCity.entries())
-        .filter(([cityCode]) => cityInfoMap[cityCode]?.country_code === cc);
-
-      const childCities = citiesForCountry.map(([cityCode, aps]) => ({
-        cityCode,
-        cityName: cityInfoMap[cityCode]?.name || cityCode,
-        airports: aps.map(ap => ({ id: ap.id, code: ap.code, name: ap.name })),
-      }));
-
-      citiesForCountry.forEach(([cityCode]) => processedCities.add(cityCode));
-      result.push({
-        kind: 'country-group',
-        code: cc,
-        name: (() => { const n = countryInfoMap[cc]?.name; return (n && n !== cc) ? n : (countryNameCache[cc] || cc); })(),
-        airportCodes: allAirportItems.filter(ap => ap.countryCode === cc).map(ap => ap.code),
-        isExpanded: expandedCityGroups.has(cc),
-        childCities,
-      });
-    }
-
-    // City groups
-    for (const [cityCode, aps] of byCity.entries()) {
-      if (processedCities.has(cityCode)) continue;
-      if (completeCityCodes.has(cityCode)) {
-        processedCities.add(cityCode);
-        result.push({
-          kind: 'city-group',
-          code: cityCode,
-          name: cityInfoMap[cityCode]?.name || cityCode,
-          airportCodes: aps.map(ap => ap.code),
-          isExpanded: expandedCityGroups.has(cityCode),
-          childCities: [{
-            cityCode,
-            cityName: cityInfoMap[cityCode]?.name || cityCode,
-            airports: aps.map(ap => ({ id: ap.id, code: ap.code, name: ap.name })),
-          }],
-        });
-      } else {
-        // Individual airports (incomplete city)
-        for (const ap of aps) {
-          result.push({
-            kind: 'airport',
-            itemId: ap.id,
-            code: ap.code,
-            name: ap.name,
-            airportCodes: [ap.code],
-            cityCode: ap.cityCode,
-            countryCode: ap.countryCode,
-          });
-        }
-      }
-    }
-
-    return result;
-  }, [explorationItems, airportsData, /*viewMode,*/ cityInfoMap, countryInfoMap, countryNameCache, expandedCityGroups]);
+  const explorationDisplayItems = useExplorationGroups(
+    explorationItems, airportsData, cityInfoMap, countryInfoMap, countryNameCache, expandedCityGroups,
+  );
 
   // ── Helper: remove all exploration items for a set of airport codes ────────
   const addMissingAirport = useCallback((ap: { code: string; name: string }) => {
@@ -963,232 +652,20 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   const showFlightsList = flightAirportCodes.length > 0 && !!timezone &&
     (flightAirportCodes.length > 1 || !!initialFromDatetime || !!effectiveArrivalTimeUTC);
 
-  // ── Render exploration list (shared by airport + city mode) ───────────────
-  const renderExplorationList = () => (
-    <div className="exploration-list">
-      {explorationDisplayItems.map((item, idx) => {
-        if (item.kind === 'airport') {
-          const altTime = getAltTimeDisplay(item.code);
-          return (
-            <div key={item.itemId || idx} className="exploration-item">
-              <span className="exploration-icon"></span>
-              <span className="exploration-name">{item.name}</span>
-              <span className="exploration-code">({item.code})</span>
-              {altTime && (
-                <button className="exploration-tz-btn" title={t.panel.switchTimezone}
-                  onClick={() => handleSwitchTimezone(item.code)}>{altTime}</button>
-              )}
-              <button className="exploration-remove-btn" onClick={() => item.itemId && removeExplorationItem(item.itemId)}>{UI_SYMBOLS.CLOSE}</button>
-            </div>
-          );
-        }
-
-        if (item.kind === 'city-group') {
-          const isPartial = (item.missingAirports?.length ?? 0) > 0;
-          const altTime = item.airportCodes[0] ? getAltTimeDisplay(item.airportCodes[0]) : null;
-
-          // Partial city (in city mode, from airport-type items): always expanded, add-only
-          if (isPartial) {
-            const total = item.airportCodes.length + (item.missingAirports?.length ?? 0);
-            return (
-              <div key={item.code} className="exploration-group">
-                <div className="exploration-item exploration-item--group">
-                  <span className="exploration-icon"></span>
-                  <span className="exploration-name">{item.name}</span>
-                  <span className="exploration-count">{item.airportCodes.length}/{total}ap</span>
-                </div>
-                {item.childCities?.[0].airports.map(ap => (
-                  <div key={ap.code} className="exploration-item exploration-item--child">
-                    <span className="exploration-icon"></span>
-                    <span className="exploration-name">{ap.name}</span>
-                    <span className="exploration-code">({ap.code})</span>
-                  </div>
-                ))}
-                {item.missingAirports?.map(ap => (
-                  <div key={ap.code} className="exploration-item exploration-item--child exploration-item--missing">
-                    <span className="exploration-icon"></span>
-                    <span className="exploration-name">{ap.name}</span>
-                    <span className="exploration-code">({ap.code})</span>
-                    <button className="exploration-add-btn" onClick={() => addMissingAirport(ap)}>+</button>
-                  </div>
-                ))}
-              </div>
-            );
-          }
-
-
-
-          // Airport mode: expandable city-group
-          const isExpanded = expandedCityGroups.has(item.code);
-          return (
-            <div key={item.code} className="exploration-group">
-              <div className="exploration-item exploration-item--group">
-                <button className="exploration-expand-btn" onClick={() => setExpandedCityGroups(prev => {
-                  const s = new Set(prev);
-                  if (s.has(item.code)) s.delete(item.code); else s.add(item.code);
-                  return s;
-                })}>{isExpanded ? '▾' : '▸'}</button>
-                <span className="exploration-icon"></span>
-                <span className="exploration-name">{item.name}</span>
-                <span className="exploration-count">{item.airportCodes.length}{t.panel.airportAbbreviation}</span>
-                {altTime && (
-                  <button className="exploration-tz-btn" onClick={() => handleSwitchTimezone(item.airportCodes[0])}>{altTime}</button>
-                )}
-                <button className="exploration-remove-btn" onClick={() => removeAirportCodes(item.airportCodes)}>{UI_SYMBOLS.CLOSE}</button>
-              </div>
-              {isExpanded && item.childCities?.map(city =>
-                city.airports.map(ap => (
-                  <div key={ap.code} className="exploration-item exploration-item--child">
-                    <span className="exploration-icon"></span>
-                    <span className="exploration-name">{ap.name}</span>
-                    <span className="exploration-code">({ap.code})</span>
-                    <button className="exploration-remove-btn" onClick={() => removeExplorationItem(ap.id)}>{UI_SYMBOLS.CLOSE}</button>
-                  </div>
-                ))
-              )}
-            </div>
-          );
-        }
-
-        if (item.kind === 'country-group') {
-          const isExpanded = expandedCityGroups.has(item.code);
-          // Determine TZ distribution: single TZ vs multiple
-          const tzSet = new Set(item.airportCodes.map(c => airportTimezoneMap[c]).filter(Boolean));
-          const hasSingleTZ = tzSet.size <= 1;
-          const countryTzBtn = hasSingleTZ
-            ? getAltTimeDisplay(item.airportCodes[0])
-            : null;
-          return (
-            <div key={item.code} className="exploration-group">
-              <div className="exploration-item exploration-item--group">
-                <button className="exploration-expand-btn" onClick={() => setExpandedCityGroups(prev => {
-                  const s = new Set(prev);
-                  if (s.has(item.code)) s.delete(item.code); else s.add(item.code);
-                  return s;
-                })}>{isExpanded ? '▾' : '▸'}</button>
-                <span className="exploration-icon"></span>
-                <span className="exploration-name">{item.name}</span>
-                <span className="exploration-count">{item.airportCodes.length}{t.panel.airportAbbreviation}</span>
-                {countryTzBtn && (
-                  <button className="exploration-tz-btn" title={t.panel.switchTimezone}
-                    onClick={() => handleSwitchTimezone(item.airportCodes[0])}>{countryTzBtn}</button>
-                )}
-                <button className="exploration-remove-btn" onClick={() => removeAirportCodes(item.airportCodes)}>{UI_SYMBOLS.CLOSE}</button>
-              </div>
-              {isExpanded && item.childCities?.map(city => {
-                const cityKey = `${item.code}:${city.cityCode}`;
-                const isCityExpanded = expandedInnerCities.has(cityKey);
-                const cityRepCode = city.airports[0]?.code;
-                const cityTzBtn = !hasSingleTZ && cityRepCode ? getAltTimeDisplay(cityRepCode) : null;
-                return (
-                  <div key={city.cityCode} className="exploration-group exploration-group--nested">
-                    <div className="exploration-item exploration-item--city-child">
-                      <button className="exploration-expand-btn" onClick={() => setExpandedInnerCities(prev => {
-                        const s = new Set(prev);
-                        if (s.has(cityKey)) s.delete(cityKey); else s.add(cityKey);
-                        return s;
-                      })}>{isCityExpanded ? '▾' : '▸'}</button>
-                      <span className="exploration-icon"></span>
-                      <span className="exploration-name">{city.cityName}</span>
-                      <span className="exploration-count">{city.airports.length}ap</span>
-                      {cityTzBtn && cityRepCode && (
-                        <button className="exploration-tz-btn" title={t.panel.switchTimezone}
-                          onClick={() => handleSwitchTimezone(cityRepCode)}>{cityTzBtn}</button>
-                      )}
-                      <button className="exploration-remove-btn" onClick={() => removeAirportCodes(city.airports.map(a => a.code))}>{UI_SYMBOLS.CLOSE}</button>
-                    </div>
-                    {isCityExpanded && city.airports.map(ap => (
-                      <div key={ap.code} className="exploration-item exploration-item--child">
-                        <span className="exploration-icon"></span>
-                        <span className="exploration-name">{ap.name}</span>
-                        <span className="exploration-code">({ap.code})</span>
-                        <button className="exploration-remove-btn" onClick={() => removeExplorationItem(ap.id)}>{UI_SYMBOLS.CLOSE}</button>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          );
-        }
-
-        return null;
-      })}
-    </div>
+  const explorationListEl = (
+    <ExplorationList
+      items={explorationDisplayItems}
+      expandedCityGroups={expandedCityGroups}
+      setExpandedCityGroups={setExpandedCityGroups}
+      expandedInnerCities={expandedInnerCities}
+      setExpandedInnerCities={setExpandedInnerCities}
+      getAltTimeDisplay={getAltTimeDisplay}
+      onSwitchTimezone={handleSwitchTimezone}
+      onRemoveItem={removeExplorationItem}
+      onRemoveCodes={removeAirportCodes}
+      onAddMissingAirport={addMissingAirport}
+    />
   );
-
-  // ── Render trip mode airport section ──────────────────────────────────────
-  const renderTripAirportSection = () => {
-    if (!tripState || selectedItem.type !== 'airport') return null;
-    return (
-      <div className="trip-airports-section">
-        <div className="trip-airports-list">
-          {/* Original arrival airport – cannot be removed */}
-          {(() => {
-            const tzDisplay = getAltTimeDisplay(selectedItem.data.code);
-            return (
-              <div className="trip-airport-item trip-airport-item--original">
-                <span className="exploration-icon"></span>
-                <span className="exploration-name">{selectedItem.data.name}</span>
-                <span className="exploration-code">({selectedItem.data.code})</span>
-                {tzDisplay && (
-                  <button className="exploration-tz-btn" title={t.panel.switchTimezone}
-                    onClick={() => handleSwitchTimezone(selectedItem.data.code)}>{tzDisplay}</button>
-                )}
-              </div>
-            );
-          })()}
-          {t.panel.transferAirports}
-          {transferAirports.map(code => {
-            const tzDisplay = getAltTimeDisplay(code);
-            const feat = airportsData?.features.find(f => f.properties.code === code);
-            const label = feat?.properties.name || code;
-            return (
-              <div key={code} className="trip-airport-item">
-                <span className="exploration-icon"></span>
-                <span className="exploration-name">{label}</span>
-                <span className="exploration-code">({code})</span>
-                {tzDisplay && (
-                  <button className="exploration-tz-btn" title={t.panel.switchTimezone}
-                    onClick={() => handleSwitchTimezone(code)}>{tzDisplay}</button>
-                )}
-                <button className="exploration-remove-btn" onClick={() => {
-                  setTransferAirports(prev => prev.filter(c => c !== code));
-                  if (selectedTimezoneAirportCode === code) {
-                    setSelectedTimezoneOverride(null);
-                    setSelectedTimezoneAirportCode(null);
-                  }
-                }}>{UI_SYMBOLS.CLOSE}</button>
-              </div>
-            );
-          })}
-        </div>
-        {/* Inline search input — hidden when 6 airports already selected (1 original + 5 transfers) */}
-        {transferAirports.length < CONFIG.MAX_TRANSFER_AIRPORTS && (
-          <AirportTransferPicker
-            currentAirport={selectedItem.data}
-            inline
-            preCheckedCodes={transferAirports}
-            onSelectAirports={(newCodes) => {
-              setTransferAirports(prev => {
-                const combined = [...new Set([...prev, ...newCodes])];
-                return combined.slice(0, CONFIG.MAX_TRANSFER_AIRPORTS);
-              });
-            }}
-            onSelectAirport={(code) => {
-              setTransferAirports(prev => {
-                if (prev.includes(code) || prev.length >= CONFIG.MAX_TRANSFER_AIRPORTS) return prev;
-                return [...prev, code];
-              });
-            }}
-            onPreviewAirport={onPreviewAirport}
-            onClearPreview={onClearPreview}
-            maxSelect={CONFIG.MAX_TRANSFER_AIRPORTS - transferAirports.length}
-          />
-        )}
-      </div>
-    );
-  };
 
   return (
     <div className="right-panel">
@@ -1238,84 +715,16 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
       <div className="panel-content">
         {/* ── Inline pending country picker (shown when panel is open in airport/city mode) ── */}
         {pendingCountryPicker && selectedItem.type !== 'country' && (
-          <div className="pending-country-picker">
-            <div className="pending-country-header">
-              <span>{t.panel.addAirportsFrom}{pendingCountryPicker.name}</span>
-              <button className="pending-country-close" onClick={onClearCountryPicker}>{UI_SYMBOLS.CLOSE}</button>
-            </div>
-            <div className="pending-country-content">
-              {(() => {
-                const hasMixedTZ = pendingCountryTzGroups.filter(g => g.tz !== CONFIG.UNKNOWN_TIMEZONE).length > 1;
-                const alreadySelectedCodes = new Set(explorationItems.flatMap(i => i.airportCodes));
-                const renderPendingCheckbox = (airport: { code: string; name: string }) => {
-                  const alreadySelected = alreadySelectedCodes.has(airport.code);
-                  const isPendingSelected = pendingSelectedAirports.includes(airport.code);
-                  const isSelected = alreadySelected || isPendingSelected;
-                  const canSelect = !alreadySelected && (isPendingSelected || pendingSelectedAirports.length < CONFIG.MAX_AIRPORTS);
-                  return (
-                    <label key={airport.code}
-                      className={`country-airport-item ${isSelected ? 'selected' : ''} ${alreadySelected ? 'disabled locked' : !canSelect ? 'disabled' : ''}`}>
-                      <input type="checkbox" checked={isSelected} disabled={alreadySelected || !canSelect}
-                        onChange={() => {
-                          if (alreadySelected) return;
-                          setPendingSelectedAirports(prev =>
-                            prev.includes(airport.code)
-                              ? prev.filter(c => c !== airport.code)
-                              : (prev.length < CONFIG.MAX_AIRPORTS ? [...prev, airport.code] : prev)
-                          );
-                        }} />
-                      <span>{airportsData?.features.find(f => f.properties.code === airport.code)?.properties.name ?? airport.name} ({airport.code})</span>
-                    </label>
-                  );
-                };
-                if (hasMixedTZ) {
-                  return pendingCountryTzGroups.map(group => (
-                    <div key={group.tz} className="country-tz-group">
-                      {group.tz !== CONFIG.UNKNOWN_TIMEZONE && (
-                        <div className="country-tz-header">
-                          <span className="tz-offset">{group.utcLabel}</span>
-                          <span className="tz-current-dt">{group.currentDateStr} · {group.currentTimeStr}</span>
-                        </div>
-                      )}
-                      <div className="country-airports-flat-list">
-                        {group.airports.map(renderPendingCheckbox)}
-                      </div>
-                    </div>
-                  ));
-                }
-                return (
-                  <div className="country-airports-flat-list">
-                    {pendingCountryTzGroups.flatMap(g => g.airports).map(renderPendingCheckbox)}
-                  </div>
-                );
-              })()}
-            </div>
-            {pendingSelectedAirports.length > 0 && (
-              <button className="confirm-flights-btn" onClick={() => {
-                const currentCodes = explorationItems.flatMap((i: any) => i.airportCodes as string[]);
-                const willFill = pendingSelectedAirports.length >= CONFIG.MAX_AIRPORTS;
-                if (willFill) clearExploration();
-                const slotsLeft = CONFIG.MAX_AIRPORTS - (willFill ? 0 : currentCodes.length);
-                const codesToAdd = pendingSelectedAirports.slice(0, slotsLeft);
-                codesToAdd.forEach(code => {
-                  const feat = airportsData?.features.find((f: any) => f.properties.code === code);
-                  addExplorationItem(
-                    { type: 'airport', code, name: feat?.properties.name || code, airportCodes: [code] }
-                    /*, viewMode*/
-                  );
-                });
-                const allCodes = [
-                  ...(willFill ? [] : currentCodes),
-                  ...codesToAdd,
-                ];
-                onFitBounds?.(allCodes);
-                onClearCountryPicker?.();
-                setPendingSelectedAirports([]);
-              }}>
-                {t.panel.addCountAirports(Math.min(pendingSelectedAirports.length, CONFIG.MAX_AIRPORTS))}
-              </button>
-            )}
-          </div>
+          <PendingCountryPicker
+            pendingCountryPicker={pendingCountryPicker}
+            pendingCountryTzGroups={pendingCountryTzGroups}
+            pendingSelectedAirports={pendingSelectedAirports}
+            setPendingSelectedAirports={setPendingSelectedAirports}
+            airportsData={airportsData}
+            explorationItems={explorationItems}
+            onFitBounds={onFitBounds}
+            onClearCountryPicker={onClearCountryPicker}
+          />
         )}
 
         {/* ── Airport mode ──────────────────────────────────────── */}
@@ -1323,9 +732,21 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
           <>
             <div className="item-info">
               {tripState ? (
-                renderTripAirportSection()
+                <TripAirportSection
+                  selectedAirport={selectedItem.data}
+                  transferAirports={transferAirports}
+                  setTransferAirports={setTransferAirports}
+                  airportsData={airportsData}
+                  getAltTimeDisplay={getAltTimeDisplay}
+                  onSwitchTimezone={handleSwitchTimezone}
+                  selectedTimezoneAirportCode={selectedTimezoneAirportCode}
+                  setSelectedTimezoneOverride={setSelectedTimezoneOverride}
+                  setSelectedTimezoneAirportCode={setSelectedTimezoneAirportCode}
+                  onPreviewAirport={onPreviewAirport}
+                  onClearPreview={onClearPreview}
+                />
               ) : (
-                explorationItems.length > 0 ? renderExplorationList() : (
+                explorationItems.length > 0 ? explorationListEl : (
                   <div className="simplified-details">{getSimplifiedDetails()}</div>
                 )
               )}
@@ -1352,7 +773,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
         {selectedItem.type === 'city' && (
           <>
             <div className="item-info">
-              {explorationItems.length > 0 ? renderExplorationList() : (
+              {explorationItems.length > 0 ? explorationListEl : (
                 <div className="simplified-details">{getSimplifiedDetails()}</div>
               )}
               {loadingCityAirports && <div className="mode-loading">{t.panel.loadingAirports}</div>}
@@ -1381,67 +802,17 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
           <>
             <div className="item-info">
               <div className="simplified-details">{getSimplifiedDetails()}</div>
-
-              {(() => {
-                const hasMixedTZ = countryTzGroups.filter(g => g.tz !== CONFIG.UNKNOWN_TIMEZONE).length > 1;
-                const allCountryAirports = countryTzGroups.flatMap(g => g.airports);
-                const renderAirportCheckbox = (airport: { code: string; name: string }) => {
-                  const isSelected = selectedFlatAirports.some(a => a.code === airport.code);
-                  const canSelect = isSelected || selectedFlatAirports.length < CONFIG.MAX_AIRPORTS;
-                  const localName = airportsData?.features.find(f => f.properties.code === airport.code)?.properties.name ?? airport.name;
-                  return (
-                    <label key={airport.code}
-                      className={`country-airport-item ${isSelected ? 'selected' : ''} ${!canSelect ? 'disabled' : ''}`}>
-                      <input type="checkbox" checked={isSelected} disabled={!canSelect}
-                        onChange={() => handleCountryAirportToggle(airport)} />
-                      <span>{localName} ({airport.code})</span>
-                    </label>
-                  );
-                };
-                return (
-                  <div className="country-flat-airports">
-                    <div className="country-mode-info">
-                      {t.panel.selectAirportsMax(CONFIG.MAX_AIRPORTS)} {t.panel.selectedCount(selectedFlatAirports.length, CONFIG.MAX_AIRPORTS)}
-                    </div>
-                    {hasMixedTZ ? (
-                      countryTzGroups.map(group => {
-                        const relOffset = getCountryTzRelativeOffset(group.tz);
-                        const isActive = group.tz === countryActiveTZ;
-                        const hasSelected = selectedFlatAirports.some(a => group.airports.some(ga => ga.code === a.code));
-                        return (
-                          <div key={group.tz} className={`country-tz-group${isActive ? ' country-tz-group--active' : ''}`}>
-                            {group.tz !== CONFIG.UNKNOWN_TIMEZONE && (
-                              <div className="country-tz-header">
-                                <span className="tz-offset">{group.utcLabel}</span>
-                                <span className="tz-current-dt">{group.currentDateStr} · {group.currentTimeStr}</span>
-                                {!isActive && hasSelected && relOffset && (
-                                  <button className="tz-switch-btn" onClick={() => setCountryActiveTZ(group.tz)}>{relOffset}</button>
-                                )}
-                              </div>
-                            )}
-                            <div className="country-airports-flat-list">
-                              {group.airports.map(renderAirportCheckbox)}
-                            </div>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="country-airports-flat-list">
-                        {allCountryAirports.map(renderAirportCheckbox)}
-                      </div>
-                    )}
-                    {selectedFlatAirports.length > 0 && (
-                      <button className="confirm-flights-btn" onClick={handleConfirmFlatAirports}>
-                        {t.panel.loadFlightsFromCount(selectedFlatAirports.length)}
-                      </button>
-                    )}
-                  </div>
-                );
-              })()}
-
-
+              <CountryModeSection
+                countryTzGroups={countryTzGroups}
+                countryActiveTZ={countryActiveTZ}
+                setCountryActiveTZ={setCountryActiveTZ}
+                selectedFlatAirports={selectedFlatAirports}
+                onAirportToggle={handleCountryAirportToggle}
+                onConfirm={handleConfirmFlatAirports}
+                airportsData={airportsData}
+                getCountryTzRelativeOffset={getCountryTzRelativeOffset}
+              />
             </div>
-
             {!loadingCountry && selectedFlatAirports.length === 0 && selectedCities.length === 0 && (
               <div className="placeholder-message">
                 <p>{t.panel.selectAirportsMax(CONFIG.MAX_AIRPORTS)}</p>

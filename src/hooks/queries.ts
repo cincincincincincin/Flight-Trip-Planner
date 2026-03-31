@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { getAirportsGeoJSON, getCitiesGeoJSON, /* getRoutesGeoJSON, */ getAirportsByCountry } from '../api/geo';
+import { getAirportsGeoJSON, getCitiesGeoJSON, getAirportsByCountry } from '../api/geo';
 import { CONFIG } from '../constants/config';
 import { getFlightOffers } from '../api/flights';
 import type { AirportInfo, FlightOffersResponse } from '../types';
@@ -25,16 +25,6 @@ export const useCitiesQuery = (enabled: boolean) => {
     staleTime: Infinity,
   });
 };
-
-/*
-export const useRoutesQuery = (enabled: boolean) =>
-  useQuery({
-    queryKey: ['routes'],
-    queryFn: getRoutesGeoJSON,
-    enabled,
-    staleTime: Infinity,
-  });
-*/
 
 function computeAirportInfo(time_zone: string): AirportInfo {
   const now = new Date();

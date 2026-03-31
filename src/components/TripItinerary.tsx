@@ -8,82 +8,14 @@ import { useAirportsQuery, useAirportInfosQuery } from '../hooks/queries';
 import './TripItinerary.css';
 import { useTexts } from '../hooks/useTexts';
 import { CONFIG } from '../constants/config';
-import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
 import { UI_SYMBOLS } from '../constants/ui';
+import { haversineKm } from '../utils/math';
+import { formatTime, formatDate, formatDurationMs, getDuration, getDurationMs, computeTzDiff, formatTzDiff } from '../utils/dateFormatting';
 
-const formatTime = (str: string | null | undefined): string => {
-  if (!str) return UI_SYMBOLS.DASH;
-  return new Date(str).toLocaleTimeString(FORMAT_LOCALES.GB, FORMAT_OPTIONS.TIME_24H);
-};
+// aliases used locally in this file
+const formatTimeInTz = formatTime;
+const formatDateInTz = formatDate;
 
-const formatDate = (str: string | null | undefined): string => {
-  if (!str) return UI_SYMBOLS.DASH;
-  return new Date(str).toLocaleDateString(FORMAT_LOCALES.GB, FORMAT_OPTIONS.DATE_SHORT);
-};
-
-const formatDurationMs = (ms: number): string => {
-  const totalMinutes = Math.floor(ms / 60000);
-  const d = Math.floor(totalMinutes / CONFIG.MINUTES_PER_DAY);
-  const h = Math.floor((totalMinutes % CONFIG.MINUTES_PER_DAY) / 60);
-  const m = totalMinutes % 60;
-  if (d > 0) return `${d}d ${h}h ${m}m`;
-  return `${h}h ${m}m`;
-};
-
-const getDuration = (dep: string | undefined, arr: string | undefined): string | null => {
-  if (!dep || !arr) return null;
-  const diff = new Date(arr).getTime() - new Date(dep).getTime();
-  if (diff <= 0) return null;
-  return formatDurationMs(diff);
-};
-
-const getDurationMs = (from: string | undefined, to: string | undefined): number | null => {
-  if (!from || !to) return null;
-  const diff = new Date(to).getTime() - new Date(from).getTime();
-  return diff > 0 ? diff : null;
-};
-
-const formatTimeInTz = (str: string, tz?: string): string => {
-  const d = new Date(str);
-  if (isNaN(d.getTime())) return UI_SYMBOLS.DASH;
-  return d.toLocaleTimeString(FORMAT_LOCALES.GB, { ...FORMAT_OPTIONS.TIME_24H, ...(tz ? { timeZone: tz } : {}) });
-};
-
-const formatDateInTz = (str: string, tz?: string): string => {
-  const d = new Date(str);
-  if (isNaN(d.getTime())) return UI_SYMBOLS.DASH;
-  return d.toLocaleDateString(FORMAT_LOCALES.GB, { ...FORMAT_OPTIONS.DATE_SHORT, ...(tz ? { timeZone: tz } : {}) });
-};
-
-const computeTzDiff = (depUtc: string, depTz: string, destTz: string): number | null => {
-  if (depTz === destTz) return null;
-  const d = new Date(depUtc);
-  if (isNaN(d.getTime())) return null;
-  const getOff = (tz: string) => {
-    const s = d.toLocaleString(FORMAT_LOCALES.SE, { timeZone: tz });
-    const u = d.toLocaleString(FORMAT_LOCALES.SE, { timeZone: 'UTC' });
-    return (new Date(s).getTime() - new Date(u).getTime()) / 3600000;
-  };
-  const diff = getOff(destTz) - getOff(depTz);
-  return diff === 0 ? null : diff;
-};
-
-const formatTzDiff = (diff: number): string => {
-  const sign = diff > 0 ? '+' : '';
-  if (Number.isInteger(diff)) return `${sign}${diff}h`;
-  const h = Math.trunc(diff);
-  const m = Math.round(Math.abs(diff - h) * 60);
-  return `${sign}${h}h${m > 0 ? `${m}m` : ''}`;
-};
-
-const haversineKm = (lon1: number, lat1: number, lon2: number, lat2: number): number => {
-  const R = CONFIG.EARTH_RADIUS_KM;
-  const toRad = (d: number) => d * Math.PI / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
-};
 
 interface TripItineraryProps {
   onUndo?: () => void;

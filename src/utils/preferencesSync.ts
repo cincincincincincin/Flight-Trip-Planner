@@ -30,7 +30,7 @@ export const loadPreferencesOnLogin = async (): Promise<void> => {
     const colorSet = useColorStore.getState();
     const colorData = prefs.colors as Record<string, unknown>;
     Object.entries(colorData).forEach(([key, value]) => {
-      if (key in colorSet && typeof (colorSet as Record<string, unknown>)[key] !== 'function') {
+      if (key in colorSet && typeof (colorSet as unknown as Record<string, unknown>)[key] !== 'function') {
         useColorStore.setState({ [key]: value });
       }
     });
