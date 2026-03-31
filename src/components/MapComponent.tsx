@@ -115,6 +115,11 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   // Ref to track whether a route hover is currently active
   const isRouteHoveredRef = useRef<boolean>(false);
 
+  // Ref to track whether route hover listeners have been registered on the current map instance.
+  // Listeners are tied to the map instance (not to layers), so they need to be set up once per
+  // instance. Reset this flag whenever map.current is replaced in initMap.
+  const listenersAttachedRef = useRef(false);
+
   // Size refs for route hover styling
   const highlightedAirportHoverRadiusMinRef = useRef<number>(CONFIG.HOVER_STOP_DELAY_MS);
   const highlightedAirportHoverRadiusMaxRef = useRef<number>(CONFIG.HOVER_CLEAR_DELAY_MS);
@@ -338,6 +343,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
         console.warn('Error removing old map:', e);
       }
       map.current = null;
+      listenersAttachedRef.current = false; // new map instance — listeners must be re-attached
       setMapLoaded(false);
     }
 
@@ -655,7 +661,10 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
         unknown: t.common.unknown,
       },
     };
-    setupRouteHoverListeners(map.current, routeHoverRefs);
+    if (!listenersAttachedRef.current) {
+      setupRouteHoverListeners(map.current, routeHoverRefs);
+      listenersAttachedRef.current = true;
+    }
 
     const setLayerVisibility = (id: string, visible: boolean) => {
       if (map.current?.getLayer(id)) {
