@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import axios from 'axios';
-import { search, getCountryCities, getCityAirports, getAirport } from '../api/search';
+import { search, getCountryCities, getCityAirports } from '../api/search';
 import { CONFIG } from '../constants/config';
 import type { Country, City, Airport, SearchPhaseInfo, Airport as AirportType } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -64,7 +64,6 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const exactAirportAbortRef = useRef<AbortController | null>(null);
   const countriesCacheRef = useRef<CountriesCache>(countriesCache);
   const citiesCacheRef = useRef<CitiesCache>(citiesCache);
   const phase2CacheRef = useRef<PhaseCache>(phase2Cache);
@@ -92,28 +91,6 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
     languageRef.current = language;
   }, [language]);
 
-  // Exact airport lookup for 3-letter queries
-  useEffect(() => {
-    const q = query.trim();
-    if (q.length !== 3) {
-      setExactAirport(null);
-      if (exactAirportAbortRef.current) {
-        exactAirportAbortRef.current.abort();
-        exactAirportAbortRef.current = null;
-      }
-      return;
-    }
-    if (exactAirportAbortRef.current) {
-      exactAirportAbortRef.current.abort();
-    }
-    exactAirportAbortRef.current = new AbortController();
-    getAirport(q.toUpperCase(), { signal: exactAirportAbortRef.current.signal, params: { lang: languageRef.current } })
-      .then(data => setExactAirport(data))
-      .catch(err => {
-        if (!axios.isCancel(err)) setExactAirport(null);
-      });
-  }, [query, language]);
-
   const resetSearch = useCallback(() => {
     log('[SEARCH] Resetting search');
 
@@ -134,6 +111,7 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
     setIsMainScrollPaused(false);
     setActiveNestedScrolls(new Set());
     setSearchMode('prefix');
+    setExactAirport(null);
 
     citiesOffsetRef.current = {};
     scrollBeforeActionRef.current = 0;
@@ -174,6 +152,7 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
 
       setSearchMode(data.search_mode);
       setPhaseInfo(data.phase_info);
+      setExactAirport(data.exact_match ?? null);
 
       setPhaseData(prev => {
         const newPhaseData = { ...prev };

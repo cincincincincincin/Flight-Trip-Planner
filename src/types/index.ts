@@ -156,6 +156,7 @@ export interface SearchResponse {
   has_more: boolean;
   next_offset: number;
   phase_info: SearchPhaseInfo;
+  exact_match?: Airport | null;
 }
 
 export interface CityWithPagination {
