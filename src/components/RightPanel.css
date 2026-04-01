@@ -327,6 +327,24 @@
   border-left: 2px solid var(--c-teal-b);
 }
 
+.exploration-item--group.exploration-item--single-airport {
+  background: var(--bg-raised);
+  border-color: var(--border);
+  font-weight: normal;
+}
+
+.exploration-group--nested.exploration-group--single-airport {
+  border-left: none;
+  margin-left: 0;
+  padding-left: 0;
+}
+
+.exploration-item--city-child.exploration-item--single-airport {
+  background: var(--bg-base);
+  border-color: transparent;
+  margin-left: 12px;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    TRIP AIRPORTS SECTION
    ═══════════════════════════════════════════════════════════════ */

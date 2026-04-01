@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { getAirportsGeoJSON, getAirportsByCountry } from '../api/geo';
+import { getAirportsGeoJSON, getAirportsByCountry, getCountryCenters } from '../api/geo';
 import { CONFIG } from '../constants/config';
 import { getFlightOffers } from '../api/flights';
 import type { AirportInfo, FlightOffersResponse } from '../types';
@@ -50,6 +50,14 @@ export const useAirportInfosQuery = (codes: string[]) => {
     });
   }, [codes, airportsData]);
 };
+
+// Country centroids – essentially static, cache indefinitely
+export const useCountryCentersQuery = () =>
+  useQuery({
+    queryKey: ['countryCenters'],
+    queryFn: getCountryCenters,
+    staleTime: Infinity,
+  });
 
 // Wszystkie lotniska dla danego kraju z danymi stref czasowych – cache 24h (zgodnie z backendem)
 export const useAirportsByCountryQuery = (countryCode: string | null) => {

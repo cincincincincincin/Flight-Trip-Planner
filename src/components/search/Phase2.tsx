@@ -79,7 +79,7 @@ const Phase2 = React.memo(({
           <button
             className="expand-button"
             onClick={handleToggleCountry}
-            title={isExpanded ? t.search.collapse : t.search.expand}
+            title={isExpanded ? t.search.collapse : t.search.expandToShowCities}
           >
             {isExpanded ? UI_SYMBOLS.EXPAND_DOWN : UI_SYMBOLS.EXPAND_RIGHT}
           </button>
@@ -100,11 +100,12 @@ const Phase2 = React.memo(({
           {cities.map((city: City) => {
             const isCityExpanded = expandedCities.has(city.code);
             const cachedAirports = citiesCache[city.code]?.airports;
+            const hasSingleAirport = cachedAirports && cachedAirports.length === 1;
 
             return (
               <div key={`phase2-city-${city.code}`} className="city-item-wrapper" data-city-code={city.code}>
-                <div className={`search-item city-item${isCityExpanded ? ' city-item--expanded' : ''}`}>
-                  {(
+                <div className={`search-item city-item${isCityExpanded ? ' city-item--expanded' : ''}${hasSingleAirport ? ' city-item--single-airport' : ''}`}>
+                  {(!hasSingleAirport) && (
                     <button
                       className="expand-button"
                       onClick={(e) => handleToggleCity(city.code, city.name, e)}
@@ -125,7 +126,7 @@ const Phase2 = React.memo(({
                   <span className="item-code">({city.code})</span>
                 </div>
 
-                {isCityExpanded && cachedAirports && cachedAirports.length > 0 && (
+                {isCityExpanded && cachedAirports && cachedAirports.length > 0 && !hasSingleAirport && (
                   <div className="nested-list">
                     {cachedAirports.map((airport: Airport) => (
                       <div
@@ -143,7 +144,7 @@ const Phase2 = React.memo(({
                   </div>
                 )}
 
-                {isCityExpanded && !cachedAirports && loadingExpand && (
+                {isCityExpanded && !cachedAirports && !hasSingleAirport && loadingExpand && (
                   <div className="nested-list">
                     <div className="no-items">{t.search.loadingAirportsForCity(city.name)}</div>
                   </div>

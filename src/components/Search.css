@@ -62,7 +62,6 @@
   z-index: 500;
 }
 
-/* ── Results header ──────────────────────────────────────────── */
 .results-header {
   padding: 10px 14px 8px;
   border-bottom: 1px solid var(--border);
@@ -70,7 +69,7 @@
   border-radius: var(--r-md) var(--r-md) 0 0;
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 10;
 }
 
 .header-main {
@@ -191,8 +190,8 @@
 .search-item.country-item--expanded { background: var(--s-l1); }
 
 /* Hover country row → all cities + airports cascade */
-.search-item.country-item:hover                              { background: var(--s-hover); }
-.search-item.country-item:hover ~ .nested-list .search-item { background: var(--s-hover); }
+.search-item.country-item:hover                              { background: var(--s-hover) !important; }
+.search-item.country-item:hover ~ .nested-list .search-item { background: var(--s-hover) !important; }
 
 /* Country's cities nested list */
 .country-wrapper > .nested-list {
@@ -212,9 +211,41 @@
   background: var(--s-l2) !important;
 }
 
+/* Single airport city: L3 (look like an airport but keep city indent) */
+.search-item.city-item--single-airport {
+  background: var(--s-l3) !important;
+}
+
+.search-item.city-item--coral-line {
+  position: relative;
+}
+
+.search-item.city-item--coral-line::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 8px; /* Precisely overlays the parent's 2px teal border */
+  width: 2px;
+  /* Compositing stack: Top layer is the row's background, middle is the coral border, bottom is the solid white dropdown background making it opaque to hide the teal line */
+  background: 
+    linear-gradient(var(--s-l3), var(--s-l3)),
+    linear-gradient(var(--c-coral-b), var(--c-coral-b)),
+    var(--bg-raised);
+  z-index: 2;
+}
+
+.city-item-wrapper > .search-item.city-item--coral-line:hover::before {
+  /* Update the top compositing layer to match the hovered row background */
+  background: 
+    linear-gradient(var(--s-hover), var(--s-hover)),
+    linear-gradient(var(--c-coral-b), var(--c-coral-b)),
+    var(--bg-raised);
+}
+
 /* Hover city row → airports in that city cascade */
 .city-item-wrapper > .search-item.city-item:hover                              { background: var(--s-hover) !important; }
-.city-item-wrapper > .search-item.city-item:hover ~ .nested-list .search-item { background: var(--s-hover); }
+.city-item-wrapper > .search-item.city-item:hover ~ .nested-list .search-item { background: var(--s-hover) !important; }
 
 /* City's airports nested list */
 .city-item-wrapper > .nested-list {
@@ -230,7 +261,7 @@
 }
 
 .city-item-wrapper > .nested-list > .search-item.airport-item:hover {
-  background: var(--s-hover);
+  background: var(--s-hover) !important;
 }
 
 /* ── Item internals ──────────────────────────────────────────── */

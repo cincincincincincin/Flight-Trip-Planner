@@ -4,6 +4,7 @@ import './FlightsFilter.css';
 import { useTexts } from '../hooks/useTexts';
 import { UI_SYMBOLS } from '../constants/ui';
 import { getLocalizedName } from '../utils/i18n';
+import { getSingleAirportLabel } from './search/searchUtils';
 import { CONFIG } from '../constants/config';
 import { useFlightsFilterData } from '../hooks/useFlightsFilterData';
 import type { DestAirport, DestCity, DestCountry } from '../hooks/useFlightsFilterData';
@@ -67,19 +68,26 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
 
   const renderCity = (ci: DestCity, expanded: boolean, onCityToggle: () => void, showAirports: boolean) => {
     const selected = isEffectivelySelected('city', ci.code, undefined, ci.countryCode);
+    const sortedAirports = [...ci.airports].sort((a, b) => getLocalizedName(a, language).localeCompare(getLocalizedName(b, language)));
+    const hasSingleAirport = sortedAirports.length === 1;
+
+    const label = hasSingleAirport
+      ? getSingleAirportLabel(getLocalizedName(ci, language), getLocalizedName(sortedAirports[0], language))
+      : (getLocalizedName(ci, language) || ci.code);
+
     return (
       <div key={ci.code} className="ff-city-wrapper">
-        <div className={`ff-item ff-city ${selected ? 'ff-selected' : ''}${expanded && showAirports ? ' ff-city--expanded' : ''}`}>
-          {ci.airports.length > 0 && (
+        <div className={`ff-item ff-city ${selected ? 'ff-selected' : ''}${expanded && showAirports ? ' ff-city--expanded' : ''}${hasSingleAirport ? ' ff-city--single-airport ff-city--coral-line' : ''}`}>
+          {!hasSingleAirport && sortedAirports.length > 0 && (
             <button className="ff-expand-btn" onClick={onCityToggle}>{expanded ? UI_SYMBOLS.EXPAND_DOWN : UI_SYMBOLS.EXPAND_RIGHT}</button>
           )}
           <div className="ff-item-left" onClick={() => selectItem('city', ci.code, undefined, ci.countryCode)}>
-            <span>{getLocalizedName(ci, language) || ci.code} {ci.code !== CONFIG.NO_CITY_PLACEHOLDER && <span className="ff-code">({ci.code})</span>}</span>
+            <span>{label} {ci.code !== CONFIG.NO_CITY_PLACEHOLDER && <span className="ff-code">({ci.code})</span>}</span>
             {selected && <span className="ff-check">{UI_SYMBOLS.CHECK}</span>}
           </div>
         </div>
-        {expanded && showAirports && (
-          <div className="ff-nested">{ci.airports.map(renderAirport)}</div>
+        {!hasSingleAirport && expanded && showAirports && (
+          <div className="ff-nested">{sortedAirports.map(renderAirport)}</div>
         )}
       </div>
     );
@@ -112,7 +120,9 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
         </div>
         {isCountryExpanded && (
           <div className="ff-cities-list">
-            {country.cities.filter(c => c.code !== CONFIG.NO_CITY_PLACEHOLDER).map(ci => {
+            {[...country.cities].filter(c => c.code !== CONFIG.NO_CITY_PLACEHOLDER)
+              .sort((a, b) => getLocalizedName(a, language).localeCompare(getLocalizedName(b, language)))
+              .map(ci => {
               const isCityExpanded = expandedCities.has(ci.code);
               return renderCity(
                 ci,
@@ -130,12 +140,15 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
   const renderSection = (title: string, countries: DestCountry[], phase: 1 | 2 | 3) => {
     if (countries.length === 0 && phase !== 1) return null;
     if (countries.length === 0 && phase === 1 && destQuery) return null;
+    
+    const sortedCountries = [...countries].sort((a, b) => getLocalizedName(a, language).localeCompare(getLocalizedName(b, language)));
+
     return (
       <div className="ff-section">
         {phase !== 1 && <div className="ff-section-label">{title}</div>}
-        {phase === 1 && countries.map(c => renderCountry(c, 1, expandedCitiesP1, setExpandedCitiesP1, expandedCountriesP1.has(c.code), setExpandedCountriesP1))}
-        {phase === 2 && countries.map(c => renderCountry(c, 2, expandedCountriesP2, setExpandedCountriesP2))}
-        {phase === 3 && countries.map(c => renderCountry(c, 3, new Set(countries.flatMap(co => co.cities.map(ci => ci.code))), () => {}))}
+        {phase === 1 && sortedCountries.map(c => renderCountry(c, 1, expandedCitiesP1, setExpandedCitiesP1, expandedCountriesP1.has(c.code), setExpandedCountriesP1))}
+        {phase === 2 && sortedCountries.map(c => renderCountry(c, 2, expandedCountriesP2, setExpandedCountriesP2))}
+        {phase === 3 && sortedCountries.map(c => renderCountry(c, 3, new Set(countries.flatMap(co => co.cities.map(ci => ci.code))), () => {}))}
       </div>
     );
   };

@@ -7,3 +7,6 @@ export const getAirportsGeoJSON = (lang = 'en'): Promise<FeatureCollection<Point
 
 export const getAirportsByCountry = (countryCode: string, lang = 'en'): Promise<CountryAirport[]> =>
   apiClient.get(`/airports/by-country/${countryCode}`, { params: { lang } }).then(r => r.data.data);
+
+export const getCountryCenters = (): Promise<Record<string, { lon: number; lat: number; zoom: number }>> =>
+  apiClient.get('/countries/centers').then(r => r.data);

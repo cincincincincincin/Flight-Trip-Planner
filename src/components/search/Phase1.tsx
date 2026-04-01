@@ -1,7 +1,7 @@
 import { UI_SYMBOLS } from '../../constants/ui';
 import React, { useState, useCallback } from 'react';
 import type { Country, City, Airport } from '../../types';
-import { highlightText } from './searchUtils';
+import { highlightText, getSingleAirportLabel } from './searchUtils';
 import { useTexts } from '../../hooks/useTexts';
 import { getLocalizedName } from '../../utils/i18n';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -83,11 +83,12 @@ const Phase1 = React.memo(({
   const renderCity = useCallback((city: City) => {
     const isCityExpanded = expandedCities.has(city.code);
     const cachedAirports = citiesCache[city.code]?.airports;
+    const hasSingleAirport = cachedAirports && cachedAirports.length === 1;
 
     return (
       <div key={`phase1-city-${city.code}`} className="city-item-wrapper" data-city-code={city.code}>
-        <div className={`search-item city-item${isCityExpanded ? ' city-item--expanded' : ''}`}>
-          {(
+        <div className={`search-item city-item${isCityExpanded ? ' city-item--expanded' : ''}${hasSingleAirport ? ' city-item--single-airport city-item--coral-line' : ''}`}>
+          {(!hasSingleAirport) && (
             <button
               className="expand-button"
               onClick={(e) => handleToggleCity(city.code, city.name, e)}
@@ -100,13 +101,17 @@ const Phase1 = React.memo(({
             className="item-main"
             onClick={() => handleItemClick(city)}
           >
-            <span className="item-name">{getLocalizedName(city, language)}</span>
+            <span className="item-name">
+              {hasSingleAirport
+                ? getSingleAirportLabel(getLocalizedName(city, language), getLocalizedName(cachedAirports[0], language))
+                : getLocalizedName(city, language)}
+            </span>
             <span className="item-badge"></span>
           </div>
           <span className="item-code">({city.code})</span>
         </div>
 
-        {isCityExpanded && cachedAirports && (
+        {isCityExpanded && cachedAirports && !hasSingleAirport && (
           <div className="nested-list">
             {cachedAirports.length > 0 ? (
               <>
@@ -130,7 +135,7 @@ const Phase1 = React.memo(({
           </div>
         )}
 
-        {isCityExpanded && !cachedAirports && loadingExpand && (
+        {isCityExpanded && !cachedAirports && !hasSingleAirport && loadingExpand && (
           <div className="nested-list">
             <div className="no-items">{t.search.loadingAirportsForCity(city.name)}</div>
           </div>

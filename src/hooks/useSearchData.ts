@@ -1,9 +1,12 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
-import axios from 'axios';
-import { search, getCountryCities, getCityAirports } from '../api/search';
-import { CONFIG } from '../constants/config';
-import type { Country, City, Airport, SearchPhaseInfo, Airport as AirportType } from '../types';
+import { useState, useRef, useCallback, useMemo } from 'react';
+import type { Country, City, Airport, SearchPhaseInfo } from '../types';
+import type { AirportFeatureProps } from '../types';
+import type { Feature, Point } from 'geojson';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useAirportsQuery } from './queries';
+
+type PhaseData = { 1: Country[]; 2: Country[]; 3: Country[] };
+type HasMore = { 1: boolean; 2: boolean; 3: boolean };
 
 interface CountryCacheEntry {
   cities: City[];
@@ -21,405 +24,197 @@ interface PhaseCacheEntry {
   fetchedAt: number;
 }
 
-type CountriesCache = Record<string, CountryCacheEntry>;
-type CitiesCache = Record<string, CityCacheEntry>;
-type PhaseCache = Record<string, PhaseCacheEntry>;
-type PhaseData = { 1: Country[]; 2: Country[]; 3: Country[] };
-type HasMore = { 1: boolean; 2: boolean; 3: boolean };
-
 interface UseSearchDataParams {
   query: string;
   containerRef: React.RefObject<HTMLElement | null>;
 }
 
-export function useSearchData({ query, containerRef }: UseSearchDataParams) {
-  const language = useSettingsStore(s => s.language);
-  const showConsoleLogs = useSettingsStore(s => s.showConsoleLogs);
-  const showConsoleLogsRef = useRef(showConsoleLogs);
-  useEffect(() => { showConsoleLogsRef.current = showConsoleLogs; }, [showConsoleLogs]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const log = useCallback((...args: any[]) => { if (showConsoleLogsRef.current) console.log(...args); }, []);
+function normalize(str: string): string {
+  return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
 
-  const [loading, setLoading] = useState({ search: false, expand: false });
-  const [currentPhase, setCurrentPhase] = useState<1 | 2 | 3>(1);
-  const [offset, setOffset] = useState(0);
-  const [phaseData, setPhaseData] = useState<PhaseData>({ 1: [], 2: [], 3: [] });
-  const [hasMore, setHasMore] = useState<HasMore>({ 1: false, 2: false, 3: false });
-  const [phaseInfo, setPhaseInfo] = useState<SearchPhaseInfo>({
-    has_phase2: false,
-    has_phase3: false,
+function featureToAirport(f: Feature<Point, AirportFeatureProps>): Airport {
+  return {
+    type: 'airport',
+    code: f.properties.code,
+    name: f.properties.name,
+    city_code: f.properties.city_code,
+    city_name: f.properties.city_name,
+    country_code: f.properties.country_code,
+    country_name: f.properties.country_name,
+  };
+}
+
+function buildIndex(features: Feature<Point, AirportFeatureProps>[]) {
+  const countryMap: Record<string, { name: string; cities: Record<string, { name: string; airports: Airport[] }> }> = {};
+
+  for (const f of features) {
+    const { code, name, city_code, city_name, country_code, country_name } = f.properties;
+    if (!country_code || !city_code) continue;
+    if (!countryMap[country_code]) {
+      countryMap[country_code] = { name: country_name ?? country_code, cities: {} };
+    }
+    if (!countryMap[country_code].cities[city_code]) {
+      countryMap[country_code].cities[city_code] = { name: city_name ?? city_code, airports: [] };
+    }
+    countryMap[country_code].cities[city_code].airports.push(featureToAirport(f));
+  }
+
+  const countriesCache: Record<string, CountryCacheEntry> = {};
+  const citiesCache: Record<string, CityCacheEntry> = {};
+  const now = Date.now();
+
+  for (const [cc, { cities }] of Object.entries(countryMap)) {
+    const cityList: City[] = Object.entries(cities)
+      .map(([cityCode, { name, airports }]) => {
+        citiesCache[cityCode] = { airports, fetchedAt: now };
+        return { type: 'city' as const, code: cityCode, name, country_code: cc, airports };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+    countriesCache[cc] = { cities: cityList, pagination: { offset: cityList.length, hasMore: false, total: cityList.length }, fetchedAt: now };
+  }
+
+  return { countryMap, countriesCache, citiesCache };
+}
+
+function computePhaseData(
+  countryMap: Record<string, { name: string; cities: Record<string, { name: string; airports: Airport[] }> }>,
+  query: string,
+): { phaseData: PhaseData; searchMode: 'prefix' | 'contains'; exactAirport: Airport | null; phase2Cache: Record<string, PhaseCacheEntry>; phase3Cache: Record<string, PhaseCacheEntry> } {
+  const q = normalize(query.trim());
+
+  // Empty query: all countries in phase 1
+  if (q === '') {
+    const allCountries: Country[] = Object.entries(countryMap)
+      .map(([code, { name }]) => ({ type: 'country' as const, code, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return { phaseData: { 1: allCountries, 2: [], 3: [] }, searchMode: 'prefix', exactAirport: null, phase2Cache: {}, phase3Cache: {} };
+  }
+
+  // Exact IATA match (3 chars)
+  let exactAirport: Airport | null = null;
+  if (q.length === 3) {
+    for (const { cities } of Object.values(countryMap)) {
+      for (const { airports } of Object.values(cities)) {
+        const found = airports.find(a => a.code.toLowerCase() === q);
+        if (found) { exactAirport = found; break; }
+      }
+      if (exactAirport) break;
+    }
+  }
+
+  for (const mode of ['prefix', 'contains'] as const) {
+    const matches = (str: string) => {
+      const n = normalize(str);
+      return mode === 'prefix' ? n.startsWith(q) : n.includes(q);
+    };
+
+    const p1: Country[] = [], p2: Country[] = [], p3: Country[] = [];
+    const p2Cache: Record<string, PhaseCacheEntry> = {};
+    const p3Cache: Record<string, PhaseCacheEntry> = {};
+    const now = Date.now();
+
+    for (const [cc, { name: countryName, cities }] of Object.entries(countryMap)) {
+      if (matches(countryName)) {
+        const cityList = Object.entries(cities)
+          .map(([cityCode, { name, airports }]) => ({ type: 'city' as const, code: cityCode, name, country_code: cc, airports }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        p1.push({ type: 'country', code: cc, name: countryName, cities: cityList });
+        continue;
+      }
+
+      const matchingCities: City[] = [];
+      const airportMatchCities: City[] = [];
+
+      for (const [cityCode, { name: cityName, airports }] of Object.entries(cities)) {
+        if (matches(cityName)) {
+          matchingCities.push({ type: 'city', code: cityCode, name: cityName, country_code: cc, airports });
+        } else {
+          const matched = airports.filter(a => matches(a.name));
+          if (matched.length > 0) {
+            airportMatchCities.push({ type: 'city', code: cityCode, name: cityName, country_code: cc, airports: matched });
+          }
+        }
+      }
+
+      if (matchingCities.length > 0) {
+        const sorted = matchingCities.sort((a, b) => a.name.localeCompare(b.name));
+        p2.push({ type: 'country', code: cc, name: countryName, cities: sorted });
+        p2Cache[cc] = { cities: sorted, fetchedAt: now };
+      } else if (airportMatchCities.length > 0) {
+        const sorted = airportMatchCities.sort((a, b) => a.name.localeCompare(b.name));
+        p3.push({ type: 'country', code: cc, name: countryName, cities: sorted });
+        p3Cache[cc] = { cities: sorted, fetchedAt: now };
+      }
+    }
+
+    p1.sort((a, b) => a.name.localeCompare(b.name));
+    p2.sort((a, b) => a.name.localeCompare(b.name));
+    p3.sort((a, b) => a.name.localeCompare(b.name));
+
+    if (p1.length > 0 || p2.length > 0 || p3.length > 0) {
+      return { phaseData: { 1: p1, 2: p2, 3: p3 }, searchMode: mode, exactAirport, phase2Cache: p2Cache, phase3Cache: p3Cache };
+    }
+  }
+
+  return { phaseData: { 1: [], 2: [], 3: [] }, searchMode: 'prefix', exactAirport, phase2Cache: {}, phase3Cache: {} };
+}
+
+export function useSearchData({ query }: UseSearchDataParams) {
+  useSettingsStore(s => s.language); // re-run when language changes (GeoJSON re-fetched per lang)
+  const { data: airportsData } = useAirportsQuery();
+
+  const { countryMap, countriesCache, citiesCache } = useMemo(
+    () => airportsData ? buildIndex(airportsData.features) : { countryMap: {}, countriesCache: {}, citiesCache: {} },
+    [airportsData],
+  );
+
+  const { phaseData, searchMode, exactAirport, phase2Cache, phase3Cache } = useMemo(
+    () => computePhaseData(countryMap, query),
+    [countryMap, query],
+  );
+
+  const currentPhase = useMemo<1 | 2 | 3>(() => {
+    if (phaseData[1].length > 0) return 1;
+    if (phaseData[2].length > 0) return 2;
+    return 3;
+  }, [phaseData]);
+
+  const hasMore: HasMore = { 1: false, 2: false, 3: false };
+  const offset = 0;
+
+  const phaseInfo: SearchPhaseInfo = useMemo(() => ({
+    has_phase2: phaseData[2].length > 0,
+    has_phase3: phaseData[3].length > 0,
     next_phase_available: false,
-    total_in_current_phase: 0
-  });
-  const [countriesCache, setCountriesCache] = useState<CountriesCache>({});
-  const [citiesCache, setCitiesCache] = useState<CitiesCache>({});
-  const [phase2Cache, setPhase2Cache] = useState<PhaseCache>({});
-  const [phase3Cache, setPhase3Cache] = useState<PhaseCache>({});
+    total_in_current_phase: phaseData[currentPhase].length,
+  }), [phaseData, currentPhase]);
+
+  const loading = { search: !airportsData, expand: false };
+
   const [isMainScrollPaused, setIsMainScrollPaused] = useState(false);
   const [activeNestedScrolls, setActiveNestedScrolls] = useState(new Set<string>());
-  const [searchMode, setSearchMode] = useState<'prefix' | 'contains'>('prefix');
-  const [exactAirport, setExactAirport] = useState<AirportType | null>(null);
 
-  const languageRef = useRef(language);
-
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const countriesCacheRef = useRef<CountriesCache>(countriesCache);
-  const citiesCacheRef = useRef<CitiesCache>(citiesCache);
-  const phase2CacheRef = useRef<PhaseCache>(phase2Cache);
-  const phase3CacheRef = useRef<PhaseCache>(phase3Cache);
+  const scrollBeforeActionRef = useRef(0);
+  const shouldRestoreScrollRef = useRef(false);
+  const changingItemRef = useRef<string | null>(null);
   const loadingRef = useRef<{
     phase1Countries: Record<string, boolean>;
     phase1Cities: Record<string, boolean>;
     phase2Cities: Record<string, boolean>;
   }>({ phase1Countries: {}, phase1Cities: {}, phase2Cities: {} });
   const citiesOffsetRef = useRef<Record<string, number>>({});
-  const scrollBeforeActionRef = useRef(0);
-  const shouldRestoreScrollRef = useRef(false);
-  const changingItemRef = useRef<string | null>(null);
 
-  // Keep cache refs in sync
-  useEffect(() => {
-    countriesCacheRef.current = countriesCache;
-    citiesCacheRef.current = citiesCache;
-    phase2CacheRef.current = phase2Cache;
-    phase3CacheRef.current = phase3Cache;
-  }, [countriesCache, citiesCache, phase2Cache, phase3Cache]);
-
-  // Keep language ref in sync
-  useEffect(() => {
-    languageRef.current = language;
-  }, [language]);
-
-  const resetSearch = useCallback(() => {
-    log('[SEARCH] Resetting search');
-
-    setPhaseData({ 1: [], 2: [], 3: [] });
-    setHasMore({ 1: false, 2: false, 3: false });
-    setPhaseInfo({
-      has_phase2: false,
-      has_phase3: false,
-      next_phase_available: false,
-      total_in_current_phase: 0
-    });
-    setCurrentPhase(1);
-    setOffset(0);
-    setCountriesCache({});
-    setCitiesCache({});
-    setPhase2Cache({});
-    setPhase3Cache({});
-    setIsMainScrollPaused(false);
-    setActiveNestedScrolls(new Set());
-    setSearchMode('prefix');
-    setExactAirport(null);
-
-    citiesOffsetRef.current = {};
-    scrollBeforeActionRef.current = 0;
-    shouldRestoreScrollRef.current = false;
-    changingItemRef.current = null;
-
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-  }, []);
-
-  const performSearch = useCallback(async (searchQuery: string, searchOffset = 0, append = false) => {
-    const trimmedQuery = searchQuery.trim();
-
-    log('[SEARCH] performSearch:', { query: trimmedQuery, offset: searchOffset, append, currentPhase });
-
-    if (!append) {
-      resetSearch();
-    }
-
-    setLoading(prev => ({ ...prev, search: true }));
-
-    try {
-      abortControllerRef.current = new AbortController();
-
-      const data = await search(
-        { q: trimmedQuery, offset: searchOffset, limit: CONFIG.SEARCH_LIMITS.main, lang: languageRef.current },
-        { signal: abortControllerRef.current.signal }
-      );
-      log('[SEARCH] Search response:', {
-        phase: data.phase,
-        mode: data.search_mode,
-        itemsCount: data.data.length,
-        hasMore: data.has_more,
-        nextOffset: data.next_offset
-      });
-
-      setSearchMode(data.search_mode);
-      setPhaseInfo(data.phase_info);
-      setExactAirport(data.exact_match ?? null);
-
-      setPhaseData(prev => {
-        const newPhaseData = { ...prev };
-        if (append && data.phase === currentPhase) {
-          const existing = newPhaseData[data.phase] || [];
-          const existingIds = new Set(existing.map((item: Country) => item.code));
-          const newItems = data.data.filter((item: Country) => !existingIds.has(item.code));
-          newPhaseData[data.phase] = [...existing, ...newItems];
-        } else {
-          newPhaseData[data.phase] = data.data;
-        }
-        return newPhaseData;
-      });
-
-      if (data.phase === 2 && data.data.length > 0) {
-        setPhase2Cache(prev => {
-          const newCache = { ...prev };
-          let hasChanges = false;
-          data.data.forEach((country: Country) => {
-            if (country.code && country.cities) {
-              const existing = prev[country.code];
-              if (!existing || existing.fetchedAt < Date.now() - CONFIG.CACHE_FRESHNESS_MS) {
-                newCache[country.code] = { cities: country.cities, fetchedAt: Date.now() };
-                hasChanges = true;
-              }
-            }
-          });
-          return hasChanges ? newCache : prev;
-        });
-      } else if (data.phase === 3 && data.data.length > 0) {
-        setPhase3Cache(prev => {
-          const newCache = { ...prev };
-          let hasChanges = false;
-          data.data.forEach((country: Country) => {
-            if (country.code) {
-              const existing = prev[country.code];
-              if (!existing || existing.fetchedAt < Date.now() - CONFIG.CACHE_FRESHNESS_MS) {
-                newCache[country.code] = { cities: country.cities || [], fetchedAt: Date.now() };
-                hasChanges = true;
-              }
-            }
-          });
-          return hasChanges ? newCache : prev;
-        });
-      }
-
-      setHasMore(prev => ({ ...prev, [data.phase]: data.has_more }));
-      setOffset(data.next_offset);
-      setCurrentPhase(data.phase);
-
-    } catch (error) {
-      if (!axios.isCancel(error)) {
-        console.error('[SEARCH ERROR] performSearch:', error);
-      }
-    } finally {
-      setLoading(prev => ({ ...prev, search: false }));
-      abortControllerRef.current = null;
-    }
-  }, [resetSearch, currentPhase]);
-
-  // Re-search when language changes (only if query is non-empty)
-  useEffect(() => {
-    if (!query.trim()) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    performSearch(query, 0, false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [language]);
-
-  const loadMoreMain = useCallback((
-    currentPhaseVal: 1 | 2 | 3,
-    offsetVal: number,
-    hasMoreVal: HasMore,
-    phaseInfoVal: SearchPhaseInfo,
-    phaseDataVal: PhaseData,
-    isMainScrollPausedVal: boolean,
-    queryVal: string,
-  ) => {
-    if (loading.search || isMainScrollPausedVal) {
-      log('[SEARCH] loadMoreMain: Skipping - loading or paused');
-      return;
-    }
-
-    let shouldLoadMore = false;
-
-    if (currentPhaseVal === 1) {
-      shouldLoadMore = hasMoreVal[1] ||
-                      (!hasMoreVal[1] && phaseInfoVal.has_phase2 && phaseDataVal[2].length === 0);
-    } else if (currentPhaseVal === 2) {
-      shouldLoadMore = hasMoreVal[2] ||
-                      (!hasMoreVal[2] && phaseInfoVal.has_phase3 && phaseDataVal[3].length === 0);
-    } else if (currentPhaseVal === 3) {
-      shouldLoadMore = hasMoreVal[3];
-    }
-
-    if (!shouldLoadMore) {
-      log('[SEARCH] No more data to load');
-      return;
-    }
-
-    log('[SEARCH] Loading more, offset:', offsetVal);
-    performSearch(queryVal, offsetVal, true);
-  }, [loading.search, performSearch]);
-
-  const expandCountryPhase1 = useCallback(async (
-    countryCode: string,
-    countryName: string,
-    citiesOffset = 0,
-    isScrollTrigger = false,
-  ) => {
-    if (loadingRef.current.phase1Countries[countryCode]) {
-      log('[SEARCH] expandCountryPhase1: Already loading', countryCode);
-      return;
-    }
-
-    log('[SEARCH] Expanding country for PHASE 1:', { countryCode, countryName, citiesOffset, isScrollTrigger });
-
-    if (containerRef.current && !isScrollTrigger) {
-      scrollBeforeActionRef.current = containerRef.current.scrollTop;
-      shouldRestoreScrollRef.current = true;
-      changingItemRef.current = `country-${countryCode}`;
-    }
-
-    loadingRef.current.phase1Countries[countryCode] = true;
-    setLoading(prev => ({ ...prev, expand: true }));
-
-    if (!isScrollTrigger) {
-      setActiveNestedScrolls(prev => new Set(prev).add(countryCode));
-    }
-
-    try {
-      const { data: cities, pagination } = await getCountryCities(countryCode, {
-        limit: CONFIG.SEARCH_LIMITS.cities,
-        offset: citiesOffset,
-        lang: languageRef.current,
-      });
-
-      citiesOffsetRef.current = {
-        ...citiesOffsetRef.current,
-        [countryCode]: citiesOffset + cities.length
-      };
-
-      setCountriesCache(prev => {
-        const currentCountryCache = prev[countryCode];
-        const existingCities = currentCountryCache?.cities || [];
-        const existingCityCodes = new Set(existingCities.map((c: City) => c.code));
-        const newCities = cities.filter((city: City) => !existingCityCodes.has(city.code));
-
-        if (citiesOffset > 0 && newCities.length === 0) return prev;
-
-        const updatedCities = citiesOffset === 0 ? cities : [...existingCities, ...newCities];
-
-        return {
-          ...prev,
-          [countryCode]: {
-            cities: updatedCities,
-            pagination: {
-              offset: citiesOffset + cities.length,
-              hasMore: pagination.has_more,
-              total: pagination.total
-            },
-            fetchedAt: Date.now()
-          }
-        };
-      });
-
-      if (!pagination.has_more) {
-        setActiveNestedScrolls(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(countryCode);
-          if (newSet.size === 0) {
-            log('[SEARCH] All nested scrolls completed, resuming main scroll');
-            setIsMainScrollPaused(false);
-          }
-          return newSet;
-        });
-      }
-
-    } catch (error) {
-      console.error('[SEARCH ERROR] expandCountryPhase1:', error);
-      setActiveNestedScrolls(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(countryCode);
-        return newSet;
-      });
-    } finally {
-      loadingRef.current.phase1Countries[countryCode] = false;
-      setLoading(prev => ({ ...prev, expand: false }));
-    }
-  }, [containerRef]);
-
-  const expandCity = useCallback(async (cityCode: string, cityName: string, countryCode: string) => {
-    if (loadingRef.current.phase1Cities[cityCode]) {
-      log('[SEARCH] expandCity: Already loading', cityCode);
-      return;
-    }
-    if (citiesCacheRef.current[cityCode]) return;
-
-    log('[SEARCH] Expanding city:', { cityCode, cityName, countryCode });
-
-    if (containerRef.current) {
-      scrollBeforeActionRef.current = containerRef.current.scrollTop;
-      shouldRestoreScrollRef.current = true;
-      changingItemRef.current = `city-${cityCode}`;
-    }
-
-    loadingRef.current.phase1Cities[cityCode] = true;
-    setLoading(prev => ({ ...prev, expand: true }));
-
-    try {
-      const { data } = await getCityAirports(cityCode, { limit: CONFIG.SEARCH_LIMITS.airports, offset: 0, lang: languageRef.current });
-      setCitiesCache(prev => {
-        if (prev[cityCode]) return prev;
-        return { ...prev, [cityCode]: { airports: data, fetchedAt: Date.now() } };
-      });
-    } catch (error) {
-      console.error('[SEARCH ERROR] expandCity:', error);
-    } finally {
-      loadingRef.current.phase1Cities[cityCode] = false;
-      setLoading(prev => ({ ...prev, expand: false }));
-    }
-  }, [containerRef]);
-
-  const handleExpandCountry = useCallback((countryCode: string, countryName: string) => {
-    setIsMainScrollPaused(true);
-    if (!countriesCacheRef.current[countryCode]) {
-      expandCountryPhase1(countryCode, countryName, 0, false);
-    }
-  }, [expandCountryPhase1]);
-
-  const handleExpandCity = useCallback((cityCode: string, cityName: string, countryCode: string) => {
-    if (!citiesCacheRef.current[cityCode]) {
-      expandCity(cityCode, cityName, countryCode);
-    }
-  }, [expandCity]);
-
-  const handleLoadMoreCities = useCallback((countryCode: string, countryName: string) => {
-    const countryCache = countriesCacheRef.current[countryCode];
-    if (!countryCache?.pagination?.hasMore) {
-      log('[SEARCH] handleLoadMoreCities: No more cities to load');
-      return;
-    }
-    const currentOffset = countryCache.pagination.offset || 0;
-    log('[SEARCH] Loading more cities for country:', { countryCode, countryName, currentOffset });
-    expandCountryPhase1(countryCode, countryName, currentOffset, true);
-  }, [expandCountryPhase1]);
-
-  const triggerSearch = useCallback((searchQuery: string, searchOffset = 0, append = false) => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    debounceRef.current = setTimeout(() => {
-      performSearch(searchQuery, searchOffset, append);
-    }, CONFIG.DEBOUNCE_TIME_MS);
-  }, [performSearch]);
-
-  const triggerSearchImmediate = useCallback((searchQuery: string, searchOffset = 0, append = false) => {
-    performSearch(searchQuery, searchOffset, append);
-  }, [performSearch]);
+  // All expand/search actions are no-ops: data is pre-indexed from GeoJSON
+  const handleExpandCountry = useCallback((_code: string, _name: string) => {}, []);
+  const handleExpandCity = useCallback((_code: string, _name: string, _cc: string) => {}, []);
+  const handleLoadMoreCities = useCallback((_code: string, _name: string) => {}, []);
+  const loadMoreMain = useCallback((..._args: any[]) => {}, []);
+  const resetSearch = useCallback(() => {}, []);
+  const triggerSearch = useCallback((_q: string, _offset?: number, _reset?: boolean) => {}, []);
+  const triggerSearchImmediate = useCallback((_q: string, _offset?: number, _reset?: boolean) => {}, []);
 
   return {
-    // state
     loading,
     currentPhase,
     offset,
@@ -434,14 +229,11 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
     activeNestedScrolls,
     searchMode,
     exactAirport,
-    // setters needed by Search.jsx
     setIsMainScrollPaused,
     setActiveNestedScrolls,
-    // scroll refs for Search.jsx scroll restoration
     scrollBeforeActionRef,
     shouldRestoreScrollRef,
     changingItemRef,
-    // actions
     triggerSearch,
     triggerSearchImmediate,
     handleExpandCountry,
@@ -449,7 +241,6 @@ export function useSearchData({ query, containerRef }: UseSearchDataParams) {
     handleLoadMoreCities,
     loadMoreMain,
     resetSearch,
-    // refs
     loadingRef,
     citiesOffsetRef,
   };

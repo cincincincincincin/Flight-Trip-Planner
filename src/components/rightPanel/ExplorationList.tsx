@@ -1,6 +1,7 @@
 import React from 'react';
 import { UI_SYMBOLS } from '../../constants/ui';
 import { useTexts } from '../../hooks/useTexts';
+import { getSingleAirportLabel } from '../search/searchUtils';
 
 export interface ExplorationDisplayItem {
   kind: 'airport' | 'city-group' | 'country-group';
@@ -98,18 +99,26 @@ const ExplorationList = ({
             );
           }
 
-          const isExpanded = expandedCityGroups.has(item.code);
+          const hasSingleAirport = item.airportCodes.length === 1 && item.childCities?.[0]?.airports?.length === 1;
+          const isExpanded = hasSingleAirport ? false : expandedCityGroups.has(item.code);
+          const label = hasSingleAirport 
+            ? getSingleAirportLabel(item.name, item.childCities![0].airports[0].name)
+            : item.name;
+
           return (
             <div key={item.code} className="exploration-group">
-              <div className="exploration-item exploration-item--group">
-                <button className="exploration-expand-btn" onClick={() => setExpandedCityGroups(prev => {
-                  const s = new Set(prev);
-                  if (s.has(item.code)) s.delete(item.code); else s.add(item.code);
-                  return s;
-                })}>{isExpanded ? '▾' : '▸'}</button>
+              <div className={`exploration-item exploration-item--group ${hasSingleAirport ? 'exploration-item--single-airport' : ''}`}>
+                {!hasSingleAirport && (
+                  <button className="exploration-expand-btn" onClick={() => setExpandedCityGroups(prev => {
+                    const s = new Set(prev);
+                    if (s.has(item.code)) s.delete(item.code); else s.add(item.code);
+                    return s;
+                  })}>{expandedCityGroups.has(item.code) ? '▾' : '▸'}</button>
+                )}
                 <span className="exploration-icon"></span>
-                <span className="exploration-name">{item.name}</span>
-                <span className="exploration-count">{item.airportCodes.length}{t.panel.airportAbbreviation}</span>
+                <span className="exploration-name">{label}</span>
+                {!hasSingleAirport && <span className="exploration-count">{item.airportCodes.length}{t.panel.airportAbbreviation}</span>}
+                {hasSingleAirport && <span className="exploration-code">({item.airportCodes[0]})</span>}
                 {altTime && (
                   <button className="exploration-tz-btn"
                     onClick={() => onSwitchTimezone(item.airportCodes[0])}>{altTime}</button>
@@ -117,7 +126,7 @@ const ExplorationList = ({
                 <button className="exploration-remove-btn"
                   onClick={() => onRemoveCodes(item.airportCodes)}>{UI_SYMBOLS.CLOSE}</button>
               </div>
-              {isExpanded && item.childCities?.map(city =>
+              {isExpanded && !hasSingleAirport && item.childCities?.map(city =>
                 city.airports.map(ap => (
                   <div key={ap.code} className="exploration-item exploration-item--child">
                     <span className="exploration-icon"></span>
@@ -157,20 +166,28 @@ const ExplorationList = ({
               </div>
               {isExpanded && item.childCities?.map(city => {
                 const cityKey = `${item.code}:${city.cityCode}`;
-                const isCityExpanded = expandedInnerCities.has(cityKey);
+                const hasSingleAirport = city.airports.length === 1;
+                const isCityExpanded = hasSingleAirport ? false : expandedInnerCities.has(cityKey);
                 const cityRepCode = city.airports[0]?.code;
                 const cityTzBtn = !hasSingleTZ && cityRepCode ? getAltTimeDisplay(cityRepCode) : null;
+                const label = hasSingleAirport 
+                  ? getSingleAirportLabel(city.cityName, city.airports[0].name)
+                  : city.cityName;
+
                 return (
-                  <div key={city.cityCode} className="exploration-group exploration-group--nested">
-                    <div className="exploration-item exploration-item--city-child">
-                      <button className="exploration-expand-btn" onClick={() => setExpandedInnerCities(prev => {
-                        const s = new Set(prev);
-                        if (s.has(cityKey)) s.delete(cityKey); else s.add(cityKey);
-                        return s;
-                      })}>{isCityExpanded ? '▾' : '▸'}</button>
+                  <div key={city.cityCode} className={`exploration-group exploration-group--nested ${hasSingleAirport ? 'exploration-group--single-airport' : ''}`}>
+                    <div className={`exploration-item exploration-item--city-child ${hasSingleAirport ? 'exploration-item--single-airport' : ''}`}>
+                      {!hasSingleAirport && (
+                        <button className="exploration-expand-btn" onClick={() => setExpandedInnerCities(prev => {
+                          const s = new Set(prev);
+                          if (s.has(cityKey)) s.delete(cityKey); else s.add(cityKey);
+                          return s;
+                        })}>{expandedInnerCities.has(cityKey) ? '▾' : '▸'}</button>
+                      )}
                       <span className="exploration-icon"></span>
-                      <span className="exploration-name">{city.cityName}</span>
-                      <span className="exploration-count">{city.airports.length}ap</span>
+                      <span className="exploration-name">{label}</span>
+                      {!hasSingleAirport && <span className="exploration-count">{city.airports.length}ap</span>}
+                      {hasSingleAirport && <span className="exploration-code">({city.airports[0].code})</span>}
                       {cityTzBtn && cityRepCode && (
                         <button className="exploration-tz-btn" title={t.panel.switchTimezone}
                           onClick={() => onSwitchTimezone(cityRepCode)}>{cityTzBtn}</button>
@@ -178,7 +195,7 @@ const ExplorationList = ({
                       <button className="exploration-remove-btn"
                         onClick={() => onRemoveCodes(city.airports.map(a => a.code))}>{UI_SYMBOLS.CLOSE}</button>
                     </div>
-                    {isCityExpanded && city.airports.map(ap => (
+                    {isCityExpanded && !hasSingleAirport && city.airports.map(ap => (
                       <div key={ap.code} className="exploration-item exploration-item--child">
                         <span className="exploration-icon"></span>
                         <span className="exploration-name">{ap.name}</span>

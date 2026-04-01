@@ -242,20 +242,24 @@ const Search = ({ onSelectItem }: SearchProps) => {
       // Country: active when top ≤ refY AND the last visible text (nested-list bottom) > refY
       let country: string | null = null;
       container.querySelectorAll<HTMLElement>('[data-country-code]').forEach(el => {
-        const r = el.getBoundingClientRect();
         const nestedList = el.querySelector<HTMLElement>(':scope > .nested-list');
-        const textBottom = nestedList ? nestedList.getBoundingClientRect().bottom : r.bottom;
-        if (r.top <= refY && textBottom > refY) country = el.getAttribute('data-country-code');
+        if (nestedList) {
+          const r = el.getBoundingClientRect();
+          const textBottom = nestedList.getBoundingClientRect().bottom;
+          if (r.top <= refY && textBottom > refY) country = el.getAttribute('data-country-code');
+        }
       });
       setVisibleCountry(prev => prev === country ? prev : country);
 
       // City: active when top ≤ refY AND the last visible text (nested-list bottom) > refY
       let city: string | null = null;
       container.querySelectorAll<HTMLElement>('[data-city-code]').forEach(el => {
-        const r = el.getBoundingClientRect();
         const nestedList = el.querySelector<HTMLElement>(':scope > .nested-list');
-        const textBottom = nestedList ? nestedList.getBoundingClientRect().bottom : r.bottom;
-        if (r.top <= refY && textBottom > refY) city = el.getAttribute('data-city-code');
+        if (nestedList) {
+          const r = el.getBoundingClientRect();
+          const textBottom = nestedList.getBoundingClientRect().bottom;
+          if (r.top <= refY && textBottom > refY) city = el.getAttribute('data-city-code');
+        }
       });
       setVisibleCity(prev => prev === city ? prev : city);
     };
@@ -310,9 +314,28 @@ const Search = ({ onSelectItem }: SearchProps) => {
     if (!showSection) return null;
 
     const isCurrentPhase = currentPhase === phaseNumber;
+    
+    // Determine if this is the first visible section
+    const hasExactAirport = !!exactAirport;
+    const hasP1 = phaseData[1].length > 0;
+    const hasP2 = phaseData[2].length > 0;
+    const isFirst = phaseNumber === 1 ? !hasExactAirport :
+                    phaseNumber === 2 ? (!hasExactAirport && !hasP1) :
+                    (!hasExactAirport && !hasP1 && !hasP2);
+
+    const sectionTitle = phaseNumber === 1 ? t.search.countries :
+                         phaseNumber === 2 ? t.search.cities :
+                         t.search.airports;
 
     return (
       <div className="search-section" data-phase={phaseNumber}>
+        {!isFirst && items.length > 0 && (
+          <div className="results-header" style={{ position: 'relative', borderRadius: 0, borderTop: '1px solid var(--border)', zIndex: 0 }}>
+            <div className="header-main">
+              <h3>{sectionTitle}</h3>
+            </div>
+          </div>
+        )}
         <div className="section-content">
           {items.length > 0 ? (
             <>
@@ -337,17 +360,14 @@ const Search = ({ onSelectItem }: SearchProps) => {
   }, [phaseData, currentPhase, hasMore, loading.search, searchMode, query, isMainScrollPaused, showConsoleLogs]);
 
   const hasResults = useMemo(() => {
-    return phaseData[1].length > 0 || phaseData[2].length > 0 || phaseData[3].length > 0;
-  }, [phaseData]);
+    return !!exactAirport || phaseData[1].length > 0 || phaseData[2].length > 0 || phaseData[3].length > 0;
+  }, [phaseData, exactAirport]);
 
   const showContent = useMemo(() => {
     return isSearchOpen && (hasResults || loading.search || query.trim() !== '');
   }, [isSearchOpen, hasResults, loading.search, query]);
 
   const dynamicLabel = useMemo(() => {
-    // 3-char exact airport code
-    if (query.trim().length === 3 && exactAirport) return t.search.airportCode;
-
     // Inside large city (>1 airport) — show city name
     if (visibleCity) {
       const airports = citiesCache[visibleCity]?.airports;
@@ -377,6 +397,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
     if (visibleSection === 3) return t.search.airports;
     if (visibleSection === 2) return t.search.cities;
     if (visibleSection === 1) return t.search.countries;
+    if (visibleSection === 0) return t.search.airportCode;
     return t.search.searchResults;
   }, [query, exactAirport, visibleCity, visibleCountry, visibleSection,
       citiesCache, countriesCache, phase2Cache, phase3Cache, phaseData, language, t]);
@@ -416,21 +437,25 @@ const Search = ({ onSelectItem }: SearchProps) => {
             </div>
 
             <div className="results-content">
-              {!hasResults && !exactAirport && !loading.search && query.trim() !== '' ? (
+              {!hasResults && !loading.search && query.trim() !== '' ? (
                 <div className="no-results">
                   {t.search.noResultsFound(query)}
                 </div>
               ) : (
                 <>
-                  {query.trim().length === 3 && exactAirport && (
-                    <div className="search-section">
+                  {exactAirport && (
+                    <div className="search-section exact-airport-section" data-phase="0">
                       <div className="section-content">
                         <div
                           className="search-item airport-item"
                           onClick={() => handleItemClick(exactAirport)}
+                          style={{
+                            paddingLeft: '14px',
+                            borderLeft: '2px solid var(--c-coral-b)'
+                          }}
                         >
                           <div className="item-main">
-                            <span className="item-name"><b>{getLocalizedName(exactAirport, language)}</b></span>
+                            <span className="item-name">{getLocalizedName(exactAirport, language)}</span>
                             <span className="item-badge"></span>
                           </div>
                           <span className="item-code">({exactAirport.code})</span>

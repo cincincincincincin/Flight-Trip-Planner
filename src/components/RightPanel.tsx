@@ -13,7 +13,6 @@ import { useTripStore } from '../stores/tripStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useFilterStore } from '../stores/filterStore';
 import { useAirportInfoQuery, useAirportInfosQuery, useAirportsQuery, useAirportsByCountryQuery } from '../hooks/queries';
-import { getCityAirports, getCountryCities } from '../api/search';
 import { useTravelDate } from '../hooks/useTravelDate';
 import './RightPanel.css';
 import { useTexts } from '../hooks/useTexts';
@@ -49,11 +48,11 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
 
   // ── City mode state ─────────────────────────────────────────────────────────
   const [cityAirports, setCityAirports] = useState<Airport[]>([]);
-  const [loadingCityAirports, setLoadingCityAirports] = useState(false);
+  const [loadingCityAirports] = useState(false);
 
   // ── Country mode state ──────────────────────────────────────────────────────
   const [countryCities, setCountryCities] = useState<City[]>([]);
-  const [loadingCountry, setLoadingCountry] = useState(false);
+  const [loadingCountry] = useState(false);
   const [selectedFlatAirports, setSelectedFlatAirports] = useState<CountryAirport[]>([]);
   const [selectedCities, setSelectedCities] = useState<City[]>([]);
   const [loadingConfirm] = useState(false);
@@ -115,7 +114,10 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
       const cc = f.properties.country_code;
       if (cc) {
         if (!map[cc]) {
-          const name = countryDisplayNames?.of(cc) || f.properties.country_name || cc;
+          let name = countryDisplayNames?.of(cc);
+          if (!name || name === cc) {
+            name = f.properties.country_name || cc;
+          }
           map[cc] = { name, airportCount: 0 };
         }
         map[cc].airportCount++;
@@ -312,24 +314,29 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     }
   }, [explorationItems.length, tripState, selectedItem, clearFilters, onClose, pendingCountryPicker, onSwitchToCountryView]);
 
-  // ── Load city airports when city selected ─────────────────────────────────
+  // ── Load city airports from GeoJSON when city selected ────────────────────
   useEffect(() => {
     if (selectedItem?.type !== 'city') {
       setCityAirports([]);
       return;
     }
     const cityCode = selectedItem.data.code;
-    setLoadingCityAirports(true);
-    setCityAirports([]);
-    getCityAirports(cityCode, { limit: CONFIG.PAGE_LIMITS.GET_CITY_AIRPORTS, offset: 0 })
-      .then(r => {
-        setCityAirports((r.data || []).slice(0, CONFIG.MAX_AIRPORTS));
-      })
-      .catch(console.error)
-      .finally(() => setLoadingCityAirports(false));
-  }, [selectedItem]);
+    const airports: Airport[] = (airportsData?.features ?? [])
+      .filter(f => f.properties.city_code === cityCode)
+      .map(f => ({
+        type: 'airport' as const,
+        code: f.properties.code,
+        name: f.properties.name,
+        city_code: f.properties.city_code,
+        city_name: f.properties.city_name,
+        country_code: f.properties.country_code,
+        country_name: f.properties.country_name,
+        time_zone: f.properties.time_zone ?? undefined,
+      }));
+    setCityAirports(airports.slice(0, CONFIG.MAX_AIRPORTS));
+  }, [selectedItem, airportsData]);
 
-  // ── Load country cities when country selected ─────────────────────────────
+  // ── Load country cities from GeoJSON when country selected ───────────────
   useEffect(() => {
     if (selectedItem?.type !== 'country') {
       setCountryCities([]);
@@ -337,15 +344,33 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
       setSelectedCities([]);
       return;
     }
-    setLoadingCountry(true);
-    setCountryCities([]);
-    setSelectedFlatAirports([]);
-    setSelectedCities([]);
-    getCountryCities(selectedItem.data.code, { limit: CONFIG.PAGE_LIMITS.GET_COUNTRY_CITIES, offset: 0 })
-      .then(r => setCountryCities(r.data || []))
-      .catch(console.error)
-      .finally(() => setLoadingCountry(false));
-  }, [selectedItem]);
+    const countryCode = selectedItem.data.code;
+    const cityMap: Record<string, import('../types').City> = {};
+    for (const f of (airportsData?.features ?? [])) {
+      if (f.properties.country_code !== countryCode) continue;
+      const cityCode = f.properties.city_code;
+      if (!cityCode) continue;
+      if (!cityMap[cityCode]) {
+        cityMap[cityCode] = {
+          type: 'city',
+          code: cityCode,
+          name: f.properties.city_name ?? cityCode,
+          country_code: countryCode,
+          airports: [],
+        };
+      }
+      cityMap[cityCode].airports!.push({
+        type: 'airport',
+        code: f.properties.code,
+        name: f.properties.name,
+        city_code: f.properties.city_code,
+        city_name: f.properties.city_name,
+        country_code: f.properties.country_code,
+        country_name: f.properties.country_name,
+      });
+    }
+    setCountryCities(Object.values(cityMap).sort((a, b) => a.name.localeCompare(b.name)));
+  }, [selectedItem, airportsData]);
 
   // ── Build airportCountMap for country mode ────────────────────────────────
   const cityAirportCountMap = useMemo<Record<string, number>>(() => {

@@ -266,6 +266,9 @@
 /* Expanded city: permanent bg L2 (same specificity as above, comes after → wins) */
 .ff-country--expanded + .ff-cities-list .ff-city--expanded { background: var(--ff-l2); }
 
+/* Single airport city: permanent bg L3 */
+.ff-country--expanded + .ff-cities-list .ff-city--single-airport { background: var(--ff-l3); }
+
 /* Hover on any country: ff-hover (same spec as ff-item:hover, comes after → wins) */
 .ff-country:hover { background: var(--ff-hover); }
 
@@ -278,6 +281,31 @@
 
 /* Hover on expanded city (same spec as above, comes after → wins for expanded) */
 .ff-country--expanded + .ff-cities-list .ff-city--expanded:hover { background: var(--ff-hover); }
+
+/* Hover on single airport city */
+.ff-country--expanded + .ff-cities-list .ff-city--single-airport:hover { background: var(--ff-hover); }
+
+.ff-city--coral-line {
+  position: relative;
+}
+
+.ff-city--coral-line::before {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; left: 8px; width: 2px;
+  background: 
+    linear-gradient(var(--ff-l3), var(--ff-l3)),
+    linear-gradient(var(--c-coral-b), var(--c-coral-b)),
+    var(--bg-raised);
+  z-index: 2;
+}
+
+.ff-country--expanded + .ff-cities-list .ff-city--coral-line:hover::before {
+  background: 
+    linear-gradient(var(--ff-hover), var(--ff-hover)),
+    linear-gradient(var(--c-coral-b), var(--c-coral-b)),
+    var(--bg-raised);
+}
 
 .ff-cities-list {
   border-left: 2px solid var(--c-teal-b);

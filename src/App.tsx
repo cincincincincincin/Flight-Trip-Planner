@@ -7,8 +7,7 @@ import TripItinerary from './components/TripItinerary';
 import AuthModal from './components/auth/AuthModal';
 import UserMenu from './components/auth/UserMenu';
 import SavedTripsPanel from './components/auth/SavedTripsPanel';
-import { getCountryCenter } from './api/search';
-import { useAirportsQuery } from './hooks/queries';
+import { useAirportsQuery, useCountryCentersQuery } from './hooks/queries';
 import { useMapStore } from './stores/mapStore';
 import { useSelectionStore } from './stores/selectionStore';
 import { useTripStore } from './stores/tripStore';
@@ -188,6 +187,7 @@ function App() {
   }, [showConsoleLogs]);
 
   const { data: airportsData } = useAirportsQuery();
+  const { data: countryCenters } = useCountryCentersQuery();
 
   const { clearFilters } = useFilterStore();
 
@@ -295,11 +295,12 @@ function App() {
         return;
       }
     }
-    // Fallback to backend center if GeoJSON has no airports for this country
-    getCountryCenter(countryCode).then((center: any) => {
-      flyToLocation(center.lon ?? 0, center.lat ?? 0, center.recommended_zoom ?? CONFIG.FALLBACK_ZOOM.COUNTRY);
-    }).catch(() => {});
-  }, [airportsData, flyToLocation]);
+    // Fallback to precomputed country center if GeoJSON has no airports for this country
+    const center = countryCenters?.[countryCode];
+    if (center) {
+      flyToLocation(center.lon, center.lat, center.zoom);
+    }
+  }, [airportsData, countryCenters, flyToLocation]);
 
   const handleSelectItem = useCallback(async (item: any) => {
     if (item.type === 'airport' && item.isHighlighted && tripState) {
