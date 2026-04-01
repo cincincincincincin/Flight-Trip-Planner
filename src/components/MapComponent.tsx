@@ -9,12 +9,10 @@ import { useTripStore } from '../stores/tripStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useColorStore } from '../stores/colorStore';
 import { useFilterStore } from '../stores/filterStore';
-import { useAirportsQuery, useCitiesQuery } from '../hooks/queries';
+import { useAirportsQuery } from '../hooks/queries';
 import { generateGreatCircle, getTextColorForHaloColor, isBlackOrWhiteColor } from './map/utils';
-import { getAirport } from '../api/search';
 import { addAirportsLayer } from './map/airportsLayer';
-// import { addCitiesLayer } from './map/citiesLayer';
-// import { addRoutesLayer } from './map/routesLayer';
+
 import { startPreviewAnimation } from './map/routeAnimations';
 import type { GCPath } from './map/routeAnimations';
 import './MapComponent.css';
@@ -49,7 +47,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   const t = useTexts();
 
   // Stores
-  const { showAirports, /* showCities, */ mapStyle, globeMode, flyToZoom, setFlyToZoom } = useMapStore();
+  const { showAirports, mapStyle, globeMode, flyToZoom, setFlyToZoom } = useMapStore();
   const { highlightedAirports, selectedAirportCode, selectedAirportCodes, highlightedCities, flightsData, displayedFlights, explorationItems } = useSelectionStore();
   const { tripState, tripRoutes, previewAirportCode, manualTransferAirportCodes } = useTripStore();
   const { travelDate, timezone } = useSettingsStore();
@@ -73,8 +71,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
 
   // React Query – geo data
   const { data: airportsData } = useAirportsQuery();
-  // const { data: citiesData } = useCitiesQuery(showCities);
-  // const { data: routesData } = useRoutesQuery(false);
+
 
   // Derived
   const tripVisibleAirportCodes = useMemo(() => {
@@ -575,10 +572,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       safeRemoveLayer('airports-labels-highlighted');
       safeRemoveLayer('airports-labels-hover');
       safeRemoveLayer('airports-labels-hover-general');
-    safeRemoveLayer('cities-circles');
-    safeRemoveLayer('cities-labels');
-    safeRemoveLayer('cities-highlighted');
-    safeRemoveLayer('cities-labels-highlighted');
+
     safeRemoveLayer('routes-lines');
     safeRemoveLayer('selected-routes');
     safeRemoveLayer('trip-permanent-routes-line');
@@ -592,11 +586,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     safeRemoveSource('transfer-preview-route');
     safeRemoveSource('manual-transfer-preview');
 
-    /*
-    if (routesData && showRoutes) {
-      addRoutesLayer(map.current, routesData, onSelectItemRef);
-    }
-    */
+
 
     setupRouteLayers(map.current);
 
@@ -605,9 +595,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       addAirportsLayer(map.current, airportsData, mapStyle);
     }
 
-    // if (citiesData && showCities) {
-    //   addCitiesLayer(map.current, citiesData, mapStyle, onSelectItemRef, hoveredAirportCodeRef);
-    // }
+
 
     // Ensure hover layers are always on top of routes and city labels.
     const bringToFront = (ids: string[]) => {
@@ -684,16 +672,11 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     setLayerVisibility('airports-labels-highlighted', showAirports);
     setLayerVisibility('airports-labels-hover', showAirports);
     setLayerVisibility('airports-labels-hover-general', showAirports);
-    // setLayerVisibility('cities-circles', showCities);
-    // setLayerVisibility('cities-labels', showCities);
-    // setLayerVisibility('cities-highlighted', showCities);
-    // setLayerVisibility('cities-labels-highlighted', showCities);
-    // setLayerVisibility('routes-lines', showRoutes);
-    setLayerVisibility('selected-routes', showAirports /*|| showCities*/);
+    setLayerVisibility('selected-routes', showAirports);
 
     applyAirportFilters();
     applyColors();
-  }, [mapLoaded, airportsData, /*citiesData,*/ mapStyle, showAirports, /*showCities,*/ safeRemoveLayer, safeRemoveSource, applyAirportFilters, applyColors, rightPanelRef]);
+  }, [mapLoaded, airportsData, mapStyle, showAirports, safeRemoveLayer, safeRemoveSource, applyAirportFilters, applyColors, rightPanelRef]);
 
   // Update airport layer filters when highlightedAirports changes (no source rebuild)
   useAirportLayerFilter({

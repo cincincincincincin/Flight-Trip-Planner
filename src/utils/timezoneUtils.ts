@@ -13,7 +13,7 @@ export function buildTzGroups(airports: Array<{ code: string; name: string; time
     const tz = airport.time_zone ?? CONFIG.UNKNOWN_TIMEZONE;
     if (tz === CONFIG.UNKNOWN_TIMEZONE) {
       if (!groups.has(CONFIG.UNKNOWN_TIMEZONE)) {
-        groups.set(CONFIG.UNKNOWN_TIMEZONE, { tz: CONFIG.UNKNOWN_TIMEZONE, airports: [], currentDT: CONFIG.UNKNOWN_TZ_DUMMY, utcLabel: CONFIG.UNKNOWN_TZ_UTCLABEL, currentDateStr: '', currentTimeStr: '' });
+        groups.set(CONFIG.UNKNOWN_TIMEZONE, { tz: CONFIG.UNKNOWN_TIMEZONE, airports: [], currentDT: CONFIG.UNKNOWN_TZ_FALLBACK, utcLabel: CONFIG.UNKNOWN_TZ_UTCLABEL, currentDateStr: '', currentTimeStr: '' });
       }
       groups.get(CONFIG.UNKNOWN_TIMEZONE)!.airports.push(airport);
       continue;

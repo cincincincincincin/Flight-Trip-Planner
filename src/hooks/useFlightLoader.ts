@@ -139,10 +139,8 @@ export function useFlightLoader({
       const normalizedDatetime = fromDatetime.substring(0, 16) + ':00';
       const windowKey = `${airportCode}:${normalizedDatetime}`;
       if (loadedWindowsRef.current.has(windowKey)) return;
-      if (perAirportLoadingRef.current.get(airportCode)) return;
 
       loadedWindowsRef.current.add(windowKey);
-      perAirportLoadingRef.current.set(airportCode, true);
       setPerAirportLoading(prev => ({ ...prev, [airportCode]: true }));
       setError(null);
 
@@ -203,7 +201,6 @@ export function useFlightLoader({
         const axiosErr = err as { response?: { data?: { detail?: string } } };
         setError(axiosErr.response?.data?.detail || 'Failed to load flights');
       } finally {
-        perAirportLoadingRef.current.set(airportCode, false);
         setPerAirportLoading(prev => ({ ...prev, [airportCode]: false }));
       }
       if (autoLoadNext) await loadFn(airportCode, autoLoadNext);
@@ -280,12 +277,10 @@ export function useFlightLoader({
       }
     } else if (!isNewAirportSet && timezone) {
       airportCodes.forEach(code => {
-        if (!perAirportLoadingRef.current.get(code)) {
-          if (airportCodes.length > 1 && !airportTimezones?.[code]) return;
-          const fromDatetime = initialFromDatetime ?? getFromDatetimeForAirport(travelDate, code);
-          if (!loadedWindowsRef.current.has(`${code}:${fromDatetime}`)) {
-            loadFlightsFromDatetime(code, fromDatetime);
-          }
+        if (airportCodes.length > 1 && !airportTimezones?.[code]) return;
+        const fromDatetime = getFromDatetimeForAirport(travelDate, code);
+        if (!loadedWindowsRef.current.has(`${code}:${fromDatetime}`)) {
+          loadFlightsFromDatetime(code, fromDatetime);
         }
       });
     }

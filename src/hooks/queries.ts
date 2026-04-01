@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { getAirportsGeoJSON, getCitiesGeoJSON, getAirportsByCountry } from '../api/geo';
+import { getAirportsGeoJSON, getAirportsByCountry } from '../api/geo';
 import { CONFIG } from '../constants/config';
 import { getFlightOffers } from '../api/flights';
 import type { AirportInfo, FlightOffersResponse } from '../types';
@@ -12,16 +12,6 @@ export const useAirportsQuery = () => {
   return useQuery({
     queryKey: ['airports', language],
     queryFn: () => getAirportsGeoJSON(language),
-    staleTime: Infinity,
-  });
-};
-
-export const useCitiesQuery = (enabled: boolean) => {
-  const language = useSettingsStore(s => s.language);
-  return useQuery({
-    queryKey: ['cities', language],
-    queryFn: () => getCitiesGeoJSON(language),
-    enabled,
     staleTime: Infinity,
   });
 };

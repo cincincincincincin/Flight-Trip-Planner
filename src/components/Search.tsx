@@ -62,7 +62,6 @@ const Search = ({ onSelectItem }: SearchProps) => {
   } = useSearchData({ query, containerRef });
 
   const handleItemClick = useCallback((item: Country | City | Airport) => {
-    console.log('[SEARCH] handleItemClick:', { type: item.type, name: item.name, code: item.code });
 
     if (onSelectItem) {
       onSelectItem({ type: item.type, data: item } as SelectedItem);
@@ -132,7 +131,6 @@ const Search = ({ onSelectItem }: SearchProps) => {
     if (shouldRestoreScrollRef.current && containerRef.current && scrollBeforeActionRef.current > 0) {
       requestAnimationFrame(() => {
         if (containerRef.current) {
-          console.log('[SEARCH] Restoring scroll position after action:', scrollBeforeActionRef.current);
           containerRef.current.scrollTop = scrollBeforeActionRef.current;
           shouldRestoreScrollRef.current = false;
           scrollBeforeActionRef.current = 0;
@@ -194,7 +192,6 @@ const Search = ({ onSelectItem }: SearchProps) => {
           const countryName = phaseData[1].find(c => c.code === countryCode)?.name;
           const countryCache = countriesCache[countryCode];
           if (countryCache?.pagination?.hasMore) {
-            console.log('[SEARCH] Nested scroll trigger detected for country:', { countryCode, countryName });
             handleLoadMoreCities(countryCode, countryName ?? '');
           }
         }

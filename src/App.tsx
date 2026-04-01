@@ -7,7 +7,7 @@ import TripItinerary from './components/TripItinerary';
 import AuthModal from './components/auth/AuthModal';
 import UserMenu from './components/auth/UserMenu';
 import SavedTripsPanel from './components/auth/SavedTripsPanel';
-import { getAirport, getCity, getCountryCenter } from './api/search';
+import { getCountryCenter } from './api/search';
 import { useAirportsQuery } from './hooks/queries';
 import { useMapStore } from './stores/mapStore';
 import { useSelectionStore } from './stores/selectionStore';
@@ -67,10 +67,8 @@ function App() {
 
   const {
     showAirports, setShowAirports,
-    // showCities, setShowCities,
     viewport, setViewport,
     controlsPanelOpen, setControlsPanelOpen,
-    // viewMode, setViewMode,
   } = useMapStore();
 
   const {
@@ -379,22 +377,9 @@ function App() {
         airportCodes: cityAirportCodes,
       }/*, viewMode*/);
 
-      if (!item.fromMap) {
-        let coords = extractCoordinates(item);
-        if (!coords && item.data?.code) {
-          try {
-            const data = await getCity(item.data.code);
-            coords = extractCoordinates({ data });
-          } catch (e) {
-            console.error('Failed to fetch city details:', e);
-          }
-        }
-        if (cityAirportCodes.length > 1) {
+        if (cityAirportCodes.length > 0) {
           fitBoundsToAirportCodes(cityAirportCodes);
-        } else if (coords) {
-          flyToLocation(coords.lng, coords.lat, CONFIG.FALLBACK_ZOOM.CITY);
         }
-      }
       return;
     } else {
       setSelectedAirportCode(null);
@@ -405,11 +390,9 @@ function App() {
     let coords = extractCoordinates(item);
 
     if (!coords && (item.type === 'airport') && item.data?.code) {
-      try {
-        const data = await getAirport(item.data.code);
-        coords = extractCoordinates({ data });
-      } catch (e) {
-        console.error(`Failed to fetch ${item.type} details:`, e);
+      const feat = airportsData?.features.find(f => f.properties.code === item.data.code);
+      if (feat && feat.geometry.coordinates) {
+        coords = { lng: feat.geometry.coordinates[0], lat: feat.geometry.coordinates[1] };
       }
     }
 
@@ -487,15 +470,26 @@ function App() {
     setSelectedItem({ type: 'airport', data: { code: destCode, name: destCode } as any });
 
     try {
-      const destData = await getAirport(destCode);
+      const destFeat = airportsData?.features.find(f => f.properties.code === destCode);
+      if (!destFeat) throw new Error('Destination airport not found in cached data');
+
       const overrideFromDatetime = flight.scheduled_arrival_local
         ? flight.scheduled_arrival_local.toString().substring(0, 19)
         : undefined;
 
-      setSelectedItem({ type: 'airport', data: destData, overrideFromDatetime });
+      const destData = {
+        code: destFeat.properties.code,
+        name: destFeat.properties.name,
+        city_code: destFeat.properties.city_code,
+        city_name: destFeat.properties.city_name,
+        country_code: destFeat.properties.country_code,
+        country_name: destFeat.properties.country_name,
+        coordinates: { lon: destFeat.geometry.coordinates[0], lat: destFeat.geometry.coordinates[1] },
+      };
 
-      const coords = destData.coordinates;
-      if (coords) flyToLocation((coords.lon ?? coords.lng) ?? 0, coords.lat ?? 0, CONFIG.FALLBACK_ZOOM.AIRPORT);
+      setSelectedItem({ type: 'airport', data: destData as any, overrideFromDatetime });
+
+      if (destData.coordinates) flyToLocation(destData.coordinates.lon, destData.coordinates.lat, CONFIG.FALLBACK_ZOOM.AIRPORT);
     } catch (e) {
       console.error('Failed to fetch destination airport:', e);
       // Fallback: set a minimal selectedItem so the panel stays consistent
@@ -590,13 +584,25 @@ function App() {
     if (!lastCode) return;
     setSelectedAirportCode(lastCode);
     try {
-      const destData = await getAirport(lastCode);
+      const destFeat = airportsData?.features.find(f => f.properties.code === lastCode);
+      if (!destFeat) throw new Error('Airport not found in cached data');
+
       const overrideFromDatetime = lastArrivalLocal
         ? lastArrivalLocal.toString().substring(0, 19)
         : lastArrivalUTC ? lastArrivalUTC.substring(0, 19) : undefined;
-      setSelectedItem({ type: 'airport', data: destData, overrideFromDatetime });
-      const coords = destData.coordinates;
-      if (coords) flyToLocation((coords.lon ?? coords.lng) ?? 0, coords.lat ?? 0, CONFIG.FALLBACK_ZOOM.AIRPORT);
+
+      const destData = {
+        code: destFeat.properties.code,
+        name: destFeat.properties.name,
+        city_code: destFeat.properties.city_code,
+        city_name: destFeat.properties.city_name,
+        country_code: destFeat.properties.country_code,
+        country_name: destFeat.properties.country_name,
+        coordinates: { lon: destFeat.geometry.coordinates[0], lat: destFeat.geometry.coordinates[1] },
+      };
+
+      setSelectedItem({ type: 'airport', data: destData as any, overrideFromDatetime });
+      if (destData.coordinates) flyToLocation(destData.coordinates.lon, destData.coordinates.lat, CONFIG.FALLBACK_ZOOM.AIRPORT);
     } catch {
       setSelectedItem({ type: 'airport', data: { code: lastCode, name: lastCode } as any });
     }
@@ -646,35 +652,6 @@ function App() {
     fitBoundsToAirportCodes([...originCodes, ...highlightedAirports]);
   }, [highlightedAirports, selectedAirportCode, selectedAirportCodes, tripState, fitBoundsToAirportCodes]);
 
-  /*
-  // Mode-switch effect: when switching to city mode, expand airport exploration items to full cities
-  useEffect(() => {
-// ... commented out city expansion effect ...
-if (viewMode !== 'cities' || !airportsData) return;
-    if (explorationItems.length === 0) return;
-    const needsExpansion = explorationItems.some(i => i.type === 'airport');
-    if (!needsExpansion) return;
-    clearExploration();
-    explorationItems.forEach(item => {
-      if (item.type === 'city') {
-        addExplorationItem(item, 'cities');
-      } else {
-        // airport → expand to city
-        const feat = airportsData.features.find(f => f.properties.code === item.code);
-        const cityCode = feat?.properties.city_code;
-        if (!cityCode) {
-          addExplorationItem(item, 'cities');
-        } else {
-          const cityAirportCodes = airportsData.features
-            .filter(f => f.properties.city_code === cityCode && f.properties.flightable)
-            .map(f => f.properties.code);
-          const cityName = feat?.properties.city_name || cityCode;
-          addExplorationItem({ type: 'city', code: cityCode, name: cityName, airportCodes: cityAirportCodes }, 'cities');
-        }
-      }
-    });
-      }, [viewMode]);
-  */
 
   useEffect(() => {
     document.documentElement.style.setProperty('--map-bg-image', MAP_ASSETS.BACKGROUND_IMAGE);

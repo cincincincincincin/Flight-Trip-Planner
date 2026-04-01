@@ -50,7 +50,7 @@ export const CONFIG = {
   /** Sentinel timezone code used when an airport's timezone is genuinely unknown */
   UNKNOWN_TIMEZONE: '_unknown',
   /** Sort key injected so that unknown-timezone airports sort after all real UTC offsets */
-  UNKNOWN_TZ_DUMMY: '9999',
+  UNKNOWN_TZ_FALLBACK: '9999',
   /** UTC label displayed when no timezone can be determined */
   UNKNOWN_TZ_UTCLABEL: '?',
 
@@ -148,7 +148,7 @@ export const CONFIG = {
   /** Maximum number of flights shown in the map airport hover popup */
   MAX_POPUP_FLIGHTS: 6,
   /** Maximum number of flights fetched per API request */
-  FLIGHT_LIMIT: 200,
+  FLIGHT_LIMIT: 1400,
 
   // ──────────────────────────────────────────────────────────────────────────
   // MapComponent.tsx – animation / fly-to

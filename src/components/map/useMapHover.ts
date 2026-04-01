@@ -3,7 +3,6 @@ import maplibregl from 'maplibre-gl';
 import type { SelectedItem, AirportFeatureProps } from '../../types';
 import { useColorStore } from '../../stores/colorStore';
 import { useFilterStore } from '../../stores/filterStore';
-import { getAirport } from '../../api/search';
 import { CONFIG } from '../../constants/config';
 
 interface AirportFeature {
@@ -333,20 +332,24 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       }
 
       const isHighlighted = refs.highlightedAirportsRef.current.includes(code);
-      (async () => {
-        try {
-          const data = await getAirport(code);
-          refs.onSelectItemRef.current?.({ type: 'airport', data, isHighlighted, fromMap: true });
-        } catch {
-          refs.onSelectItemRef.current?.({
-            type: 'airport',
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            data: feat.properties as any,
-            isHighlighted,
-            fromMap: true,
-          });
-        }
-      })();
+      const data = {
+        code: feat.properties.code,
+        name: feat.properties.name,
+        city_code: feat.properties.city_code,
+        city_name: feat.properties.city_name,
+        country_code: feat.properties.country_code,
+        country_name: feat.properties.country_name,
+        time_zone: feat.properties.time_zone || null,
+        coordinates: { lon: feat.geometry.coordinates[0], lat: feat.geometry.coordinates[1] },
+      };
+      
+      refs.onSelectItemRef.current?.({
+        type: 'airport',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data: data as any,
+        isHighlighted,
+        fromMap: true,
+      });
     };
 
     canvas.addEventListener('mousemove', handleMouseMove);
