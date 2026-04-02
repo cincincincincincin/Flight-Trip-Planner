@@ -14,7 +14,7 @@ import { useTripStore } from './stores/tripStore';
 import { useSettingsStore } from './stores/settingsStore';
 import { useAuthStore } from './stores/authStore';
 import { useFilterStore } from './stores/filterStore';
-import { useColorStore } from './stores/colorStore'; // for flight card highlight CSS vars
+import { useColorStore } from './stores/colorStore';
 import { useTexts } from './hooks/useTexts';
 import './App.css';
 import { CONFIG } from './constants/config';
@@ -56,9 +56,6 @@ function App() {
   const mapRef = useRef<any>(null);
   const rightPanelRef = useRef<any>(null);
   const handleAddToTripRef = useRef<((flight: any) => Promise<void>) | null>(null);
-
-  // ── Mobile bottom sheet (state + refs only — effects are after store declarations) ──
-   // px visible in peek state (header height)
   const [mobileSheetExpanded, setMobileSheetExpanded] = useState(false);
   const mobileSheetRef = useRef<HTMLDivElement>(null);
   const sheetExpandedRef = useRef(false);
@@ -83,10 +80,8 @@ function App() {
     clearExploration,
   } = useSelectionStore();
 
-  // Reset sheet to peek when a new item is selected
   useEffect(() => { setMobileSheetExpanded(false); }, [selectedItem]);
 
-  // Non-passive touch drag handler (needs passive:false so preventDefault works)
   useEffect(() => {
     const sheet = mobileSheetRef.current;
     if (!sheet) return;
@@ -99,7 +94,7 @@ function App() {
     const onStart = (e: TouchEvent) => {
       const rect = sheet.getBoundingClientRect();
       const fromTop = e.touches[0].clientY - rect.top;
-      if (fromTop > CONFIG.PEEK_H + CONFIG.DRAG_HEADER_EXTRA) return; // only drag from header area
+      if (fromTop > CONFIG.PEEK_H + CONFIG.DRAG_HEADER_EXTRA) return;
       dragging = true;
       startY = e.touches[0].clientY;
       startTranslate = sheetExpandedRef.current ? 0 : window.innerHeight - CONFIG.PEEK_H;
@@ -136,8 +131,7 @@ function App() {
       sheet.removeEventListener('touchmove', onMove);
       sheet.removeEventListener('touchend', onEnd);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [!!selectedItem]); // re-runs when sheet mounts/unmounts
+  }, [!!selectedItem]);
 
   const {
     tripState, setTripState,
@@ -196,9 +190,7 @@ function App() {
   const [showSavedTrips, setShowSavedTrips] = useState(false);
   const [pendingCountryPicker, setPendingCountryPicker] = useState<{ code: string; name: string } | null>(null);
   const prevSelectedAirportCodesLenRef = useRef<number>(0);
-  // When true, camera follows highlighted airports (only for search selections, not map clicks)
   const fitCameraOnFlightsRef = useRef(false);
-
   const tripVisibleAirportCodes = useMemo(() => {
     if (!tripState) return null;
     return [tripState.startAirport.code, ...tripState.legs.map(l => l.toAirportCode)];
@@ -219,7 +211,6 @@ function App() {
     mapRef.current?.flyTo({ center: [lng, lat], zoom, essential: true, duration: CONFIG.FLY_DURATION });
   }, []);
 
-  // Use a ref so fitBoundsToAirportCodes doesn't change reference when flights load
   const highlightedAirportsRef = useRef(highlightedAirports);
   useEffect(() => { highlightedAirportsRef.current = highlightedAirports; }, [highlightedAirports]);
 
@@ -237,19 +228,11 @@ function App() {
   }, [airportsData, flyToLocation]);
 
   const setDisplayMode = useCallback((mode: string) => {
-    //if (mode === 'airports') {
     setShowAirports(true);
-    // setShowCities(false);
-    // setViewMode('airports');
     if (viewport.zoom < CONFIG.AIRPORT_ZOOM_THRESHOLD) {
       mapRef.current?.flyTo({ zoom: CONFIG.AIRPORT_ZOOM_THRESHOLD, duration: CONFIG.FLY_DURATION, essential: true });
     }
-    /*} else {
-      setShowAirports(false);
-      setShowCities(true);
-      setViewMode('cities');
-    }*/
-  }, [viewport.zoom, setShowAirports /*, setShowCities, setViewMode*/]);
+  }, [viewport.zoom, setShowAirports]);
 
   const extractCoordinates = (item: any) => {
     if (!item?.data) return null;
@@ -295,7 +278,6 @@ function App() {
         return;
       }
     }
-    // Fallback to precomputed country center if GeoJSON has no airports for this country
     const center = countryCenters?.[countryCode];
     if (center) {
       flyToLocation(center.lon, center.lat, center.zoom);
@@ -316,10 +298,8 @@ function App() {
       }
     }
 
-    // Track whether camera should follow flight results (only for search, not map clicks)
     fitCameraOnFlightsRef.current = !item.fromMap;
 
-    // Pre-trip exploration: if panel already open + airport/city → ADD to selection, don't navigate
     if (selectedItem && !tripState && (item.type === 'airport' || item.type === 'city')) {
       const newCodes = getExplorationAirportCodes(item.type, item.data.code);
       const allCodes = [...new Set([...explorationItems.flatMap((i: any) => i.airportCodes), ...newCodes])];
@@ -330,7 +310,6 @@ function App() {
         airportCodes: newCodes,
       }/*, viewMode*/);
       if (!item.fromMap) fitBoundsToAirportCodes(allCodes);
-      // If we were in country selection mode, switch the panel to the newly selected item
       if (selectedItem.type === 'country') {
         setSelectedItem(item);
         if (item.type === 'airport') setSelectedAirportCode(item.data.code);
@@ -338,14 +317,12 @@ function App() {
       return;
     }
 
-    // If panel is already open with non-country content and user clicks a country → inline picker
     if (item.type === 'country') {
       if (selectedItem !== null && selectedItem.type !== 'country') {
         setPendingCountryPicker({ code: item.data.code, name: item.data.name });
         if (!item.fromMap) fitToCountry(item.data.code);
         return;
       }
-      // Otherwise: open full country panel
       setSelectedItem(item);
       setSelectedAirportCode(null);
       if (!item.fromMap) fitToCountry(item.data.code);
@@ -359,14 +336,12 @@ function App() {
       setHighlightedAirports([]);
       setFlightsData([]);
       setDisplayMode('airports');
-      // Seed exploration items for the first selection
       addExplorationItem({
         type: 'airport',
         code: item.data.code,
         name: item.data.name || item.data.code,
         airportCodes: [item.data.code],
-      }/*, viewMode*/);
-      // Camera only for search selections — map clicks don't move camera
+      });
       if (item.fromMap) return;
     } else if (item.type === 'city') {
       setSelectedAirportCode(null);
@@ -407,11 +382,8 @@ function App() {
     const originCode = flight.origin_airport_code;
     const isFirstLeg = !tripState;
     const newFlightLeg = { fromAirportCode: originCode, toAirportCode: destCode, flight };
-
-    // In trip mode: check if flight departs from a manual transfer airport
     const isFromTransferAirport = !isFirstLeg && manualTransferAirportCodes.includes(originCode);
     
-    // Save current state to undo stack before modifying
     pushToHistory();
 
     const newTripRoutes = [...tripRoutes];
@@ -428,7 +400,6 @@ function App() {
         legs: [newFlightLeg],
       });
     } else if (isFromTransferAirport) {
-      // Add manual transfer leg (current arrival → transfer airport) then the flight leg
       const arrivalCode = (selectedItem?.data as any)?.code ?? '';
       const manualLeg = {
         type: 'manual' as const,
@@ -437,7 +408,6 @@ function App() {
         flight: null as any,
       };
       setTripState({ ...tripState, legs: [...tripState.legs, manualLeg, newFlightLeg] });
-      // Add manual transfer route line
       const fromFeat = airportsData?.features.find(f => f.properties.code === arrivalCode);
       const transferFeat = airportsData?.features.find(f => f.properties.code === originCode);
       if (fromFeat?.geometry && transferFeat?.geometry) {
@@ -447,10 +417,8 @@ function App() {
       setTripState({ ...tripState, legs: [...tripState.legs, newFlightLeg] });
     }
 
-    // Clear manual transfer airports
     setManualTransferAirportCodes([]);
 
-    // Add flight route line
     const fromFeat = airportsData?.features.find(f => f.properties.code === originCode);
     const toFeat = airportsData?.features.find(f => f.properties.code === destCode);
     if (fromFeat?.geometry && toFeat?.geometry) {
@@ -462,11 +430,6 @@ function App() {
     setFlightsData([]);
     clearExploration();
     rightPanelRef.current?.clearTransferAirports();
-
-    // Switch selectedItem immediately (minimal data) so flightAirportCodes in RightPanel
-    // points to destCode right away — before the async getAirport resolves.
-    // Without this, selectedItem.data.code stays on the old airport during the async gap,
-    // causing FlightsList to fetch and append flights from the wrong airport.
     setSelectedAirportCode(destCode);
     setSelectedItem({ type: 'airport', data: { code: destCode, name: destCode } as any });
 
@@ -493,14 +456,12 @@ function App() {
       if (destData.coordinates) flyToLocation(destData.coordinates.lon, destData.coordinates.lat, CONFIG.FALLBACK_ZOOM.AIRPORT);
     } catch (e) {
       console.error('Failed to fetch destination airport:', e);
-      // Fallback: set a minimal selectedItem so the panel stays consistent
       setSelectedItem({ type: 'airport', data: { code: destCode, name: destCode } as any });
     }
   }, [tripState, selectedItem, airportsData, tripRoutes, manualTransferAirportCodes, flyToLocation, setTripState, setTripRoutes, setManualTransferAirportCodes, setHighlightedAirports, setFlightsData, setSelectedAirportCode, setSelectedItem]);
   handleAddToTripRef.current = handleAddToTrip;
 
   const handleUndoRedo = useCallback(() => {
-    // Defer slightly so Zustand stores (trip and selection) fully update
     setTimeout(() => {
       const item = useSelectionStore.getState().selectedItem;
       if (!item) return;
@@ -530,8 +491,6 @@ function App() {
   const handleEditLoadedTrip = useCallback(async () => {
     if (!tripState?.legs?.length) return;
     setEditMode(true);
-
-    // Build undo history: allow undoing future legs (departure >= now), stop at departed legs
     const now = Date.now();
     const legs = tripState.legs;
     const snapshots: import('./stores/tripStore').TripSnapshot[] = [];
@@ -541,11 +500,10 @@ function App() {
       const isManual = (leg as { type?: string }).type === 'manual';
       if (!isManual && leg.flight?.scheduled_departure_utc) {
         const dep = new Date(leg.flight.scheduled_departure_utc).getTime();
-        if (dep < now) break; // this flight already departed — stop here
+        if (dep < now) break;
       }
       const slicedLegs = legs.slice(0, i);
       const slicedState = slicedLegs.length === 0 ? null : { ...tripState, legs: slicedLegs };
-      // Determine the "current airport" for this intermediate state
       let snapCode: string | null = null;
       for (let j = slicedLegs.length - 1; j >= 0; j--) {
         const l = slicedLegs[j];
@@ -555,7 +513,7 @@ function App() {
       const snapData = snapFeat?.properties ?? (snapCode ? { code: snapCode } : null);
       snapshots.unshift({
         tripState: slicedState,
-        tripRoutes: tripRoutes.slice(0, i), // each leg adds exactly one route
+        tripRoutes: tripRoutes.slice(0, i),
         selectedItem: snapData ? { type: 'airport', data: snapData as any } : null,
         selectedAirportCode: snapCode,
         selectedAirportCodes: snapCode ? [snapCode] : [],
@@ -569,7 +527,6 @@ function App() {
       setPastTrips(snapshots);
     }
 
-    // Find last real leg's arrival airport to open the right panel there
     let lastCode: string | null = null;
     let lastArrivalUTC: string | null = null;
     let lastArrivalLocal: string | null = null;
@@ -617,7 +574,6 @@ function App() {
 
   const handleCountryAirportsConfirmed = useCallback((codes: string[], countryCode: string, countryName: string) => {
     if (!airportsData || codes.length === 0) return;
-    // Resolve name: prefer passed countryName, fall back to country_name from GeoJSON, then code
     const resolvedName = (countryName && countryName !== countryCode)
       ? countryName
       : (() => {
@@ -630,9 +586,8 @@ function App() {
     const firstFeat = airportsData.features.find(f => f.properties.code === codes[0]);
     if (firstFeat) setSelectedItem({ type: 'airport', data: firstFeat.properties as any });
     fitBoundsToAirportCodes(codes);
-  }, [airportsData, clearExploration, addExplorationItem, /*viewMode,*/ setSelectedItem, fitBoundsToAirportCodes]);
+  }, [airportsData, clearExploration, addExplorationItem, setSelectedItem, fitBoundsToAirportCodes]);
 
-  // Camera: when selectedAirportCodes grows (search only, not map clicks), fitBounds
   useEffect(() => {
     if (
       fitCameraOnFlightsRef.current &&
@@ -644,7 +599,6 @@ function App() {
     prevSelectedAirportCodesLenRef.current = selectedAirportCodes.length;
   }, [selectedAirportCodes, fitBoundsToAirportCodes]);
 
-  // Camera: fit to selected + destination airports each time new flights load (search only, not map clicks)
   useEffect(() => {
     if (!fitCameraOnFlightsRef.current || tripState || highlightedAirports.length === 0) return;
     const originCodes = selectedAirportCodes.length > 0

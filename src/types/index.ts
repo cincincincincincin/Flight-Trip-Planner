@@ -30,7 +30,6 @@ export interface Country {
   cities?: City[];
 }
 
-// --- Flights ---
 export interface Flight {
   origin_airport_code: string;
   destination_airport_code: string;
@@ -73,7 +72,6 @@ export interface CountryAirport {
   time_zone?: string | null;
 }
 
-// --- GeoJSON feature properties ---
 export interface AirportFeatureProps {
   code: string;
   name: string;
@@ -99,14 +97,13 @@ export interface RouteFeatureProps {
   transfers?: number;
 }
 
-// --- Selection ---
 export type SelectedItem =
   | { type: 'airport'; data: Airport; isHighlighted?: boolean; overrideFromDatetime?: string; fromMap?: boolean }
   | { type: 'city'; data: City; fromMap?: boolean }
   | { type: 'country'; data: Country; fromMap?: boolean }
   | { type: 'route'; data: RouteFeatureProps };
 
-// --- Trip ---
+
 export interface TripLeg {
   fromAirportCode: string;
   toAirportCode: string;
@@ -133,7 +130,6 @@ export interface TripRoute {
   to: [number, number];
 }
 
-// --- Map ---
 export interface Viewport {
   center: [number, number];
   zoom: number;
@@ -141,7 +137,6 @@ export interface Viewport {
   bearing: number;
 }
 
-// --- Search API ---
 export interface SearchPhaseInfo {
   has_phase2: boolean;
   has_phase3: boolean;

@@ -3,18 +3,10 @@ import type { ColorState } from '../stores/colorStore';
 import type { MapState } from '../stores/mapStore';
 import type { SettingsState } from '../stores/settingsStore';
 
-// --- Lokalizacja nazw encji z bazy danych ---
-
-/**
- * Zwraca przetłumaczoną nazwę encji (lotnisko, miasto, kraj).
- * Jeśli brak tłumaczenia dla danego języka, zwraca domyślną nazwę (angielską).
- */
 export const getLocalizedName = (
   entity: { name: string; name_translations?: Record<string, string> },
   lang: Language
 ): string => entity.name_translations?.[lang] ?? entity.name;
-
-// --- Snapshot ustawień użytkownika do zapisu w DB ---
 
 export type PrefsSnapshot = {
   settings: {
@@ -29,14 +21,9 @@ export type PrefsSnapshot = {
     map_style: string;
     globe_mode: boolean;
   };
-  // Płaski stan colorStore — funkcje akcji są pomijane przez JSON.stringify
   colors: Record<string, unknown>;
 };
 
-/**
- * Buduje snapshot ustawień z trzech stores.
- * Klucze w stałej kolejności alfabetycznej — zapewnia stabilne JSON.stringify do porównań.
- */
 export const buildPrefsSnapshot = (
   settings: Pick<SettingsState, 'language' | 'currency' | 'minTransferHours' |
     'minManualTransferHours' | 'showRefreshButton' | 'showConsoleLogs'>,

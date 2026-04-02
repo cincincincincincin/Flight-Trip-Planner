@@ -1,19 +1,31 @@
 import { useQuery } from '@tanstack/react-query';
-import { getAirportsGeoJSON, getAirportsByCountry, getCountryCenters } from '../api/geo';
+import { getInitData } from '../api/geo';
 import { CONFIG } from '../constants/config';
 import { getFlightOffers } from '../api/flights';
 import type { AirportInfo, FlightOffersResponse } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useMemo } from 'react';
 
-// GeoJSON – essentially static data, cache per language
-export const useAirportsQuery = () => {
+// Single startup request — returns both GeoJSON and country centers
+export const useInitQuery = () => {
   const language = useSettingsStore(s => s.language);
   return useQuery({
-    queryKey: ['airports', language],
-    queryFn: () => getAirportsGeoJSON(language),
+    queryKey: ['init', language],
+    queryFn: () => getInitData(language),
     staleTime: Infinity,
   });
+};
+
+// Thin wrapper — consumers unchanged
+export const useAirportsQuery = () => {
+  const { data, ...rest } = useInitQuery();
+  return { data: data?.geojson, ...rest };
+};
+
+// Thin wrapper — consumers unchanged
+export const useCountryCentersQuery = () => {
+  const { data, ...rest } = useInitQuery();
+  return { data: data?.country_centers, ...rest };
 };
 
 function computeAirportInfo(time_zone: string): AirportInfo {
@@ -27,7 +39,7 @@ function computeAirportInfo(time_zone: string): AirportInfo {
   return { time_zone, current_local_date: current_local_datetime.substring(0, 10), current_local_datetime };
 }
 
-// Airport timezone/date info – derived from GeoJSON data (no extra requests)
+// Airport timezone/date info — derived from GeoJSON data (no extra requests)
 export const useAirportInfoQuery = (code: string | null) => {
   const { data: airportsData } = useAirportsQuery();
   return useMemo(() => {
@@ -38,7 +50,7 @@ export const useAirportInfoQuery = (code: string | null) => {
   }, [code, airportsData]);
 };
 
-// Batch airport info – derived from GeoJSON data (no extra requests)
+// Batch airport info — derived from GeoJSON data (no extra requests)
 export const useAirportInfosQuery = (codes: string[]) => {
   const { data: airportsData } = useAirportsQuery();
   return useMemo(() => {
@@ -51,26 +63,23 @@ export const useAirportInfosQuery = (codes: string[]) => {
   }, [codes, airportsData]);
 };
 
-// Country centroids – essentially static, cache indefinitely
-export const useCountryCentersQuery = () =>
-  useQuery({
-    queryKey: ['countryCenters'],
-    queryFn: getCountryCenters,
-    staleTime: Infinity,
-  });
-
-// Wszystkie lotniska dla danego kraju z danymi stref czasowych – cache 24h (zgodnie z backendem)
+// Local filter — replaces GET /airports/by-country (no network request)
 export const useAirportsByCountryQuery = (countryCode: string | null) => {
-  const language = useSettingsStore(s => s.language);
-  return useQuery({
-    queryKey: ['airportsByCountry', countryCode, language],
-    queryFn: () => getAirportsByCountry(countryCode!, language),
-    enabled: !!countryCode,
-    staleTime: 24 * 60 * 60 * 1000,
-  });
+  const { data: airportsData } = useAirportsQuery();
+  return useMemo(() => {
+    if (!countryCode || !airportsData) return { data: undefined };
+    const airports = airportsData.features
+      .filter(f => f.properties.country_code === countryCode)
+      .map(f => ({
+        code: f.properties.code,
+        name: f.properties.name,
+        time_zone: f.properties.time_zone ?? null,
+      }));
+    return { data: airports };
+  }, [countryCode, airportsData]);
 };
 
-// Flight price offers – 5 min cache, disabled until explicitly triggered
+// Flight price offers — 5 min cache, disabled until explicitly triggered
 export const useFlightOffersQuery = (
   origin: string | null,
   dest: string | null,

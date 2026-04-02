@@ -9,7 +9,6 @@ import { CONFIG } from '../constants/config';
 interface RawFlightsResponse {
   success: boolean;
   data: Flight[];
-  range_end_datetime?: string;
   last_fetched_at?: string;
 }
 
@@ -144,7 +143,6 @@ export function useFlightLoader({
       setPerAirportLoading(prev => ({ ...prev, [airportCode]: true }));
       setError(null);
 
-      let autoLoadNext: string | null = null;
       try {
         const response = (await getFlights(airportCode, {
           from_local_datetime: normalizedDatetime,
@@ -153,7 +151,6 @@ export function useFlightLoader({
 
         if (response.success) {
           const newFlights = response.data;
-          const rangeEnd = response.range_end_datetime;
 
           setRawFlights(prev => {
             const existingIds = new Set(prev.map(f => f.id));
@@ -176,22 +173,8 @@ export function useFlightLoader({
 
           appendFlights(newFlights);
 
-          // Auto-load next window if within the same local day (full-day load).
-          // [DISABLED] Cross-day continuation removed.
-          if (rangeEnd) {
-            const sameLocalDay = rangeEnd.split('T')[0] === normalizedDatetime.split('T')[0];
-            if (sameLocalDay) {
-              autoLoadNext = rangeEnd;
-              perAirportHasMoreRef.current.set(airportCode, true);
-              perAirportNextWindowRef.current.set(airportCode, rangeEnd);
-            } else {
-              perAirportHasMoreRef.current.set(airportCode, false);
-              perAirportNextWindowRef.current.set(airportCode, null);
-            }
-          } else {
-            perAirportHasMoreRef.current.set(airportCode, false);
-            perAirportNextWindowRef.current.set(airportCode, null);
-          }
+          perAirportHasMoreRef.current.set(airportCode, false);
+          perAirportNextWindowRef.current.set(airportCode, null);
         } else {
           loadedWindowsRef.current.delete(windowKey);
           setError('Failed to load flights');
@@ -203,7 +186,6 @@ export function useFlightLoader({
       } finally {
         setPerAirportLoading(prev => ({ ...prev, [airportCode]: false }));
       }
-      if (autoLoadNext) await loadFn(airportCode, autoLoadNext);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [timezone, appendFlights]

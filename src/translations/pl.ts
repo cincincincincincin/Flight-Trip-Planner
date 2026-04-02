@@ -1,6 +1,6 @@
 // Polskie tłumaczenia interfejsu użytkownika
 export const TEXTS_PL = {
-  appTitle: "Planer Lotów",
+  appTitle: "Planer Podróży Lotniczych",
   common: {
     userFallback: "Użytkownik",
     unknown: "Nieznany",
@@ -27,8 +27,8 @@ export const TEXTS_PL = {
     close: "Zamknij"
   },
   auth: {
-    updateTripTitle: "Zaktualizuj istniejącą podróż",
-    saveTripTitle: "Zapisz bieżącą podróż",
+    updateTripTitle: "Zaktualizuj podróż",
+    saveTripTitle: "Zapisz podróż",
     createAccount: "Utwórz konto",
     email: "Email",
     password: "Hasło",
@@ -54,7 +54,7 @@ export const TEXTS_PL = {
     hoursAgo: (hours: number) => `${hours}h temu`,
     loadingFrom: (code: string) => `Ładowanie lotów z ${code}...`,
     noFlightsMatchFilters: "Żadne loty nie pasują do bieżących filtrów",
-    noFlightsForDate: (date: string) => `Brak lotów na ${date}`,
+    noFlightsForDate: (date: string) => `Brak lotów ${date}`,
     tryAdjustFilters: "Spróbuj dostosować lub wyczyścić filtry",
     tryDifferentDate: "Spróbuj wybrać inną datę",
     lastUpdated: "Ostatnia aktualizacja: ",
