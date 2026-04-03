@@ -299,9 +299,11 @@ export const CONFIG = {
   MAX_DATE_DAYS: 180,
 
   // ──────────────────────────────────────────────────────────────────────────
-  // ColorSettings.tsx – slider ranges for map style tuning
+  // API
   // ──────────────────────────────────────────────────────────────────────────
 
+  /** Base URL for the backend API */
+  API_BASE_URL: import.meta.env.VITE_API_URL ?? '',
 };
 
 /** Dostępne waluty do wyboru przez użytkownika */

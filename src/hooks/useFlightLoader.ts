@@ -15,6 +15,7 @@ interface RawFlightsResponse {
   success: boolean;
   data: Flight[];
   last_fetched_at?: string;
+  range_end_datetime?: string;
 }
 
 interface UseFlightLoaderParams {
@@ -123,41 +124,78 @@ export function useFlightLoader({
 
     setPerAirportLoading(prev => ({ ...prev, [code]: true }));
     setError(null);
-    try {
-      const response = (await getFlights(code, {
-        from_local_datetime: toLocalMinute(fromMs, airportTZ),
-        to_local_datetime: toLocalMinute(toMs, airportTZ),
-        limit: CONFIG.FLIGHT_LIMIT,
-      })) as unknown as RawFlightsResponse;
 
-      if (response.success) {
-        setRawFlights(prev => {
-          const ids = new Set(prev.map(f => f.id));
-          const fresh = response.data.filter(f => !ids.has(f.id));
-          if (!fresh.length) return prev;
-          return [...prev, ...fresh].sort((a, b) =>
-            (a.scheduled_departure_utc ?? a.scheduled_departure_local ?? '')
-              .localeCompare(b.scheduled_departure_utc ?? b.scheduled_departure_local ?? '')
-          );
-        });
-        if (response.last_fetched_at) {
-          setLastFetched(prev =>
-            !prev || response.last_fetched_at! > prev ? response.last_fetched_at! : prev
-          );
-        }
-        appendFlights(response.data);
-        // Extend airport's loaded UTC range
-        const prev = perAirportLoadedRef.current.get(code);
-        perAirportLoadedRef.current.set(code, {
-          fromMs: prev ? Math.min(prev.fromMs, fromMs) : fromMs,
-          toMs:   prev ? Math.max(prev.toMs,   toMs)   : toMs,
-        });
-      } else {
-        setError('Failed to load flights');
+    try {
+      const fromLocal = toLocalMinute(fromMs, airportTZ);
+      const toLocal = toLocalMinute(toMs, airportTZ);
+      const url = `${CONFIG.API_BASE_URL}/flights/airport/${code}?from_local_datetime=${fromLocal}&to_local_datetime=${toLocal}&limit=${CONFIG.FLIGHT_LIMIT}&lang=${useSettingsStore.getState().language}`;
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail ?? 'Failed to load flights');
       }
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { detail?: string } } };
-      setError(axiosErr.response?.data?.detail ?? 'Failed to load flights');
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('ReadableStream not supported');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? ''; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const batch = JSON.parse(line) as RawFlightsResponse & { error?: string };
+            
+            if (batch.success === false) {
+              setError(batch.error ?? 'Failed to load flights batch');
+              continue;
+            }
+
+            if (batch.data) {
+              setRawFlights(prev => {
+                const ids = new Set(prev.map(f => f.id));
+                const fresh = batch.data.filter(f => !ids.has(f.id));
+                if (!fresh.length) return prev;
+                return [...prev, ...fresh].sort((a, b) =>
+                  (a.scheduled_departure_utc ?? a.scheduled_departure_local ?? '')
+                    .localeCompare(b.scheduled_departure_utc ?? b.scheduled_departure_local ?? '')
+                );
+              });
+
+              if (batch.last_fetched_at) {
+                setLastFetched(prev =>
+                  !prev || batch.last_fetched_at! > prev ? batch.last_fetched_at! : prev
+                );
+              }
+              appendFlights(batch.data);
+            }
+
+            // Update airport's loaded UTC range incrementally based on range_end_datetime if provided
+            // or use the target toMs if it's the last chunk. (Heuristic: if it's in the stream, we trust it).
+            const batchEndMs = batch.range_end_datetime ? new Date(batch.range_end_datetime).getTime() : toMs;
+            
+            const prevLoad = perAirportLoadedRef.current.get(code);
+            perAirportLoadedRef.current.set(code, {
+              fromMs: prevLoad ? Math.min(prevLoad.fromMs, fromMs) : fromMs,
+              toMs:   prevLoad ? Math.max(prevLoad.toMs,   batchEndMs) : batchEndMs,
+            });
+
+          } catch (e) {
+            console.error('Failed to parse NDJSON line:', e);
+          }
+        }
+      }
+    } catch (err: any) {
+      setError(err.message ?? 'Failed to load flights');
     } finally {
       perAirportFetchingRef.current.delete(fetchKey);
       setPerAirportLoading(prev => ({ ...prev, [code]: false }));
