@@ -30,7 +30,7 @@ export function useTravelDate({
   countryDisplayTZ,
   travelDate,
   setTravelDate,
-}: UseTravelDateParams): void {
+}: UseTravelDateParams): { effectiveTravelDate: string } {
   const prevSelectedItemKeyRef = useRef<string | null>(null);
   const prevTimezoneRef = useRef<string | null>(null);
   const prevExplorationItemsCountRef = useRef<number>(0);
@@ -117,4 +117,19 @@ export function useTravelDate({
   useEffect(() => {
     prevResolvedTZRef.current = undefined;
   }, [selectedItem]);
+
+  // ── Synchronous effective travel date ────────────────────────────────────
+  // In trip mode: always pin to the arrival date in the current TZ (synchronously
+  // correct even before the store update from useEffect fires).
+  // In non-trip mode: use whatever the store says — the useEffect calls above keep
+  // it in sync with timezone changes, and we must NOT override manual date selection.
+  const effectiveTravelDate = (() => {
+    if (!timezone) return travelDate;
+    if (effectiveArrivalTimeUTC) {
+      return new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
+    }
+    return travelDate;
+  })();
+
+  return { effectiveTravelDate };
 }

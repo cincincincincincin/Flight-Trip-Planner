@@ -21,7 +21,7 @@ import { UI_SYMBOLS } from '../constants/ui';
 import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
 import { CONFIG } from '../constants/config';
 import { haversineKm } from '../utils/math';
-import { BROWSER_TIMEZONE, buildTzGroups, resolveTimezone } from '../utils/timezoneUtils';
+import { BROWSER_TIMEZONE, buildTzGroups } from '../utils/timezoneUtils';
 
 interface RightPanelProps {
   onClose: () => void;
@@ -185,7 +185,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedTimezoneOverride, setSelectedTimezoneOverride] = useState<string | null>(null);
   const [selectedTimezoneAirportCode, setSelectedTimezoneAirportCode] = useState<string | null>(null);
-  const [, setNowTick] = useState(0);
+
 
   // ── Airport info for timezone ──────────────────────────────────────────────
   const primaryAirportCode = useMemo(() => {
@@ -235,13 +235,6 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     return map;
   }, [flightAirportCodes, airportInfosResults]);
 
-  // In trip mode use the last transfer airport as "last added"; otherwise use exploration items
-  const lastAddedCode = useMemo(() => {
-    if (tripState && transferAirports.length > 0) return transferAirports[transferAirports.length - 1];
-    if (explorationItems.length > 0) return explorationItems[explorationItems.length - 1].airportCodes[0];
-    return null;
-  }, [tripState, transferAirports, explorationItems]);
-
   const lastRealLeg = useMemo(() => {
     if (!tripState?.legs?.length) return null;
     for (let i = tripState.legs.length - 1; i >= 0; i--) {
@@ -252,14 +245,15 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   }, [tripState]);
 
   const resolvedTimezone = useMemo(() => {
-    // In trip mode: always pin to the arrival airport's TZ so adding transfer airports
-    // doesn't auto-switch the displayed timezone.
+    // In trip mode: always pin to the arrival airport's TZ.
     if (effectiveArrivalTimeUTC && lastRealLeg?.toAirportCode) {
       const arrTZ = airportTimezoneMap[lastRealLeg.toAirportCode];
       if (arrTZ) return arrTZ;
     }
-    return resolveTimezone(flightAirportCodes, airportTimezoneMap, lastAddedCode);
-  }, [effectiveArrivalTimeUTC, lastRealLeg, flightAirportCodes, airportTimezoneMap, lastAddedCode]);
+    // Use the first airport's timezone — no auto-switching when new airports are added.
+    const firstCode = flightAirportCodes[0];
+    return (firstCode && airportTimezoneMap[firstCode]) ?? null;
+  }, [effectiveArrivalTimeUTC, lastRealLeg, flightAirportCodes, airportTimezoneMap]);
 
   // ── "Display TZ" for country mode: active TZ → earliest group → browser ────
   const countryDisplayTZ = useMemo(() => {
@@ -452,7 +446,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   }, [clearFilters, onClose]);
 
   // ── Travel date management ─────────────────────────────────────────────────
-  useTravelDate({
+  const { effectiveTravelDate } = useTravelDate({
     selectedItem, timezone, explorationItems, effectiveArrivalTimeUTC,
     selectedTimezoneOverride, resolvedTimezone, countryDisplayTZ,
     travelDate, setTravelDate,
@@ -517,18 +511,37 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     });
   }, [effectiveArrivalTimeUTC, timezone]);
 
+  // Ref so the midnight handler can read travelDate without restarting the timer
+  const travelDateRef = useRef(travelDate);
+  useEffect(() => { travelDateRef.current = travelDate; }, [travelDate]);
+
   useEffect(() => {
     if (!timezone) { setAirportTime(null); return; }
+    let intervalId: ReturnType<typeof setInterval>;
     const updateTime = () => {
       try {
         setAirportTime(new Date().toLocaleTimeString(FORMAT_LOCALES.GB, { timeZone: timezone, hour: '2-digit', minute: '2-digit' }));
-        setNowTick(t => t + 1);
       } catch { setAirportTime(null); }
+      // Midnight detection: advance travelDate when the day rolls over
+      const newToday = new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
+      if (travelDateRef.current !== newToday) {
+        // Only auto-advance if the user hadn't manually chosen a different date.
+        // We detect this by checking whether the stored date was "yesterday" in this TZ.
+        const yesterday = new Date(Date.now() - 86400000).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
+        if (travelDateRef.current === yesterday) {
+          setTravelDate(newToday);
+        }
+      }
     };
     updateTime();
-    const interval = setInterval(updateTime, 60000);
-    return () => clearInterval(interval);
-  }, [timezone]);
+    // Synchronise to the system clock: wait until the next full minute, then tick every 60 s.
+    const msToNextMinute = 60000 - (Date.now() % 60000);
+    const timeoutId = setTimeout(() => {
+      updateTime();
+      intervalId = setInterval(updateTime, 60000);
+    }, msToNextMinute);
+    return () => { clearTimeout(timeoutId); clearInterval(intervalId); };
+  }, [timezone, setTravelDate]);
 
   // ── Two-timezone arrival time (when TZ switched in trip mode) ─────────────
   const arrivalTwoTZ = useMemo(() => {
@@ -551,7 +564,14 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     const diff = toUTCOffset(originalTZ) - toUTCOffset(selectedTimezoneOverride);
     const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
 
-    return { selectedCode: selectedTimezoneAirportCode, selectedTime, originalCode: originalArrCode, originalTime, diffStr };
+    // Show day label in parentheses when the calendar date differs between the two timezones
+    const selectedDay = date.toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: selectedTimezoneOverride });
+    const originalDay = date.toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: originalTZ });
+    const dayLabel = selectedDay !== originalDay
+      ? date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: originalTZ })
+      : null;
+
+    return { selectedCode: selectedTimezoneAirportCode, selectedTime, originalCode: originalArrCode, originalTime, diffStr, dayLabel };
   }, [effectiveArrivalTimeUTC, selectedTimezoneOverride, selectedTimezoneAirportCode, lastRealLeg, airportTimezoneMap]);
 
   // ── Per-airport alt-timezone offset display ────────────────────────────────
@@ -709,7 +729,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                       <div>{arrivalTwoTZ.selectedCode}: {arrivalTwoTZ.selectedTime}</div>
                       <div className="arrival-secondary">
                         {arrivalTwoTZ.originalCode}: {arrivalTwoTZ.originalTime}
-                        {' '}<span className="arrival-tz-diff">{arrivalTwoTZ.diffStr}</span>
+                        {' '}<span className="arrival-tz-diff">{arrivalTwoTZ.diffStr}{arrivalTwoTZ.dayLabel && ` (${arrivalTwoTZ.dayLabel})`}</span>
                       </div>
                     </>
                   ) : (
@@ -787,6 +807,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                   airportTimezones={airportTimezoneMap}
                   originalAirportCode={tripState ? selectedItem.data.code : null}
                   tripArrivalTimeUTC={tripState ? effectiveArrivalTimeUTC : null}
+                  travelDateOverride={effectiveTravelDate}
                   onAddToTrip={handleAddToTripWithReset}
                 />
               </div>
@@ -815,6 +836,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                   timezone={timezone!}
                   initialFromDatetime={initialFromDatetime ?? undefined}
                   airportTimezones={airportTimezoneMap}
+                  travelDateOverride={effectiveTravelDate}
                   onAddToTrip={handleAddToTripWithReset}
                 />
               </div>

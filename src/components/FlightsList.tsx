@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import FlightCard from './FlightCard';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { useSelectionStore } from '../stores/selectionStore';
@@ -21,11 +21,12 @@ interface FlightsListProps {
   airportTimezones?: Record<string, string>; // per-airport IANA timezone
   originalAirportCode?: string | null; // the "arrival" airport in trip mode (others are transfer airports)
   tripArrivalTimeUTC?: string | null;  // UTC arrival time in trip mode — used as start time for all airports
+  travelDateOverride?: string;     // synchronous travel date to avoid stale store value on timezone change
   onAddToTrip: (flight: Flight) => void;
 }
 
 const FlightsList = forwardRef<unknown, FlightsListProps>(
-  ({ airportCodes, timezone, initialFromDatetime, airportTimezones, originalAirportCode, tripArrivalTimeUTC, onAddToTrip }, ref) => {
+  ({ airportCodes, timezone, initialFromDatetime, airportTimezones, originalAirportCode, tripArrivalTimeUTC, travelDateOverride, onAddToTrip }, ref) => {
     const t = useTexts();
     // ── Stores ────────────────────────────────────────────────────────────────
     const { travelDate, minTransferHours, minManualTransferHours, showRefreshButton } = useSettingsStore();
@@ -36,7 +37,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
 
     // ── Data loading ──────────────────────────────────────────────────────────
     const { error, lastFetched, perAirportLoading, anyLoading, flightsByDate, handleRefresh } =
-      useFlightLoader({ airportCodes, timezone, initialFromDatetime, airportTimezones, tripArrivalTimeUTC });
+      useFlightLoader({ airportCodes, timezone, initialFromDatetime, airportTimezones, tripArrivalTimeUTC, travelDateOverride });
 
     // ── Derived from tripState ────────────────────────────────────────────────
     const tripStartAirport = tripState?.startAirport ?? null;
@@ -79,6 +80,20 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
     // const isManualJumpRef = useRef(false); // [DISABLED] date-jump navigation
     const virtuosoRef = useRef<VirtuosoHandle | null>(null);
     const flightRefsMap = useRef(new Map());
+
+    // ── Synchronized minute timer for real-time past-flight filtering ──────────
+    // Starts at this moment (for isToday check), then locks on to the full-minute boundary.
+    const [nowMs, setNowMs] = useState(() => Date.now());
+    useEffect(() => {
+      let intervalId: ReturnType<typeof setInterval>;
+      const tick = () => setNowMs(Date.now());
+      const msToNextMinute = 60000 - (Date.now() % 60000);
+      const timeoutId = setTimeout(() => {
+        tick();
+        intervalId = setInterval(tick, 60000);
+      }, msToNextMinute);
+      return () => { clearTimeout(timeoutId); clearInterval(intervalId); };
+    }, []);
 
     // ── Unfiltered flights for the selected day only ───────────────────────────
     const todayFlights = useMemo(
@@ -128,10 +143,21 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
     );
 
     /** Filtered view for the selected day only */
-    const displayedFlatFlights = useMemo(
-      () => todayFlights.filter(matchesFilter),
-      [todayFlights, matchesFilter]
-    );
+    const displayedFlatFlights = useMemo(() => {
+      let flights = todayFlights.filter(matchesFilter);
+      // In non-trip mode, hide flights that have already departed (only for today's date).
+      if (!tripArrivalTimeUTC) {
+        const selectedTodayStr = timezone
+          ? new Date(nowMs).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone })
+          : new Date(nowMs).toISOString().split('T')[0];
+        if (travelDate === selectedTodayStr) {
+          flights = flights.filter(f =>
+            !f.scheduled_departure_utc || f.scheduled_departure_utc > new Date(nowMs).toISOString()
+          );
+        }
+      }
+      return flights;
+    }, [todayFlights, matchesFilter, tripArrivalTimeUTC, nowMs, travelDate, timezone]);
 
     // ── Highlighted airports + cities effect (filter-aware) ──────────────────
     // Only dispatch when the SET CONTENT changes, not on every rawFlights append.
