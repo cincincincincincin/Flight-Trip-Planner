@@ -56,8 +56,8 @@ export function useFlightLoader({
 
   // UTC ms range that has been fetched per airport: { fromMs, toMs }
   const perAirportLoadedRef = useRef<Map<string, { fromMs: number; toMs: number }>>(new Map());
-  // Keys: "code:fromMs:toMs" — prevents concurrent duplicate fetches (React StrictMode etc.)
-  const perAirportFetchingRef = useRef<Set<string>>(new Set());
+  // Keys: code, Value: current target toMs — prevents concurrent redundant fetches for the same airport
+  const perAirportFetchingRef = useRef<Map<string, number>>(new Map());
   // Cache key: travelDate + airportCodes. Tracked separately from `timezone` so that
   // a timezone-only change does NOT clear the loaded ranges — the global UTC window
   // already covers all TZs, and ensureLoaded handles any new gaps.
@@ -117,10 +117,10 @@ export function useFlightLoader({
     toMs: number,
     airportTZ: string,
   ): Promise<void> => {
-    // Dedup: skip if an identical fetch is already in flight
-    const fetchKey = `${code}:${fromMs}:${toMs}`;
-    if (perAirportFetchingRef.current.has(fetchKey)) return;
-    perAirportFetchingRef.current.add(fetchKey);
+    // Dedup: skip if a fetch for this airport is already aimed at covering [fromMs, toMs]
+    const currentlyFetchingTo = perAirportFetchingRef.current.get(code);
+    if (currentlyFetchingTo !== undefined && currentlyFetchingTo >= toMs) return;
+    perAirportFetchingRef.current.set(code, toMs);
 
     setPerAirportLoading(prev => ({ ...prev, [code]: true }));
     setError(null);
@@ -194,10 +194,19 @@ export function useFlightLoader({
           }
         }
       }
+      // After successfully exhausting the stream (200 OK), mark the entire requested range 
+      // as loaded for this airport to prevent infinite retry loops for empty ranges.
+      const lastLoad = perAirportLoadedRef.current.get(code);
+      perAirportLoadedRef.current.set(code, {
+        fromMs: lastLoad ? Math.min(lastLoad.fromMs, fromMs) : fromMs,
+        toMs:   lastLoad ? Math.max(lastLoad.toMs,   toMs)   : toMs,
+      });
     } catch (err: any) {
       setError(err.message ?? 'Failed to load flights');
     } finally {
-      perAirportFetchingRef.current.delete(fetchKey);
+      if (perAirportFetchingRef.current.get(code) === toMs) {
+        perAirportFetchingRef.current.delete(code);
+      }
       setPerAirportLoading(prev => ({ ...prev, [code]: false }));
     }
   }, [toLocalMinute, appendFlights]);
@@ -238,12 +247,18 @@ export function useFlightLoader({
     const todayInPrevTZ  = (tzJustChanged && prevTimezone)
       ? new Date(nowMin).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: prevTimezone })
       : null;
+    const arrivalDay = tripArrivalTimeUTC
+      ? new Date(tripArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone })
+      : null;
+    const arrivalDayInPrevTZ = (tzJustChanged && prevTimezone && tripArrivalTimeUTC)
+      ? new Date(tripArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: prevTimezone })
+      : null;
     const todayInBrowser = new Date(nowMin).toLocaleDateString(FORMAT_LOCALES.CA);
 
-    const isTodayMode = !!tripArrivalTimeUTC
-      || travelDate === todayInTZ
-      || (tzJustChanged && todayInPrevTZ === travelDate)
-      || travelDate === todayInBrowser;
+    // Guard: isTodayMode is true if we are on the current day for the mode (today in now mode, or arrival day in trip mode).
+    // The tzJustChanged checks handle the 1-render lag during a timezone switch to prevent redundant re-fetching.
+    const isTodayMode = (arrivalDay ? travelDate === arrivalDay : (travelDate === todayInTZ || travelDate === todayInBrowser))
+      || (tzJustChanged && (todayInPrevTZ === travelDate || (arrivalDayInPrevTZ && arrivalDayInPrevTZ === travelDate)));
 
     // In today/trip mode: use the literal string "today" as the date part of the cache key.
     // This means a timezone change (which auto-updates travelDate to "today in new TZ") does
@@ -266,17 +281,18 @@ export function useFlightLoader({
       // Airport removed or first load → full reset
       setRawFlights([]);
       perAirportLoadedRef.current = new Map();
-      perAirportFetchingRef.current = new Set();
+      // NOTE: We do NOT clear perAirportFetchingRef here to avoid race conditions 
+      // with already running background fetches during rapid re-renders.
       setPerAirportLoading({});
       setError(null);
       dateOrderRef.current = [];
     } else if (dateOrAirportsChanged && !isAdditionOnly) {
       // travelDate changed (airports same) → clear loaded ranges to re-fetch for new date.
-      // rawFlights is kept — old data from other dates is deduplicated by ID on next fetch.
-      perAirportLoadedRef.current = new Map();
+      // Only clear if NOT in the middle of a timezone transition (stable key change)
+      if (!tzJustChanged) {
+        perAirportLoadedRef.current = new Map();
+      }
     }
-    // If only timezone changed: dateOrAirportsChanged = false → nothing cleared.
-    // The global window recomputes (possibly wider); ensureLoaded fills any gaps.
 
     // Wait until all airport timezones are known
     if (airportCodes.some(c => !airportTimezones?.[c])) return;
@@ -286,31 +302,24 @@ export function useFlightLoader({
     let fromMs: number;
     let toMs: number;
 
-    if (tripArrivalTimeUTC) {
-      // Trip mode: fetch 24h from the arrival moment
+    if (tripArrivalTimeUTC && isTodayMode) {
+      // Trip mode on arrival day: fetch 24h from the arrival moment
       fromMs = Math.floor(new Date(tripArrivalTimeUTC).getTime() / MIN_MS) * MIN_MS;
       toMs   = fromMs + WINDOW_MS;
+    } else if (isTodayMode) {
+      // Normal mode today: rolling window from now, aligned
+      fromMs = Math.floor(now / ALIGN_MS) * ALIGN_MS;
+      toMs   = fromMs + WINDOW_MS;
     } else {
-      if (isTodayMode) {
-        // Today: fixed 24h rolling window from 'now', aligned to 30-minute boundaries.
-        // This makes the UTC window IDENTICAL regardless of the display timezone,
-        // so switching TZs never triggers a re-fetch.
-        // The 30-minute alignment ensures we don't re-fetch every minute as time passes.
-        fromMs = Math.floor(now / ALIGN_MS) * ALIGN_MS;
-        toMs   = fromMs + WINDOW_MS;
-      } else {
-        // Manual date: max UTC range covering travelDate in EVERY airport + display TZ.
-        // This ensures TZ switching never needs a new fetch.
-        const tzs = new Set<string>([timezone]);
-        Object.values(airportTimezones ?? {}).forEach(tz => { if (tz) tzs.add(tz); });
-        fromMs = Infinity;
-        toMs   = -Infinity;
-        for (const tz of tzs) {
-          const midnight = utcMidnightOf(travelDate, tz);
-          if (midnight < fromMs) fromMs = midnight;
-          if (midnight + WINDOW_MS > toMs) toMs = midnight + WINDOW_MS;
-        }
-        // Manual mode also uses 24h window for each date boundary
+      // Manual date (or later day in Trip mode): compute window covering travelDate in all TZs
+      const tzs = new Set<string>([timezone]);
+      Object.values(airportTimezones ?? {}).forEach(tz => { if (tz) tzs.add(tz); });
+      fromMs = Infinity;
+      toMs   = -Infinity;
+      for (const tz of tzs) {
+        const midnight = utcMidnightOf(travelDate, tz);
+        if (midnight < fromMs) fromMs = midnight;
+        if (midnight + WINDOW_MS > toMs) toMs = midnight + WINDOW_MS;
       }
     }
 

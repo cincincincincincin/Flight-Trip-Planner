@@ -226,13 +226,27 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   // ── Multi-airport timezone resolution ─────────────────────────────────────
   const airportInfosResults = useAirportInfosQuery(flightAirportCodes);
 
+  const airportTimezoneMapRef = useRef<Record<string, string>>({});
   const airportTimezoneMap = useMemo<Record<string, string>>(() => {
-    const map: Record<string, string> = {};
+    const nextMap: Record<string, string> = {};
+    let changed = false;
     flightAirportCodes.forEach((code, i) => {
       const tz = airportInfosResults[i]?.data?.time_zone;
-      if (tz) map[code] = tz;
+      if (tz) {
+        nextMap[code] = tz;
+        if (airportTimezoneMapRef.current[code] !== tz) changed = true;
+      }
     });
-    return map;
+
+    // Also check if any were removed
+    if (!changed && Object.keys(nextMap).length !== Object.keys(airportTimezoneMapRef.current).length) {
+      changed = true;
+    }
+
+    if (changed) {
+      airportTimezoneMapRef.current = nextMap;
+    }
+    return airportTimezoneMapRef.current;
   }, [flightAirportCodes, airportInfosResults]);
 
   const lastRealLeg = useMemo(() => {
@@ -564,14 +578,19 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     const diff = toUTCOffset(originalTZ) - toUTCOffset(selectedTimezoneOverride);
     const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
 
-    // Show day label in parentheses when the calendar date differs between the two timezones
     const selectedDay = date.toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: selectedTimezoneOverride });
     const originalDay = date.toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: originalTZ });
     const dayLabel = selectedDay !== originalDay
       ? date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: originalTZ })
       : null;
 
-    return { selectedCode: selectedTimezoneAirportCode, selectedTime, originalCode: originalArrCode, originalTime, diffStr, dayLabel };
+    const dayDiff = selectedDay !== originalDay 
+      ? Math.round((new Date(originalDay).getTime() - new Date(selectedDay).getTime()) / 86400000)
+      : 0;
+
+    const invDiff = -diff;
+    const invDiffStr = invDiff > 0 ? `+${invDiff}` : `${invDiff}`;
+    return { selectedCode: selectedTimezoneAirportCode, selectedTime, originalCode: originalArrCode, originalTime, diffH: diff, invDiffStr, dayLabel, dayDiff };
   }, [effectiveArrivalTimeUTC, selectedTimezoneOverride, selectedTimezoneAirportCode, lastRealLeg, airportTimezoneMap]);
 
   // ── Per-airport alt-timezone offset display ────────────────────────────────
@@ -723,17 +742,28 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                 timezone={(selectedItem.type === 'country' ? (countryDisplayTZ ?? undefined) : timezone) ?? undefined}
                 minDate={minDate} />
               {selectedItem.type === 'airport' && effectiveArrivalTimeUTC && travelDate === actualArrivalDate && (
-                <div className={`airport-time airport-time--arrival${isArrivalEstimated ? ' airport-time--estimated' : ''}`}>
+                <div className={`airport-time airport-time--arrival${arrivalTwoTZ ? ' airport-time--double' : ''}${isArrivalEstimated ? ' airport-time--estimated' : ''}`}>
                   {arrivalTwoTZ ? (
-                    <>
-                      <div>{arrivalTwoTZ.selectedCode}: {arrivalTwoTZ.selectedTime}</div>
-                      <div className="arrival-secondary">
+                    <div className="arrival-two-tz">
+                      <div className="arrival-main">
                         {arrivalTwoTZ.originalCode}: {arrivalTwoTZ.originalTime}
-                        {' '}<span className="arrival-tz-diff">{arrivalTwoTZ.diffStr}{arrivalTwoTZ.dayLabel && ` (${arrivalTwoTZ.dayLabel})`}</span>
+                        {arrivalTwoTZ.dayLabel && (
+                          <span className={`arrival-different-day ${arrivalTwoTZ.dayDiff > 0 ? 'positive' : arrivalTwoTZ.dayDiff < 0 ? 'negative' : ''}`}>
+                            ({arrivalTwoTZ.dayLabel})
+                          </span>
+                        )}
                       </div>
-                    </>
+                      <div className="arrival-alt">
+                        {arrivalTwoTZ.selectedCode}: {arrivalTwoTZ.selectedTime}
+                        {arrivalTwoTZ.diffH !== 0 && (
+                          <span className={`arrival-tz-diff ${arrivalTwoTZ.diffH > 0 ? 'negative' : 'positive'}`}>
+                            ({arrivalTwoTZ.invDiffStr}h)
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   ) : (
-                    <div>{lastRealLeg?.toAirportCode}: {actualArrivalLocalTime}</div>
+                    <div className="arrival-single-tz">{lastRealLeg?.toAirportCode}: {actualArrivalLocalTime}</div>
                   )}
                   {isArrivalEstimated && (
                     <div className="arrival-estimated-note">{t.card.estimated}</div>

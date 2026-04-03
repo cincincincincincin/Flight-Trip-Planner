@@ -55,9 +55,9 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
   );
 
   const offersParams = useMemo(() => ({
-    departure_date: effectiveDate,
+    departure_at: flight.scheduled_departure_local,
     currency,
-  }), [effectiveDate, currency]);
+  }), [flight.scheduled_departure_local, currency]);
 
   const {
     data: offersResponse,
@@ -72,15 +72,28 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
 
   const priceData = useMemo(() => {
     if (!offersResponse?.success || !offersResponse.data?.length) return null;
-    const flightTime = new Date(flight.scheduled_departure_utc ?? '');
-    let best = offersResponse.data[0];
-    let minDiff = Math.abs(new Date(best.departure_at).getTime() - flightTime.getTime());
-    for (const offer of offersResponse.data) {
-      const diff = Math.abs(new Date(offer.departure_at).getTime() - flightTime.getTime());
-      if (diff < minDiff) { minDiff = diff; best = offer; }
-    }
-    return best;
-  }, [offersResponse, flight.scheduled_departure_utc]);
+
+    const flightUtcMs = flight.scheduled_departure_utc ? new Date(flight.scheduled_departure_utc).getTime() : 0;
+    if (!flightUtcMs) return null;
+
+    const normalize = (fn?: string) => fn?.replace(/\s+/g, '').toUpperCase() ?? '';
+    const targetFn = normalize(flight.flight_number);
+
+    const matches = offersResponse.data.filter(o => {
+      if (o.origin_airport_code !== flight.origin_airport_code || o.destination_airport_code !== flight.destination_airport_code) {
+        return false;
+      }
+      const oMs = new Date(o.departure_at).getTime();
+      return Math.abs(oMs - flightUtcMs) < 60000;
+    });
+
+    if (matches.length === 0) return null;
+    if (matches.length === 1) return matches[0];
+
+    // If multiple matches for the same minute, try to find the one with the matching flight number
+    const perfectMatch = matches.find(o => normalize(o.flight_number) === targetFn);
+    return perfectMatch || matches[0];
+  }, [offersResponse, flight]);
 
   const formatTime = (dateString: string, tz?: string) => {
     if (!dateString) return t.card.na;
@@ -387,20 +400,6 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
                 <span className="currency">{priceData.currency}</span>
                 <span className="amount">{priceData.price.toFixed(2)}</span>
               </div>
-              {priceData.duration_to && (
-                <>
-                  <div className="price-detail">
-                    {t.card.flightTime} {Math.floor(priceData.duration_to / 60)}h {priceData.duration_to % 60}m
-                  </div>
-                  <div className="price-detail">
-                    {t.card.estArrival} {(() => {
-                      const depTime = new Date(flight.scheduled_departure_utc ?? '');
-                      const arrTime = new Date(depTime.getTime() + priceData.duration_to * 60000);
-                      return arrTime.toLocaleTimeString(FORMAT_LOCALES.GB, FORMAT_OPTIONS.TIME_24H);
-                    })()}
-                  </div>
-                </>
-              )}
               {priceData.link && (
                 <a
                   href={`https://www.aviasales.com${priceData.link}`}

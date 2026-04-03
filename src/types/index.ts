@@ -53,11 +53,18 @@ export interface Flight {
 }
 
 export interface FlightOffer {
+  origin_city_code?: string;
+  destination_city_code?: string;
+  origin_airport_code: string;
+  destination_airport_code: string;
   price: number;
   currency: string;
-  link?: string;
+  airline_code?: string;
+  flight_number?: string;
   departure_at: string;
+  transfers?: number;
   duration_to?: number;
+  link?: string;
 }
 
 export interface AirportInfo {
@@ -172,4 +179,6 @@ export interface FlightsResponse {
 export interface FlightOffersResponse {
   success: boolean;
   data: FlightOffer[];
+  count: number;
+  last_fetched_at?: string;
 }

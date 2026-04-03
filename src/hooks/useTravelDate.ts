@@ -118,18 +118,7 @@ export function useTravelDate({
     prevResolvedTZRef.current = undefined;
   }, [selectedItem]);
 
-  // ── Synchronous effective travel date ────────────────────────────────────
-  // In trip mode: always pin to the arrival date in the current TZ (synchronously
-  // correct even before the store update from useEffect fires).
-  // In non-trip mode: use whatever the store says — the useEffect calls above keep
-  // it in sync with timezone changes, and we must NOT override manual date selection.
-  const effectiveTravelDate = (() => {
-    if (!timezone) return travelDate;
-    if (effectiveArrivalTimeUTC) {
-      return new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
-    }
-    return travelDate;
-  })();
+  const effectiveTravelDate = travelDate;
 
   return { effectiveTravelDate };
 }

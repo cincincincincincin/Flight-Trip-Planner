@@ -35,8 +35,8 @@
 .header-info {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
+  flex-shrink: 0;
 }
 
 /* ── Airport time display ────────────────────────────────────── */
@@ -57,7 +57,57 @@
   border-color: var(--c-sage-b);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  justify-content: center;
+  min-height: 24px;
+}
+
+.airport-time--double {
+  padding: 1px 5px;
+  min-height: 22px;
+}
+
+.arrival-two-tz {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.1;
+  padding: 0;
+}
+
+.arrival-main,
+.arrival-alt {
+  font-size: 10px;
+  font-weight: 500;
+  color: inherit;
+}
+
+.arrival-tz-diff {
+  font-size: 8.5px;
+  font-weight: 700;
+  opacity: 0.9;
+  margin-left: 2px;
+}
+
+.arrival-tz-diff.positive {
+  color: var(--green);
+}
+
+.arrival-tz-diff.negative {
+  color: var(--red);
+}
+
+.arrival-different-day {
+  font-weight: 700;
+  font-size: 8.5px;
+  margin-left: 2px;
+}
+
+.arrival-different-day.positive {
+  color: var(--green);
+}
+
+.arrival-different-day.negative {
+  color: var(--red);
 }
 
 .airport-time--estimated {
@@ -94,16 +144,6 @@
 
 .airport-time--estimated:hover .arrival-estimated-tooltip {
   display: block;
-}
-
-.arrival-secondary {
-  color: var(--text-muted);
-  font-size: 10px;
-}
-
-.arrival-tz-diff {
-  color: var(--c-gold);
-  font-weight: 700;
 }
 
 /* ── Close button ────────────────────────────────────────────── */
