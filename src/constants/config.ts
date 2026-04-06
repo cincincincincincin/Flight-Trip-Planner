@@ -126,20 +126,12 @@ export const CONFIG = {
   /** Delay (ms) before restoring scroll position after search panel closes */
   SCROLL_RESTORE_DELAY_MS: 50,
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Shared maths / geo utilities
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Multiply degrees by this to get radians */
-  DEG_TO_RAD: Math.PI / 180,
-  /** Multiply radians by this to get degrees */
-  RAD_TO_DEG: 180 / Math.PI,
   /** Earth radius in kilometres (used in the Haversine formula) */
   EARTH_RADIUS_KM: 6371,
+  /** Degrees to radians conversion factor */
+  DEG_TO_RAD: Math.PI / 180,
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // App-wide limits
-  // ──────────────────────────────────────────────────────────────────────────
+  /** App-wide limits */
 
   /** Maximum number of departure airports that can be selected simultaneously */
   MAX_AIRPORTS: 6,
@@ -169,18 +161,12 @@ export const CONFIG = {
   /** Default map zoom level on initial load */
   DEFAULT_MAP_ZOOM: 4,
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // TripItinerary.tsx – flight time estimation
-  // ──────────────────────────────────────────────────────────────────────────
-
   /** Assumed average cruise speed (km/h) used to estimate flight duration when no schedule exists */
   AVERAGE_AIRCRAFT_SPEED_KMH: 850,
   /** Extra hours added to the raw flight-time estimate to account for taxi, climb and descent */
   ADDITIONAL_BLOCK_HOURS: 0.5,
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Map layers – zoom interpolation breakpoints (MapComponent.tsx / ColorSettings.tsx)
-  // ──────────────────────────────────────────────────────────────────────────
+  /** Zoom interpolation breakpoints (MapComponent.tsx / ColorSettings.tsx) */
 
   /** Minimum zoom level used as the lower anchor of zoom-based style interpolations */
   MIN_ZOOM: 1,
@@ -219,14 +205,17 @@ export const CONFIG = {
   /** Minimum pixel distance between labels before one is hidden to prevent overlap */
   LABEL_CLEAR_RADIUS: 70,
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Search.tsx / MapComponent.tsx – typeahead and debounce
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Debounce delay (ms) for search input and other high-frequency input handlers */
-  DEBOUNCE_TIME_MS: 150,
   /** Maximum results returned per search category (main results / cities / airports) */
   SEARCH_LIMITS: { main: 20, cities: 50, airports: 50 },
+
+  /** Minimalny rozmiar etykiety przy podświetleniu (hover) */
+  MAP_HOVER_LABEL_MIN_SIZE: 11,
+  /** Maksymalny rozmiar etykiety przy podświetleniu (hover) */
+  MAP_HOVER_LABEL_MAX_SIZE: 22,
+  /** Domyślny minimalny zakres zoomu mapy */
+  MAP_ZOOM_MIN_DEFAULT: 1.3,
+  /** Domyślny maksymalny zakres zoomu mapy */
+  MAP_ZOOM_MAX_DEFAULT: 5.5,
 
   // ──────────────────────────────────────────────────────────────────────────
   // MapComponent.tsx – layer radius/text size arrays
@@ -298,12 +287,18 @@ export const CONFIG = {
   /** Alias for MAX_DAYS_FORWARD used by the date store */
   MAX_DATE_DAYS: 180,
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // API
-  // ──────────────────────────────────────────────────────────────────────────
-
   /** Base URL for the backend API */
   API_BASE_URL: import.meta.env.VITE_API_URL ?? '',
+
+  /** Poziomy przybliżenia mapy zależne od liczby lotnisk w danym kraju */
+  COUNTRY_ZOOM_LEVELS: {
+    '0': 5.0,
+    '5': 5.0,
+    '15': 4.5,
+    '40': 3.5,
+    '100': 2.6,
+    'default': 1.8
+  }
 };
 
 /** Dostępne waluty do wyboru przez użytkownika */

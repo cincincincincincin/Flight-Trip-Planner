@@ -1,13 +1,14 @@
 import React from 'react';
-import type { Airport } from '../../types';
+import type { Airport, AirportFeatureProps } from '../../types';
 import AirportTransferPicker from '../AirportTransferPicker';
 import { UI_SYMBOLS } from '../../constants/ui';
 import { useTexts } from '../../hooks/useTexts';
 import { CONFIG } from '../../constants/config';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { getLocalizedProp } from '../../utils/geoUtils';
+import type { FeatureCollection, Point } from 'geojson';
 
-interface AirportsGeoData {
-  features: Array<{ properties: { code?: string; name?: string } }>;
-}
+type AirportsGeoData = FeatureCollection<Point, AirportFeatureProps>;
 
 interface TripAirportSectionProps {
   selectedAirport: Airport;
@@ -37,6 +38,7 @@ const TripAirportSection = ({
   onClearPreview,
 }: TripAirportSectionProps) => {
   const t = useTexts();
+  const language = useSettingsStore(s => s.language);
 
   return (
     <div className="trip-airports-section">
@@ -59,7 +61,7 @@ const TripAirportSection = ({
         {transferAirports.map(code => {
           const tzDisplay = getAltTimeDisplay(code);
           const feat = airportsData?.features.find(f => f.properties.code === code);
-          const label = feat?.properties.name || code;
+          const label = feat ? getLocalizedProp(feat.properties, 'name', language) : code;
           return (
             <div key={code} className="trip-airport-item">
               <span className="exploration-icon"></span>

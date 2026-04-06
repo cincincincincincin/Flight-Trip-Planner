@@ -4,7 +4,7 @@ import type { Flight } from '../types';
 import { useFilterStore } from '../stores/filterStore';
 import { useAirportsQuery } from './queries';
 import { useSettingsStore } from '../stores/settingsStore';
-import { getLocalizedName } from '../utils/i18n';
+import { getLocalizedProp } from '../utils/geoUtils';
 import type { Language } from '../constants/text';
 
 export interface DestAirport { code: string; name: string; cityCode?: string; countryCode?: string; }
@@ -65,10 +65,10 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
     if (!airportsData) return {} as Record<string, string>;
     const m: Record<string, string> = {};
     airportsData.features.forEach(f => {
-      if (f.properties.code) m[f.properties.code] = f.properties.name || f.properties.code;
+      if (f.properties.code) m[f.properties.code] = getLocalizedProp(f.properties, 'name', language) || f.properties.code;
     });
     return m;
-  }, [airportsData]);
+  }, [airportsData, language]);
 
   const destScopeFlights = useMemo(() => {
     if (airlineFilter.length === 0) return allFlights;

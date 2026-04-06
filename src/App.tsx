@@ -19,18 +19,24 @@ import { useTexts } from './hooks/useTexts';
 import './App.css';
 import { CONFIG } from './constants/config';
 import { MAP_ASSETS } from './constants/mapStyles';
+import { calculateZoomByAirportCount } from './components/map/zoomUtils';
+import { getLocalizedProp } from './utils/geoUtils';
 
+// Zachowujemy oryginalne metody konsoli, żeby móc je przywrócić w razie potrzeby
 const _origLog = console.log;
 const _origWarn = console.warn;
 const _origDebug = console.debug;
 
 
+// Pomocnicza funkcja do liczenia mediany - przydaje się przy filtrowaniu outlierów
 function medianVal(arr: number[]): number {
   const sorted = [...arr].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
+// Logika odrzucania terytoriów pozamorskich i wysp (outliers).
+// Chodzi o to, żeby mapa centrowała się na głównym terytorium kraju, a nie na środku oceanu.
 function filterOutliersCoords(coords: [number, number][], maxDeg = CONFIG.OUTLIER_MAX_DEG): [number, number][] {
   if (coords.length <= 1) return coords;
   let current = [...coords];
@@ -52,10 +58,12 @@ function filterOutliersCoords(coords: [number, number][], maxDeg = CONFIG.OUTLIE
 const MemoizedMapComponent = memo(MapComponent);
 
 function App() {
-  const t = useTexts();
-  const mapRef = useRef<any>(null);
-  const rightPanelRef = useRef<any>(null);
+  const t = useTexts(); // Hook do tłumaczeń
+  const mapRef = useRef<any>(null); // Referencja do instancji mapy (MapLibre/Mapbox)
+  const rightPanelRef = useRef<any>(null); // Ref do bocznego panelu z informacjami
   const handleAddToTripRef = useRef<((flight: any) => Promise<void>) | null>(null);
+  
+  // Stan dla mobilnego panelu (dolna szuflada)
   const [mobileSheetExpanded, setMobileSheetExpanded] = useState(false);
   const mobileSheetRef = useRef<HTMLDivElement>(null);
   const sheetExpandedRef = useRef(false);
@@ -82,6 +90,7 @@ function App() {
 
   useEffect(() => { setMobileSheetExpanded(false); }, [selectedItem]);
 
+  // Obsługa gestów swipe dla panelu mobilnego (bottom sheet)
   useEffect(() => {
     const sheet = mobileSheetRef.current;
     if (!sheet) return;
@@ -94,12 +103,13 @@ function App() {
     const onStart = (e: TouchEvent) => {
       const rect = sheet.getBoundingClientRect();
       const fromTop = e.touches[0].clientY - rect.top;
+      // Sprawdzamy czy użytkownik złapał za górny pasek (header) panelu
       if (fromTop > CONFIG.PEEK_H + CONFIG.DRAG_HEADER_EXTRA) return;
       dragging = true;
       startY = e.touches[0].clientY;
       startTranslate = sheetExpandedRef.current ? 0 : window.innerHeight - CONFIG.PEEK_H;
       currentTranslate = startTranslate;
-      sheet.style.transition = 'none';
+      sheet.style.transition = 'none'; // Wyłączamy animację na czas dragowania
     };
 
     const onMove = (e: TouchEvent) => {
@@ -115,9 +125,10 @@ function App() {
       if (!dragging) return;
       dragging = false;
       const totalDrag = currentTranslate - startTranslate;
-            const wasExpanded = sheetExpandedRef.current;
+      const wasExpanded = sheetExpandedRef.current;
+      // Decydujemy czy rozwinąć czy schować panel na podstawie progu przesunięcia
       const nextExpanded = wasExpanded ? totalDrag < CONFIG.DRAG_THRESHOLD : totalDrag < -CONFIG.DRAG_THRESHOLD;
-      sheet.style.transition = '';
+      sheet.style.transition = ''; // Przywracamy animację CSS
       sheet.style.transform = '';
       setMobileSheetExpanded(nextExpanded);
     };
@@ -126,7 +137,7 @@ function App() {
     sheet.addEventListener('touchmove', onMove, { passive: false });
     sheet.addEventListener('touchend', onEnd);
 
-  return () => {
+    return () => {
       sheet.removeEventListener('touchstart', onStart);
       sheet.removeEventListener('touchmove', onMove);
       sheet.removeEventListener('touchend', onEnd);
@@ -144,7 +155,7 @@ function App() {
     setPastTrips,
   } = useTripStore();
 
-  const { travelDate, showConsoleLogs } = useSettingsStore();
+  const { travelDate, showConsoleLogs, language } = useSettingsStore();
 
   const fcHighlightAirportBg     = useColorStore(s => s.fcHighlightAirportBg);
   const fcHighlightAirportBorder = useColorStore(s => s.fcHighlightAirportBorder);
@@ -155,6 +166,7 @@ function App() {
   const fcHighlightSoonBg        = useColorStore(s => s.fcHighlightSoonBg);
   const fcHighlightSoonBorder    = useColorStore(s => s.fcHighlightSoonBorder);
 
+  // Dynamiczna aktualizacja zmiennych CSS dla kolorów podświetlenia (Exploration Mode)
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty('--fc-highlight-airport-bg',     fcHighlightAirportBg);
@@ -207,6 +219,7 @@ function App() {
     return null;
   }, [tripState]);
 
+  // Funkcja flyTo do płynnego przemieszczania kamery na mapie
   const flyToLocation = useCallback((lng: number, lat: number, zoom: number) => {
     mapRef.current?.flyTo({ center: [lng, lat], zoom, essential: true, duration: CONFIG.FLY_DURATION });
   }, []);
@@ -260,19 +273,27 @@ function App() {
 
   const fitToCountry = useCallback((countryCode: string) => {
     if (airportsData) {
-      const coords = airportsData.features
-        .filter(f => f.properties.country_code === countryCode)
-        .map(f => f.geometry.coordinates as [number, number]);
+      const countryAirports = airportsData.features
+        .filter(f => f.properties.country_code === countryCode);
+      
+      const coords = countryAirports.map(f => f.geometry.coordinates as [number, number]);
+      
       if (coords.length > 0) {
+        const customZoom = calculateZoomByAirportCount(coords.length);
         const continental = filterOutliersCoords(coords);
+        
         if (continental.length === 1) {
-          flyToLocation(continental[0][0], continental[0][1], CONFIG.FALLBACK_ZOOM.COUNTRY);
+          flyToLocation(continental[0][0], continental[0][1], customZoom);
         } else {
           const lngs = continental.map(c => c[0]);
           const lats = continental.map(c => c[1]);
           mapRef.current?.fitBounds(
             [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
-            { padding: CONFIG.FIT_BOUNDS_PADDING, duration: CONFIG.FLY_DURATION, maxZoom: CONFIG.MAX_ZOOM_FOR_COUNTRY }
+            { 
+              padding: CONFIG.FIT_BOUNDS_PADDING, 
+              duration: CONFIG.FLY_DURATION, 
+              maxZoom: Math.max(CONFIG.MAX_ZOOM_FOR_COUNTRY, customZoom) 
+            }
           );
         }
         return;
@@ -280,7 +301,8 @@ function App() {
     }
     const center = countryCenters?.[countryCode];
     if (center) {
-      flyToLocation(center.lon, center.lat, center.zoom);
+      // Dla krajów bez lotnisk (fallback) również aplikujemy nową logikę lub zostawiamy domyślny środek
+      flyToLocation(center.lon, center.lat, calculateZoomByAirportCount(center.airport_count));
     }
   }, [airportsData, countryCenters, flyToLocation]);
 
@@ -308,7 +330,7 @@ function App() {
         code: item.data.code,
         name: item.data.name || item.data.code,
         airportCodes: newCodes,
-      }/*, viewMode*/);
+      });
       if (!item.fromMap) fitBoundsToAirportCodes(allCodes);
       if (selectedItem.type === 'country') {
         setSelectedItem(item);
@@ -351,7 +373,7 @@ function App() {
         code: item.data.code,
         name: item.data.name || item.data.code,
         airportCodes: cityAirportCodes,
-      }/*, viewMode*/);
+      });
 
         if (cityAirportCodes.length > 0) {
           fitBoundsToAirportCodes(cityAirportCodes);
@@ -377,6 +399,7 @@ function App() {
     }
   }, [setDisplayMode, flyToLocation, fitBoundsToAirportCodes, tripState, flightsData, travelDate, selectedItem, /*viewMode,*/ addExplorationItem, explorationItems, getExplorationAirportCodes, setSelectedItem, setSelectedAirportCode, setHighlightedAirports, setFlightsData]);
 
+  // Handler dodawania lotu do planu podróży
   const handleAddToTrip = useCallback(async (flight: any) => {
     const destCode = flight.destination_airport_code;
     const originCode = flight.origin_airport_code;
@@ -384,10 +407,12 @@ function App() {
     const newFlightLeg = { fromAirportCode: originCode, toAirportCode: destCode, flight };
     const isFromTransferAirport = !isFirstLeg && manualTransferAirportCodes.includes(originCode);
     
+    // Zapisujemy stan na potrzeby undo/redo
     pushToHistory();
 
     const newTripRoutes = [...tripRoutes];
 
+    // Inicjalizacja pierwszej nogi podróży
     if (isFirstLeg) {
       const originFeat = airportsData?.features.find(f => f.properties.code === originCode);
       const startData = originFeat ? originFeat.properties : { code: originCode, city_code: '', country_code: '' };
@@ -400,6 +425,7 @@ function App() {
         legs: [newFlightLeg],
       });
     } else if (isFromTransferAirport) {
+      // Obsługa przesiadek ręcznych (gdy użytkownik sam wybrał lotnisko wylotu w trakcie)
       const arrivalCode = (selectedItem?.data as any)?.code ?? '';
       const manualLeg = {
         type: 'manual' as const,
@@ -419,6 +445,7 @@ function App() {
 
     setManualTransferAirportCodes([]);
 
+    // Dodanie nowej linii (trasy) na mapie
     const fromFeat = airportsData?.features.find(f => f.properties.code === originCode);
     const toFeat = airportsData?.features.find(f => f.properties.code === destCode);
     if (fromFeat?.geometry && toFeat?.geometry) {
@@ -426,6 +453,7 @@ function App() {
     }
     setTripRoutes(newTripRoutes);
 
+    // Czyszczenie UI po dodaniu lotu
     setHighlightedAirports([]);
     setFlightsData([]);
     clearExploration();
@@ -443,11 +471,11 @@ function App() {
 
       const destData = {
         code: destFeat.properties.code,
-        name: destFeat.properties.name,
+        name: getLocalizedProp(destFeat.properties, 'name', language),
         city_code: destFeat.properties.city_code,
-        city_name: destFeat.properties.city_name,
+        city_name: getLocalizedProp(destFeat.properties, 'city_name', language),
         country_code: destFeat.properties.country_code,
-        country_name: destFeat.properties.country_name,
+        country_name: getLocalizedProp(destFeat.properties, 'country_name', language),
         coordinates: { lon: destFeat.geometry.coordinates[0], lat: destFeat.geometry.coordinates[1] },
       };
 
@@ -458,7 +486,7 @@ function App() {
       console.error('Failed to fetch destination airport:', e);
       setSelectedItem({ type: 'airport', data: { code: destCode, name: destCode } as any });
     }
-  }, [tripState, selectedItem, airportsData, tripRoutes, manualTransferAirportCodes, flyToLocation, setTripState, setTripRoutes, setManualTransferAirportCodes, setHighlightedAirports, setFlightsData, setSelectedAirportCode, setSelectedItem]);
+  }, [tripState, selectedItem, airportsData, tripRoutes, manualTransferAirportCodes, flyToLocation, setTripState, setTripRoutes, setManualTransferAirportCodes, setHighlightedAirports, setFlightsData, setSelectedAirportCode, setSelectedItem, pushToHistory, clearExploration]);
   handleAddToTripRef.current = handleAddToTrip;
 
   const handleUndoRedo = useCallback(() => {
@@ -472,6 +500,7 @@ function App() {
     }, 0);
   }, [flyToLocation]);
 
+  // Resetowanie wszystkich stanów (powrót do widoku domyślnego)
   const handleClosePanel = () => {
     setPendingCountryPicker(null);
     clearFilters();
@@ -480,6 +509,7 @@ function App() {
     clearTrip();
   };
 
+  // Zamknięcie załadowanej podróży i powrót do czystego stanu UI
   const handleCloseLoadedTrip = useCallback(() => {
     setPendingCountryPicker(null);
     clearFilters();
@@ -488,6 +518,7 @@ function App() {
     clearTrip();
   }, [clearFilters, clearExploration, clearSelection, clearTrip]);
 
+  // Funkcja do edycji załadowanej podróży - odtwarzamy stan i migawki historyczne (snapshots)
   const handleEditLoadedTrip = useCallback(async () => {
     if (!tripState?.legs?.length) return;
     setEditMode(true);
@@ -495,9 +526,11 @@ function App() {
     const legs = tripState.legs;
     const snapshots: import('./stores/tripStore').TripSnapshot[] = [];
 
+    // Przechodzimy po odcinkach podróży wstecz, aby zbudować historię dla undo/redo
     for (let i = legs.length - 1; i >= 0; i--) {
       const leg = legs[i];
       const isManual = (leg as { type?: string }).type === 'manual';
+      // Jeśli segment już się odbył (czas przeszły), nie pozwalamy na jego cofnięcie w historii edycji
       if (!isManual && leg.flight?.scheduled_departure_utc) {
         const dep = new Date(leg.flight.scheduled_departure_utc).getTime();
         if (dep < now) break;
@@ -551,11 +584,11 @@ function App() {
 
       const destData = {
         code: destFeat.properties.code,
-        name: destFeat.properties.name,
+        name: getLocalizedProp(destFeat.properties, 'name', language),
         city_code: destFeat.properties.city_code,
-        city_name: destFeat.properties.city_name,
+        city_name: getLocalizedProp(destFeat.properties, 'city_name', language),
         country_code: destFeat.properties.country_code,
-        country_name: destFeat.properties.country_name,
+        country_name: getLocalizedProp(destFeat.properties, 'country_name', language),
         coordinates: { lon: destFeat.geometry.coordinates[0], lat: destFeat.geometry.coordinates[1] },
       };
 
@@ -566,28 +599,32 @@ function App() {
     }
   }, [tripState, tripRoutes, airportsData, setEditMode, setPastTrips, setSelectedAirportCode, setSelectedItem, flyToLocation]);
 
+  // Przełączenie na widok konkretnego państwa (reset filtrów eksploracji)
   const handleSwitchToCountryView = useCallback((code: string, name: string) => {
     clearExploration();
     setSelectedItem({ type: 'country', data: { code, name } as any });
     setPendingCountryPicker(null);
   }, [clearExploration, setSelectedItem]);
 
+  // Potwierdzenie wyboru lotnisk z widoku państwa i dopasowanie widoku mapy
   const handleCountryAirportsConfirmed = useCallback((codes: string[], countryCode: string, countryName: string) => {
     if (!airportsData || codes.length === 0) return;
     const resolvedName = (countryName && countryName !== countryCode)
       ? countryName
       : (() => {
-          const fromGeo = airportsData.features.find(f => f.properties.country_code === countryCode)?.properties.country_name;
+          const feat = airportsData.features.find(f => f.properties.country_code === countryCode);
+          const fromGeo = feat ? getLocalizedProp(feat.properties, 'country_name', language) : undefined;
           if (fromGeo && fromGeo !== countryCode) return fromGeo;
           try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(countryCode) || countryCode; } catch { return countryCode; }
         })();
     clearExploration();
-    addExplorationItem({ type: 'country', code: countryCode, name: resolvedName, airportCodes: codes }/*, viewMode*/);
-    const firstFeat = airportsData.features.find(f => f.properties.code === codes[0]);
+    addExplorationItem({ type: 'country', code: countryCode, name: resolvedName, airportCodes: codes });
+    const firstFeat = airportsData?.features.find(f => f.properties.code === codes[0]);
     if (firstFeat) setSelectedItem({ type: 'airport', data: firstFeat.properties as any });
     fitBoundsToAirportCodes(codes);
   }, [airportsData, clearExploration, addExplorationItem, setSelectedItem, fitBoundsToAirportCodes]);
 
+  // Efekt do automatycznego dopasowania kamery po wybraniu wielu lotnisk (np. grupy eksploracji)
   useEffect(() => {
     if (
       fitCameraOnFlightsRef.current &&
@@ -599,6 +636,7 @@ function App() {
     prevSelectedAirportCodesLenRef.current = selectedAirportCodes.length;
   }, [selectedAirportCodes, fitBoundsToAirportCodes]);
 
+  // Efekt do automatycznego dopasowania widoku, gdy zmieniają się podświetlone lotniska (np. po wyszukiwaniu)
   useEffect(() => {
     if (!fitCameraOnFlightsRef.current || tripState || highlightedAirports.length === 0) return;
     const originCodes = selectedAirportCodes.length > 0
@@ -608,6 +646,7 @@ function App() {
   }, [highlightedAirports, selectedAirportCode, selectedAirportCodes, tripState, fitBoundsToAirportCodes]);
 
 
+  // Inicjalizacja tła z parametrów wizualnych
   useEffect(() => {
     document.documentElement.style.setProperty('--map-bg-image', MAP_ASSETS.BACKGROUND_IMAGE);
   }, []);

@@ -2,20 +2,17 @@
 export interface Airport {
   code: string;
   name: string;
-  name_translations?: Record<string, string>;
   city_name?: string;
   city_code?: string;
   country_name?: string;
   country_code?: string;
   coordinates?: { lat: number; lon?: number; lng?: number };
-  urls?: { webSite?: string; wikipedia?: string; twitter?: string; liveAtc?: string; flightRadar?: string; googleMaps?: string };
   type: 'airport';
 }
 
 export interface City {
   code: string;
   name: string;
-  name_translations?: Record<string, string>;
   country_name?: string;
   country_code?: string;
   airports?: Airport[];
@@ -25,7 +22,6 @@ export interface City {
 export interface Country {
   code: string;
   name: string;
-  name_translations?: Record<string, string>;
   type: 'country';
   cities?: City[];
 }
@@ -62,8 +58,6 @@ export interface FlightOffer {
   airline_code?: string;
   flight_number?: string;
   departure_at: string;
-  transfers?: number;
-  duration_to?: number;
   link?: string;
 }
 
@@ -81,11 +75,14 @@ export interface CountryAirport {
 
 export interface AirportFeatureProps {
   code: string;
-  name: string;
-  city_name?: string;
+  name_en: string;
+  name_pl?: string;
   city_code?: string;
+  city_name_en?: string;
+  city_name_pl?: string;
   country_code?: string;
-  country_name?: string;
+  country_name_en?: string;
+  country_name_pl?: string;
   time_zone?: string | null;
 }
 
@@ -101,7 +98,6 @@ export interface RouteFeatureProps {
   departure_airport_iata?: string;
   arrival_airport_iata?: string;
   codeshare?: boolean;
-  transfers?: number;
 }
 
 export type SelectedItem =

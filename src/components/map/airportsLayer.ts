@@ -5,10 +5,28 @@ import { getLabelPaint } from './utils';
 import { THEME_COLORS } from '../../constants/theme';
 import { CONFIG } from '../../constants/config';
 
+export const AIRPORT_LABEL_LAYERS = [
+  'airports-labels-normal',
+  'airports-labels-normal-city',
+  'airports-labels-highlighted-city',
+  'airports-labels-highlighted',
+  'airports-labels-hover-general',
+  'airports-labels-hover',
+] as const;
+
+export function airportLabelField(lang: string): maplibregl.ExpressionSpecification {
+  return ['get', `name_${lang}`] as maplibregl.ExpressionSpecification;
+}
+
+export function airportCityLabelField(lang: string): maplibregl.ExpressionSpecification {
+  return ['coalesce', ['get', `city_name_${lang}`], ['get', `name_${lang}`]] as maplibregl.ExpressionSpecification;
+}
+
 export function addAirportsLayer(
   map: MapLibreMap,
   data: FeatureCollection<Point, AirportFeatureProps>,
   currentMapStyle: string,
+  lang = 'en',
 ) {
   const labelPaint = getLabelPaint(currentMapStyle);
   const strokeColor = labelPaint.haloColor;
@@ -103,7 +121,7 @@ export function addAirportsLayer(
     source: 'airports',
     minzoom: 5,
     layout: {
-      'text-field': ['get', 'name'],
+      'text-field': airportLabelField(lang),
       'text-size': CONFIG.MAP_AIRPORT_LAYER.TEXT_SMALL,
       'text-offset': [0, 1.5],
       'text-anchor': 'top',
@@ -126,7 +144,7 @@ export function addAirportsLayer(
     maxzoom: 5,
     filter: ['in', 'code', ''],
     layout: {
-      'text-field': ['coalesce', ['get', 'city_name'], ['get', 'name']],
+      'text-field': airportCityLabelField(lang),
       'text-size': CONFIG.MAP_AIRPORT_LAYER.TEXT_MEDIUM,
       'text-font': ["Noto Sans Regular"],
       'text-offset': [0, 1.5],
@@ -150,7 +168,7 @@ export function addAirportsLayer(
     maxzoom: 5,
     filter: ['in', 'code', ''],
     layout: {
-      'text-field': ['coalesce', ['get', 'city_name'], ['get', 'name']],
+      'text-field': airportCityLabelField(lang),
       'text-size': CONFIG.MAP_AIRPORT_LAYER.TEXT_LARGE,
       'text-font': ["Noto Sans Bold"],
       'text-offset': [0, 1.5],
@@ -173,7 +191,7 @@ export function addAirportsLayer(
     minzoom: 5,
     filter: ['in', 'code', ''],
     layout: {
-      'text-field': ['get', 'name'],
+      'text-field': airportLabelField(lang),
       'text-size': CONFIG.MAP_AIRPORT_LAYER.TEXT_LARGE,
       'text-font': ["Noto Sans Bold"],
       'text-offset': [0, 1.5],
@@ -195,7 +213,7 @@ export function addAirportsLayer(
     source: 'airports',
     filter: ['==', 'code', ''],
     layout: {
-      'text-field': ['get', 'name'],
+      'text-field': airportLabelField(lang),
       'text-size': CONFIG.MAP_AIRPORT_LAYER.TEXT_LARGE,
       'text-font': ["Noto Sans Bold"],
       'text-offset': [0, 1.5],
@@ -221,7 +239,7 @@ export function addAirportsLayer(
     source: 'airports',
     filter: ['==', 'code', ''],
     layout: {
-      'text-field': ['get', 'name'],
+      'text-field': airportLabelField(lang),
       'text-size': CONFIG.MAP_AIRPORT_LAYER.TEXT_LARGE,
       'text-font': ["Noto Sans Bold"],
       'text-offset': [0, 1.5],

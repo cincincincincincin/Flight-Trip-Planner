@@ -5,6 +5,7 @@ import { getFlightOffers } from '../api/flights';
 import type { AirportInfo, FlightOffersResponse } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useMemo } from 'react';
+import { getLocalizedProp } from '../utils/geoUtils';
 
 // Single startup request — returns both GeoJSON and country centers
 export const useInitQuery = () => {
@@ -66,17 +67,18 @@ export const useAirportInfosQuery = (codes: string[]) => {
 // Local filter — replaces GET /airports/by-country (no network request)
 export const useAirportsByCountryQuery = (countryCode: string | null) => {
   const { data: airportsData } = useAirportsQuery();
+  const language = useSettingsStore(s => s.language);
   return useMemo(() => {
     if (!countryCode || !airportsData) return { data: undefined };
     const airports = airportsData.features
       .filter(f => f.properties.country_code === countryCode)
       .map(f => ({
         code: f.properties.code,
-        name: f.properties.name,
+        name: getLocalizedProp(f.properties, 'name', language),
         time_zone: f.properties.time_zone ?? null,
       }));
     return { data: airports };
-  }, [countryCode, airportsData]);
+  }, [countryCode, airportsData, language]);
 };
 
 // Flight price offers — 5 min cache, disabled until explicitly triggered

@@ -4,6 +4,8 @@ import type { Point } from 'geojson';
 import type { AirportFeatureProps } from '../../types';
 import type { ExplorationItem } from '../../stores/selectionStore';
 import type { ExplorationDisplayItem } from './ExplorationList';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { getLocalizedProp } from '../../utils/geoUtils';
 
 type CityInfoMap = Record<string, { name: string; country_code: string; airportCount: number }>;
 type CountryInfoMap = Record<string, { name: string; airportCount: number }>;
@@ -16,6 +18,8 @@ export function useExplorationGroups(
   countryNameCache: Record<string, string>,
   expandedCityGroups: Set<string>,
 ): ExplorationDisplayItem[] {
+  const language = useSettingsStore(s => s.language);
+
   return useMemo((): ExplorationDisplayItem[] => {
     if (!airportsData || explorationItems.length === 0) return [];
 
@@ -28,7 +32,7 @@ export function useExplorationGroups(
             const feat = airportsData.features.find(f => f.properties.code === code);
             const cityCode = feat?.properties.city_code || '';
             if (!byCity.has(cityCode)) byCity.set(cityCode, []);
-            byCity.get(cityCode)!.push({ id: item.id, code, name: feat?.properties.name ?? code });
+            byCity.get(cityCode)!.push({ id: item.id, code, name: feat ? getLocalizedProp(feat.properties, 'name', language) : code });
           }
           const childCities = Array.from(byCity.entries()).map(([cityCode, aps]) => ({
             cityCode,
@@ -63,7 +67,7 @@ export function useExplorationGroups(
         allAirportItems.push({
           id: item.id,
           code,
-          name: feat?.properties.name ?? code,
+          name: feat ? getLocalizedProp(feat.properties, 'name', language) : code,
           cityCode: feat?.properties.city_code || '',
           countryCode: feat?.properties.country_code || '',
         });
@@ -165,5 +169,5 @@ export function useExplorationGroups(
     }
 
     return result;
-  }, [explorationItems, airportsData, cityInfoMap, countryInfoMap, countryNameCache, expandedCityGroups]);
+  }, [explorationItems, airportsData, cityInfoMap, countryInfoMap, countryNameCache, expandedCityGroups, language]);
 }

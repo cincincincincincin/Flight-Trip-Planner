@@ -4,6 +4,7 @@ import type { AirportFeatureProps } from '../types';
 import type { Feature, Point } from 'geojson';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAirportsQuery } from './queries';
+import { getLocalizedProp } from '../utils/geoUtils';
 
 type PhaseData = { 1: Country[]; 2: Country[]; 3: Country[] };
 type HasMore = { 1: boolean; 2: boolean; 3: boolean };
@@ -33,31 +34,33 @@ function normalize(str: string): string {
   return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-function featureToAirport(f: Feature<Point, AirportFeatureProps>): Airport {
+function featureToAirport(f: Feature<Point, AirportFeatureProps>, lang: string): Airport {
   return {
     type: 'airport',
     code: f.properties.code,
-    name: f.properties.name,
+    name: getLocalizedProp(f.properties, 'name', lang),
     city_code: f.properties.city_code,
-    city_name: f.properties.city_name,
+    city_name: getLocalizedProp(f.properties, 'city_name', lang),
     country_code: f.properties.country_code,
-    country_name: f.properties.country_name,
+    country_name: getLocalizedProp(f.properties, 'country_name', lang),
   };
 }
 
-function buildIndex(features: Feature<Point, AirportFeatureProps>[]) {
+function buildIndex(features: Feature<Point, AirportFeatureProps>[], lang: string) {
   const countryMap: Record<string, { name: string; cities: Record<string, { name: string; airports: Airport[] }> }> = {};
 
   for (const f of features) {
-    const { code, name, city_code, city_name, country_code, country_name } = f.properties;
+    const { code, city_code, country_code } = f.properties;
+    const country_name = getLocalizedProp(f.properties, 'country_name', lang);
+    const city_name = getLocalizedProp(f.properties, 'city_name', lang);
     if (!country_code || !city_code) continue;
     if (!countryMap[country_code]) {
-      countryMap[country_code] = { name: country_name ?? country_code, cities: {} };
+      countryMap[country_code] = { name: country_name || country_code, cities: {} };
     }
     if (!countryMap[country_code].cities[city_code]) {
-      countryMap[country_code].cities[city_code] = { name: city_name ?? city_code, airports: [] };
+      countryMap[country_code].cities[city_code] = { name: city_name || city_code, airports: [] };
     }
-    countryMap[country_code].cities[city_code].airports.push(featureToAirport(f));
+    countryMap[country_code].cities[city_code].airports.push(featureToAirport(f, lang));
   }
 
   const countriesCache: Record<string, CountryCacheEntry> = {};
@@ -161,12 +164,12 @@ function computePhaseData(
 }
 
 export function useSearchData({ query }: UseSearchDataParams) {
-  useSettingsStore(s => s.language); // re-run when language changes (GeoJSON re-fetched per lang)
+  const language = useSettingsStore(s => s.language);
   const { data: airportsData } = useAirportsQuery();
 
   const { countryMap, countriesCache, citiesCache } = useMemo(
-    () => airportsData ? buildIndex(airportsData.features) : { countryMap: {}, countriesCache: {}, citiesCache: {} },
-    [airportsData],
+    () => airportsData ? buildIndex(airportsData.features, language) : { countryMap: {}, countriesCache: {}, citiesCache: {} },
+    [airportsData, language],
   );
 
   const { phaseData, searchMode, exactAirport, phase2Cache, phase3Cache } = useMemo(

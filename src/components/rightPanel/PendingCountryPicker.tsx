@@ -7,6 +7,8 @@ import { useTexts } from '../../hooks/useTexts';
 import { UI_SYMBOLS } from '../../constants/ui';
 import { CONFIG } from '../../constants/config';
 import type { buildTzGroups } from '../../utils/timezoneUtils';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { getLocalizedProp } from '../../utils/geoUtils';
 
 type TzGroups = ReturnType<typeof buildTzGroups>;
 
@@ -32,6 +34,7 @@ const PendingCountryPicker: React.FC<PendingCountryPickerProps> = ({
   onClearCountryPicker,
 }) => {
   const t = useTexts();
+  const language = useSettingsStore(s => s.language);
   const { clearExploration, addExplorationItem } = useSelectionStore();
 
   const hasMixedTZ = pendingCountryTzGroups.filter(g => g.tz !== CONFIG.UNKNOWN_TIMEZONE).length > 1;
@@ -54,7 +57,7 @@ const PendingCountryPicker: React.FC<PendingCountryPickerProps> = ({
                 : (prev.length < CONFIG.MAX_AIRPORTS ? [...prev, airport.code] : prev)
             );
           }} />
-        <span>{airportsData?.features.find(f => f.properties.code === airport.code)?.properties.name ?? airport.name} ({airport.code})</span>
+        <span>{(() => { const f = airportsData?.features.find(f => f.properties.code === airport.code); return f ? getLocalizedProp(f.properties, 'name', language) : airport.name; })()} ({airport.code})</span>
       </label>
     );
   };
@@ -95,7 +98,7 @@ const PendingCountryPicker: React.FC<PendingCountryPickerProps> = ({
           const codesToAdd = pendingSelectedAirports.slice(0, slotsLeft);
           codesToAdd.forEach(code => {
             const feat = airportsData?.features.find(f => f.properties.code === code);
-            addExplorationItem({ type: 'airport', code, name: feat?.properties.name || code, airportCodes: [code] });
+            addExplorationItem({ type: 'airport', code, name: feat ? getLocalizedProp(feat.properties, 'name', language) : code, airportCodes: [code] });
           });
           onFitBounds?.([...(willFill ? [] : currentCodes), ...codesToAdd]);
           onClearCountryPicker?.();

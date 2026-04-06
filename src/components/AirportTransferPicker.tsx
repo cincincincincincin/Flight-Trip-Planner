@@ -5,6 +5,8 @@ import { useAirportsQuery } from '../hooks/queries';
 import './AirportTransferPicker.css';
 import { UI_SYMBOLS } from '../constants/ui';
 import { useTexts } from '../hooks/useTexts';
+import { getLocalizedProp } from '../utils/geoUtils';
+import { useSettingsStore } from '../stores/settingsStore';
 
 interface AirportTransferPickerProps {
   currentAirport: Airport;
@@ -35,6 +37,7 @@ const AirportTransferPicker = ({
   preCheckedCodes = [],
 }: AirportTransferPickerProps) => {
   const t = useTexts();
+  const language = useSettingsStore(s => s.language);
   const { data: airportsData } = useAirportsQuery();
   const [isOpen, setIsOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
@@ -58,14 +61,14 @@ const AirportTransferPicker = ({
         const distKm = Math.round(Math.sqrt(dLat * dLat + dLng * dLng));
         return {
           code: f.properties.code,
-          name: f.properties.name,
-          city_name: f.properties.city_name,
-          country_name: f.properties.country_name,
+          name: getLocalizedProp(f.properties, 'name', language),
+          city_name: getLocalizedProp(f.properties, 'city_name', language),
+          country_name: getLocalizedProp(f.properties, 'country_name', language),
           distKm,
         };
       })
       .sort((a, b) => a.distKm - b.distKm);
-  }, [airportsData, currentAirport]);
+  }, [airportsData, currentAirport, language]);
 
   const filteredAirports = useMemo(() => {
     const q = searchText.trim().toLowerCase();

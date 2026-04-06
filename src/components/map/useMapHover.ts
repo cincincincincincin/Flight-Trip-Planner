@@ -3,6 +3,8 @@ import maplibregl from 'maplibre-gl';
 import type { SelectedItem, AirportFeatureProps } from '../../types';
 import { useColorStore } from '../../stores/colorStore';
 import { useFilterStore } from '../../stores/filterStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { getLocalizedProp } from '../../utils/geoUtils';
 import { CONFIG } from '../../constants/config';
 
 interface AirportFeature {
@@ -39,6 +41,8 @@ export interface MapHoverRefs {
 }
 
 export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports: boolean): void {
+  const language = useSettingsStore(s => s.language);
+
   useEffect(() => {
     if (!mapLoaded || !refs.map.current) return;
     const m = refs.map.current;
@@ -334,11 +338,11 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       const isHighlighted = refs.highlightedAirportsRef.current.includes(code);
       const data = {
         code: feat.properties.code,
-        name: feat.properties.name,
+        name: getLocalizedProp(feat.properties, 'name', language),
         city_code: feat.properties.city_code,
-        city_name: feat.properties.city_name,
+        city_name: getLocalizedProp(feat.properties, 'city_name', language),
         country_code: feat.properties.country_code,
-        country_name: feat.properties.country_name,
+        country_name: getLocalizedProp(feat.properties, 'country_name', language),
         time_zone: feat.properties.time_zone || null,
         coordinates: { lon: feat.geometry.coordinates[0], lat: feat.geometry.coordinates[1] },
       };
@@ -369,5 +373,5 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapLoaded, showAirports]);
+  }, [mapLoaded, showAirports, language]);
 }

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, memo, forwardRef } from 'react';
 import type { Flight } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
+import { getLocalizedProp } from '../utils/geoUtils';
 import { useFlightOffersQuery, useAirportsQuery, useAirportInfoQuery } from '../hooks/queries';
 import './FlightCard.css';
 import { useTexts } from '../hooks/useTexts';
@@ -20,7 +21,7 @@ interface FlightCardProps {
 
 const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHighlight, onAddToTrip, hideAddToTrip = false, displayTimezone, airportTimezone }, ref) => {
   const t = useTexts();
-  const { currency, travelDate } = useSettingsStore();
+  const { currency, travelDate, language } = useSettingsStore();
   const [showPrices, setShowPrices] = useState(false);
   const { data: airportsData } = useAirportsQuery();
 
@@ -39,12 +40,13 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
     if (!airportsData) return {};
     const map: Record<string, string> = {};
     airportsData.features.forEach(f => {
-      if (f.properties.code && f.properties.city_name) {
-        map[f.properties.code] = f.properties.city_name;
+      if (f.properties.code) {
+        const cityName = getLocalizedProp(f.properties, 'city_name', language);
+        if (cityName) map[f.properties.code] = cityName;
       }
     });
     return map;
-  }, [airportsData]);
+  }, [airportsData, language]);
 
   // Use the flight's actual departure date for price queries so that prices
   // shown in the TripItinerary popup match the stored flight, not the current

@@ -22,6 +22,7 @@ import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
 import { CONFIG } from '../constants/config';
 import { haversineKm } from '../utils/math';
 import { BROWSER_TIMEZONE, buildTzGroups } from '../utils/timezoneUtils';
+import { getLocalizedProp } from '../utils/geoUtils';
 
 interface RightPanelProps {
   onClose: () => void;
@@ -93,7 +94,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
       const city = f.properties.city_code;
       if (city) {
         if (!map[city]) {
-          const cityName = f.properties.city_name ?? city;
+          const cityName = getLocalizedProp(f.properties, 'city_name', language) || city;
           map[city] = { name: cityName, country_code: f.properties.country_code || '', airportCount: 0 };
         }
         map[city].airportCount++;
@@ -116,7 +117,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
         if (!map[cc]) {
           let name = countryDisplayNames?.of(cc);
           if (!name || name === cc) {
-            name = f.properties.country_name || cc;
+            name = getLocalizedProp(f.properties, 'country_name', language) || cc;
           }
           map[cc] = { name, airportCount: 0 };
         }
@@ -334,11 +335,11 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
       .map(f => ({
         type: 'airport' as const,
         code: f.properties.code,
-        name: f.properties.name,
+        name: getLocalizedProp(f.properties, 'name', language),
         city_code: f.properties.city_code,
-        city_name: f.properties.city_name,
+        city_name: getLocalizedProp(f.properties, 'city_name', language),
         country_code: f.properties.country_code,
-        country_name: f.properties.country_name,
+        country_name: getLocalizedProp(f.properties, 'country_name', language),
         time_zone: f.properties.time_zone ?? undefined,
       }));
     setCityAirports(airports.slice(0, CONFIG.MAX_AIRPORTS));
@@ -362,7 +363,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
         cityMap[cityCode] = {
           type: 'city',
           code: cityCode,
-          name: f.properties.city_name ?? cityCode,
+          name: getLocalizedProp(f.properties, 'city_name', language) || cityCode,
           country_code: countryCode,
           airports: [],
         };
@@ -370,11 +371,11 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
       cityMap[cityCode].airports!.push({
         type: 'airport',
         code: f.properties.code,
-        name: f.properties.name,
+        name: getLocalizedProp(f.properties, 'name', language),
         city_code: f.properties.city_code,
-        city_name: f.properties.city_name,
+        city_name: getLocalizedProp(f.properties, 'city_name', language),
         country_code: f.properties.country_code,
-        country_name: f.properties.country_name,
+        country_name: getLocalizedProp(f.properties, 'country_name', language),
       });
     }
     setCountryCities(Object.values(cityMap).sort((a, b) => a.name.localeCompare(b.name)));

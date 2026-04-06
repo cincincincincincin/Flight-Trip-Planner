@@ -5,6 +5,8 @@ import SaveTripButton from './auth/SaveTripButton';
 import type { Flight } from '../types';
 import { useTripStore } from '../stores/tripStore';
 import { useAirportsQuery, useAirportInfosQuery } from '../hooks/queries';
+import { useSettingsStore } from '../stores/settingsStore';
+import { getLocalizedProp } from '../utils/geoUtils';
 import './TripItinerary.css';
 import { useTexts } from '../hooks/useTexts';
 import { CONFIG } from '../constants/config';
@@ -29,15 +31,20 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
   const t = useTexts();
   const { tripState, undo, redo, pastTrips, futureTrips, isLoadedTrip, editMode } = useTripStore();
   const { data: airportsData } = useAirportsQuery();
+  const { language } = useSettingsStore();
 
   const airportCityNameMap = useMemo<Record<string, string>>(() => {
     if (!airportsData) return {};
     const map: Record<string, string> = {};
     airportsData.features.forEach(f => {
-      if (f.properties.code) map[f.properties.code] = f.properties.city_name || f.properties.name || f.properties.code;
+      if (f.properties.code) {
+        const cityName = getLocalizedProp(f.properties, 'city_name', language);
+        const name = getLocalizedProp(f.properties, 'name', language);
+        map[f.properties.code] = cityName || name || f.properties.code;
+      }
     });
     return map;
-  }, [airportsData]);
+  }, [airportsData, language]);
 
   const airportCoordsMap = useMemo<Record<string, [number, number]>>(() => {
     if (!airportsData) return {};

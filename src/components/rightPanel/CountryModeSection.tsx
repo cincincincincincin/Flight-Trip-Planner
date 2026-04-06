@@ -4,6 +4,8 @@ import type { AirportFeatureProps, CountryAirport } from '../../types';
 import { useTexts } from '../../hooks/useTexts';
 import { CONFIG } from '../../constants/config';
 import type { buildTzGroups } from '../../utils/timezoneUtils';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { getLocalizedProp } from '../../utils/geoUtils';
 
 type TzGroups = ReturnType<typeof buildTzGroups>;
 
@@ -29,6 +31,7 @@ const CountryModeSection: React.FC<CountryModeSectionProps> = ({
   getCountryTzRelativeOffset,
 }) => {
   const t = useTexts();
+  const language = useSettingsStore(s => s.language);
 
   const hasMixedTZ = countryTzGroups.filter(g => g.tz !== CONFIG.UNKNOWN_TIMEZONE).length > 1;
   const allCountryAirports = countryTzGroups.flatMap(g => g.airports);
@@ -36,7 +39,8 @@ const CountryModeSection: React.FC<CountryModeSectionProps> = ({
   const renderAirportCheckbox = (airport: { code: string; name: string }) => {
     const isSelected = selectedFlatAirports.some(a => a.code === airport.code);
     const canSelect = isSelected || selectedFlatAirports.length < CONFIG.MAX_AIRPORTS;
-    const localName = airportsData?.features.find(f => f.properties.code === airport.code)?.properties.name ?? airport.name;
+    const feat = airportsData?.features.find(f => f.properties.code === airport.code);
+    const localName = feat ? getLocalizedProp(feat.properties, 'name', language) : airport.name;
     return (
       <label key={airport.code}
         className={`country-airport-item ${isSelected ? 'selected' : ''} ${!canSelect ? 'disabled' : ''}`}>

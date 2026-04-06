@@ -7,11 +7,12 @@ import { useMapStore } from '../stores/mapStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useTripStore } from '../stores/tripStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { getLocalizedProp } from '../utils/geoUtils';
 import { useColorStore } from '../stores/colorStore';
 import { useFilterStore } from '../stores/filterStore';
 import { useAirportsQuery } from '../hooks/queries';
 import { generateGreatCircle, getTextColorForHaloColor, isBlackOrWhiteColor } from './map/utils';
-import { addAirportsLayer } from './map/airportsLayer';
+import { addAirportsLayer, AIRPORT_LABEL_LAYERS, airportLabelField, airportCityLabelField } from './map/airportsLayer';
 
 import { startPreviewAnimation } from './map/routeAnimations';
 import type { GCPath } from './map/routeAnimations';
@@ -46,14 +47,14 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
 }, ref) => {
   const t = useTexts();
 
-  // Stores
+  // Subskrypcje do magazynów stanu (Stores)
   const { showAirports, mapStyle, globeMode, flyToZoom, setFlyToZoom } = useMapStore();
   const { highlightedAirports, selectedAirportCode, selectedAirportCodes, highlightedCities, flightsData, displayedFlights, explorationItems } = useSelectionStore();
   const { tripState, tripRoutes, previewAirportCode, manualTransferAirportCodes } = useTripStore();
-  const { travelDate, timezone } = useSettingsStore();
+  const { travelDate, timezone, language } = useSettingsStore();
   const { destinationFilter, airlineFilter } = useFilterStore();
 
-  // Color store – subscribe to individual values so effects re-run on change
+  // Subskrypcja kolorów i rozmiarów – używamy konkretnych wartości, żeby efekty reagowały na ich zmianę
   const {
     startPoints, clrGeneral, clrDestination, clrTripAirport, clrTripRoute, clrTransferRoute,
     clrTripHover, clrGeneralHover, clrDestinationHover, clrTransferRouteHover,
@@ -69,16 +70,17 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     zoomRangeMin, zoomRangeMax,
   } = useMapColors();
 
-  // React Query – geo data
+  // Dane lotnisk z API (React Query)
   const { data: airportsData } = useAirportsQuery();
 
 
-  // Derived
+  // Logika obliczeniowa dla widocznych kodów lotnisk w planie podróży
   const tripVisibleAirportCodes = useMemo(() => {
     if (!tripState) return null;
     return [tripState.startAirport.code, ...tripState.legs.map(l => l.toAirportCode)];
   }, [tripState]);
 
+  // Referencje do instancji mapy i DOM – kluczowe dla wydajności (unikamy zbędnych renderów Reacta)
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -87,7 +89,8 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   const onSelectItemRef = useRef(onSelectItem);
   const animationRef = useRef<number | null>(null);
   const previewAnimationRef = useRef<number | null>(null);
-  // Additive animation state
+  
+  // Referencje pomocnicze do animacji i zarządzania stanem bez wyzwalania re-renderu
   const completedPathsRef = useRef<GCPath[]>([]);
   const currentAnimatingRef = useRef<GCPath[]>([]);
   const renderedHighlightedRef = useRef<Set<string>>(new Set());
@@ -98,45 +101,43 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   const clearRouteHoverRef = useRef<((opts?: { keepLabels?: boolean }) => void) | null>(null);
   const currentPopup = useRef<maplibregl.Popup | null>(null);
 
-  // Refs for dynamic values used inside stable callbacks
+  // Synchronizacja referencji z aktualnym stanem (do użytku wewnątrz stabilnych callbacków)
   const tripVisibleAirportCodesRef = useRef<string[] | null>(null);
   const highlightedAirportsRef = useRef<string[]>([]);
   const airportsDataRef = useRef(airportsData);
-  const highlightedLabelCodesRef = useRef<string[]>([]); // codes used for highlighted label filter (for hover exclusion)
+  const highlightedLabelCodesRef = useRef<string[]>([]); 
   const selectedAirportCodeRef = useRef<string | null>(null);
   const selectedAirportCodesRef = useRef<string[]>([]);
   const explorationAirportCodesRef = useRef<string[]>([]);
   const tripRoutesRef = useRef<TripRoute[]>([]);
   const manualTransferAirportCodesRef = useRef<string[]>([]);
 
-  // Ref to track whether a route hover is currently active
+  // Ref do śledzenia aktualnego stanu hover dla tras
   const isRouteHoveredRef = useRef<boolean>(false);
 
-  // Ref to track whether route hover listeners have been registered on the current map instance.
-  // Listeners are tied to the map instance (not to layers), so they need to be set up once per
-  // instance. Reset this flag whenever map.current is replaced in initMap.
+  // Flaga informująca, czy listenery hover zostały już przypięte do tej instancji mapy
   const listenersAttachedRef = useRef(false);
 
-  // Size refs for route hover styling
+  // Parametry rozmiarów dla hoverowania tras ładowane z centralnej konfiguracji
   const highlightedAirportHoverRadiusMinRef = useRef<number>(CONFIG.HOVER_STOP_DELAY_MS);
   const highlightedAirportHoverRadiusMaxRef = useRef<number>(CONFIG.HOVER_CLEAR_DELAY_MS);
-  const highlightedLabelHoverSizeMinRef = useRef<number>(11);
-  const highlightedLabelHoverSizeMaxRef = useRef<number>(22);
-  const zoomRangeMinRef = useRef<number>(1.3);
-  const zoomRangeMaxRef = useRef<number>(5.5);
+  const highlightedLabelHoverSizeMinRef = useRef<number>(CONFIG.MAP_HOVER_LABEL_MIN_SIZE);
+  const highlightedLabelHoverSizeMaxRef = useRef<number>(CONFIG.MAP_HOVER_LABEL_MAX_SIZE);
+  const zoomRangeMinRef = useRef<number>(CONFIG.MAP_ZOOM_MIN_DEFAULT);
+  const zoomRangeMaxRef = useRef<number>(CONFIG.MAP_ZOOM_MAX_DEFAULT);
 
-  // Airport hover state managed directly via map.setFilter (no React state = no render delay)
+  // Zarządzanie stanem hover lotnisk bezpośrednio przez map.setFilter (brak delayów Reacta)
   const hoveredAirportCodeRef = useRef<string | null>(null);
-  // Pre-projected pixel positions of visible airports — rebuilt on moveend.
+  // Kesz pixelowych pozycji widocznych lotnisk – przebudowywany przy każdym ruchu mapy (moveend)
   const projectedAirportsRef = useRef<Array<{ code: string; x: number; y: number }>>([]);
   const lastDetectedCodeRef = useRef<string | null>(null);
-  const hoverSampleCountRef = useRef(0);  // airports skipped since last hover update
+  const hoverSampleCountRef = useRef(0);
   const mouseStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverLockUntilRef = useRef<number>(0);
 
+  // Mapy pomocnicze do szybkiego wyszukiwania kodów miast i współrzędnych
   const airportNamesMap = useRef<Record<string, string>>({});
-  // [lng, lat] per airport code — for zoom-in-on-click at low zoom levels
   const airportCoordsMapRef = useRef<Record<string, [number, number]>>({});
   const airportCityKeyRef = useRef<Record<string, string>>({});
   const cityLabelCodeByCityRef = useRef<Record<string, string>>({});
@@ -145,24 +146,24 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   const flightDetailsMap = useRef<Record<string, Flight[]>>({});
   const matchesFilterRef = useRef<((flight: Flight) => boolean) | null>(null);
 
+  // Synchronizacja selekcji z referencjami – pozwala uniknąć domknięć (closures) w eventach mapy
   useEffect(() => {
     onSelectItemRef.current = (item) => {
-      // In trip mode, clicking any airport should either be ignored (trip airports)
-      // or toggle the destination filter (all others including highlighted destinations)
+      // W trybie planowania trasy, kliknięcie w lotnisko filtruje tylko loty do tego miejsca
       if (
         tripVisibleAirportCodesRef.current &&
         tripVisibleAirportCodesRef.current.length > 0 &&
         item.type === 'airport'
       ) {
-        // Trip airports (black dots) — do nothing
         if (tripVisibleAirportCodesRef.current.includes(item.data.code)) return;
-        // All other airports — set destination filter (same as clicking a route line)
         useFilterStore.getState().setDestinationFilter({ airports: [item.data.code], cities: [], countries: [] });
         return;
       }
       onSelectItem(item);
     };
   }, [onSelectItem]);
+
+  // Aktualizacje referencji przy zmianach stanu (stability)
   useEffect(() => { tripVisibleAirportCodesRef.current = tripVisibleAirportCodes; }, [tripVisibleAirportCodes]);
   useEffect(() => { highlightedAirportsRef.current = highlightedAirports; }, [highlightedAirports]);
   useEffect(() => { airportsDataRef.current = airportsData; }, [airportsData]);
@@ -174,7 +175,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   useEffect(() => { tripRoutesRef.current = tripRoutes; }, [tripRoutes]);
   useEffect(() => { manualTransferAirportCodesRef.current = manualTransferAirportCodes; }, [manualTransferAirportCodes]);
 
-  // Size refs for hover styling
+  // Synchronizacja parametrów hoverowania
   useEffect(() => {
     highlightedAirportHoverRadiusMinRef.current = szHighlightedHoverRadiusMin;
     highlightedAirportHoverRadiusMaxRef.current = szHighlightedHoverRadiusMax;
@@ -196,6 +197,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   const timezoneRef = useRef<string | null>(null);
   useEffect(() => { timezoneRef.current = timezone; }, [timezone]);
 
+  // Budowanie map pomocniczych danych po załadowaniu lotnisk
   useEffect(() => {
     if (airportsData) {
       const nameMap: Record<string, string> = {};
@@ -204,9 +206,9 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       const cityToCode: Record<string, string> = {};
       airportsData.features.forEach(f => {
         const code = f.properties.code;
-        nameMap[code] = f.properties.name;
+        nameMap[code] = getLocalizedProp(f.properties, 'name', language);
         coordsMap[code] = f.geometry.coordinates as [number, number];
-        const cityKey = f.properties.city_code || f.properties.city_name || code;
+        const cityKey = f.properties.city_code || code;
         codeToCity[code] = cityKey;
         if (!cityToCode[cityKey]) cityToCode[cityKey] = code;
       });
@@ -216,9 +218,22 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       cityLabelCodeByCityRef.current = cityToCode;
       cityLabelCodesRef.current = Object.values(cityToCode);
     }
-  }, [airportsData]);
+  }, [airportsData, language]);
 
-  // ── Airport city and country maps for filter matching ───────────────────────
+  // Update map label expressions when language changes
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return;
+    const cityLayers = ['airports-labels-normal-city', 'airports-labels-highlighted-city'];
+    for (const id of AIRPORT_LABEL_LAYERS) {
+      if (!map.current.getLayer(id)) continue;
+      const field = cityLayers.includes(id)
+        ? airportCityLabelField(language)
+        : airportLabelField(language);
+      map.current.setLayoutProperty(id, 'text-field', field);
+    }
+  }, [language, mapLoaded]);
+
+  // Mapy pomocnicze city oraz country używane do filtrowania wyników
   const airportCityMap = useMemo<Record<string, string>>(() => {
     if (!airportsData) return {};
     const map: Record<string, string> = {};
@@ -241,7 +256,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     return map;
   }, [airportsData]);
 
-  // ── Filter matching function (same as FlightsList) ────────────────────────
+  // Funkcja sprawdzająca czy dany lot pasuje do aktualnych filtrów (analogiczna do logiki z listy lotów)
   const matchesFilter = useCallback(
     (flight: Flight): boolean => {
       const hasFilters = destinationFilter.airports.length > 0 ||
@@ -277,7 +292,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     [destinationFilter, airlineFilter, airportCityMap, airportCountryMap]
   );
 
-  // Keep matchesFilter in a ref so it can be used in closures (line 1CONFIG.HOVER_STOP_DELAY_MS0 for popup generation)
+  // Przechowujemy matchesFilter w referencji żeby mieć do niego dostęp wewnątrz callbacków mapy
   useEffect(() => {
     matchesFilterRef.current = matchesFilter;
   }, [matchesFilter]);
@@ -300,6 +315,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     flightDetailsMap.current = map;
   }, [displayedFlights]);
 
+  // Sprawdzanie wsparcia dla WebGL przy starcie komponentu
   useEffect(() => {
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
@@ -330,6 +346,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
 
   const initMapId = useRef(0);
 
+  // Główna funkcja inicjalizująca instancję mapy
   const initMap = useCallback(() => {
     if (!webglSupported || !mapContainer.current) return;
 
@@ -340,7 +357,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
         console.warn('Error removing old map:', e);
       }
       map.current = null;
-      listenersAttachedRef.current = false; // new map instance — listeners must be re-attached
+      listenersAttachedRef.current = false; // Nowa instancja mapy wymaga ponownego podpięcia listenerów
       setMapLoaded(false);
     }
 
@@ -382,7 +399,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
 
         map.current.on('load', () => {
           if (isPlugin) {
-            // Blank style is now loaded → isStyleLoaded() is true → safe to call applyStyle.
+            // Styl Blank jest załadowany co pozwala na bezpieczne wywołanie applyStyle
             const bs = BasemapStyle.applyStyle(map.current!, {
               map: map.current!,
               style: toPluginStyleName(mapStyle),
@@ -391,8 +408,8 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
             bs.on('BasemapStyleLoad', () => {
               console.log('ArcGIS plugin style loaded:', mapStyle);
               onMapReady();
-              // The plugin injects its own attribution control at bottom-right.
-              // Move it to bottom-left and clean up the text to match other styles.
+              
+              // Wstrzykiwanie własnej atrybucji dla stylów ArcGIS i przesunięcie jej do lewego dolnego rogu
               requestAnimationFrame(() => {
                 if (!map.current) return;
                 const c = map.current.getContainer();
@@ -440,8 +457,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       }
     };
 
-    // For URL-based styles in globe mode: fetch the style JSON, inject projection,
-    // and pass the modified spec so the map starts as a globe immediately.
+    // Obsługa stylów bazujących na URL w trybie globusa poprzez modyfikację specyfikacji JSON
     if (currentGlobeMode && typeof resolvedStyle === 'string') {
       fetch(resolvedStyle)
         .then(r => r.json())
@@ -478,6 +494,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     };
   }, [initMap]);
 
+  // Funkcja addControls odpowiedzialna za dodawanie narzędzi nawigacyjnych i skali
   const addControls = useCallback(() => {
     if (!map.current) return;
     try {
@@ -517,7 +534,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     }
   }, []);
 
-  // Central function updating airport filters and trip routes (uses refs)
+  // Centralna funkcja aktualizująca filtry lotnisk i trasy podróży korzystająca z referencji
   const applyAirportFilters = useCallback(() => {
     if (!map.current) return;
     applyMapAirportFilters(
@@ -538,11 +555,9 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       },
       { highlightedLabelCodesRef, highlightedCityLabelCodesRef },
     );
-  }, []); // stable – uses only refs
+  }, []); // Funkcja stabilna oparta wyłącznie na referencjach
 
-  // ── applyColors: update all paint properties from colorStore ──────────────
-  // Reads current store state via getState() so the callback stays stable.
-  // ── applyColors: update all paint properties from colorStore ──────────────
+  // Funkcja applyColors aktualizuje właściwości warstw na podstawie danych z colorStore
   const applyColors = useCallback(() => {
     if (!map.current) return;
     applyMapColors(map.current, {
@@ -554,7 +569,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       selectedAirportCode: selectedAirportCodeRef.current,
       highlightedLabelCodes: highlightedLabelCodesRef.current,
     });
-  }, []); // stable – uses only refs
+  }, []); // Funkcja korzysta z referencji dla zwiększenia stabilności
 
   // Main function adding all layers
   const addLayers = useCallback(() => {
@@ -592,12 +607,12 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
 
     // Airport and city layers on top of all route lines
     if (airportsData && showAirports) {
-      addAirportsLayer(map.current, airportsData, mapStyle);
+      addAirportsLayer(map.current, airportsData, mapStyle, language);
     }
 
 
 
-    // Ensure hover layers are always on top of routes and city labels.
+    // Wyciąganie warstw interaktywnych na wierzch stosu aby były nad trasami i etykietami miast
     const bringToFront = (ids: string[]) => {
       for (const id of ids) {
         if (map.current?.getLayer(id)) map.current.moveLayer(id);
@@ -618,7 +633,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       'airports-labels-hover',
     ]);
 
-    // Route hover — event listeners and popup logic delegated to routeHover.ts
+    // Obsługa hoverowania tras oraz logika popupów delegowana do modułu routeHover.ts
     const routeHoverRefs: RouteHoverRefs = {
       map,
       projectedAirportsRef,
@@ -678,7 +693,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     applyColors();
   }, [mapLoaded, airportsData, mapStyle, showAirports, safeRemoveLayer, safeRemoveSource, applyAirportFilters, applyColors, rightPanelRef]);
 
-  // Update airport layer filters when highlightedAirports changes (no source rebuild)
+  // Aktualizacja filtrów warstw lotnisk przy zmianie podświetlenia (bez przebudowy źródła danych)
   useAirportLayerFilter({
     map,
     mapLoaded,
@@ -697,7 +712,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     highlightedCityLabelCodesRef,
   });
 
-  // Update city highlighting when highlightedCities changes
+  // Synchronizacja podświetlenia miast przy zmianie stanu zaznaczenia
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
     if (map.current.getLayer('cities-highlighted')) {
@@ -711,15 +726,15 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     }
   }, [highlightedCities, mapLoaded]);
 
-  // Keep hover colors in sync with highlighted/selected airports
+  // Utrzymywanie spójności kolorów hovera z zaznaczonymi lotniskami
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
     applyColors();
   }, [highlightedAirports, selectedAirportCode, selectedAirportCodes, explorationItems, tripVisibleAirportCodes, manualTransferAirportCodes, mapLoaded, applyColors]);
 
-  // Rebuild pixel-space projection cache whenever the map moves or airportsData changes.
-  // map.on('move') fires at render-loop rate (≤60fps), so this is bounded even when panning.
-  // mousemove then only needs plain arithmetic on the cached array — zero map.project() calls per event.
+  // Przebudowa kesza projekcji lotnisk do przestrzeni pikseli przy każdym ruchu mapy.
+  // Zdarzenie move odpala się z częstotliwością odświeżania ekranu co zapewnia płynność.
+  // Dzięki temu mousemove wykonuje tylko proste operacje arytmetyczne na gotowej tablicy.
   useEffect(() => {
     if (!mapLoaded || !map.current || !airportsData) return;
     const m = map.current;
@@ -741,9 +756,8 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
 
     rebuildCache();
 
-    // Throttle cache rebuilds to one per rAF frame during pan/zoom animation.
-    // Without this, the cache is stale during inertia pan (several seconds),
-    // causing the hover to lock onto airports that are no longer under the cursor.
+    // Ograniczanie częstotliwości przebudowy kesza za pomocą requestAnimationFrame podczas animacji.
+    // Zapobiega to efektowi przesunięcia hovera przy bezwładnym przesuwaniu mapy (inertia pan).
     let rafId: number | null = null;
     const scheduleRebuild = () => {
       if (rafId !== null) return;
@@ -753,7 +767,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     const onMoveEnd = () => {
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
       rebuildCache();
-      // Clear any hover that was based on stale cache positions
+      // Czyszczenie starego stanu hover opartego na nieaktualnych pozycjach z kesza
       hoveredAirportCodeRef.current = null;
       lastDetectedCodeRef.current = null;
       if (m.getLayer('airports-hover')) m.setFilter('airports-hover', ['==', 'code', '']);
@@ -768,7 +782,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     };
   }, [mapLoaded, airportsData]);
 
-  // Raw canvas DOM mousemove — airport hover logic delegated to useMapHover
+  // Podpięcie logiki hovera lotnisk do surowego zdarzenia mousemove na płótnie mapy
   const hoverRefs: MapHoverRefs = {
     map,
     projectedAirportsRef,
@@ -795,7 +809,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   useMapHover(hoverRefs, mapLoaded, showAirports);
 
 
-  // Update permanent trip routes
+  // Odświeżanie stałych tras podróży użytkownika (permanentny trip)
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
     const source = map.current.getSource('trip-permanent-routes') as maplibregl.GeoJSONSource | undefined;
@@ -809,7 +823,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     source.setData({ type: 'FeatureCollection', features });
   }, [tripRoutes, mapLoaded]);
 
-  // Update manual transfer preview lines (dashed semi-transparent lines to transfer airports)
+  // Rysowanie przerywanych linii podglądu dla ręcznego dodawania lotnisk przesiadkowych
   useEffect(() => {
     if (!map.current || !mapLoaded || !airportsData) return;
     const source = map.current.getSource('manual-transfer-preview') as maplibregl.GeoJSONSource | undefined;
@@ -846,13 +860,13 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     source.setData({ type: 'FeatureCollection', features });
   }, [manualTransferAirportCodes, tripState, airportsData, mapLoaded]);
 
-  // Preview animation for manual transfer
+  // Animacja podglądu dla lotniska wybranego manualnie jako przesiadka
   useEffect(() => {
     if (!map.current || !mapLoaded || !airportsData) return;
     startPreviewAnimation(map.current, previewAnimationRef, previewAirportCode, selectedAirportCode, airportsData);
   }, [previewAirportCode, selectedAirportCode, airportsData, mapLoaded]);
 
-  // Update selected airport filter (no longer triggers animation — handled by highlightedAirports effect)
+  // Aktualizacja filtru zaznaczonego lotniska (steruje widocznością kółka zaznaczenia)
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
     const layer = map.current.getLayer('airports-selected');
@@ -867,15 +881,15 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     }
   }, [selectedAirportCode, selectedAirportCodes, mapLoaded]);
 
-  // Rebuild layers when data/style changes
+  // Przebudowa wszystkich warstw przy zmianie danych bazowych lub stylu mapy
   useEffect(() => {
     if (!mapLoaded) return;
     addLayers();
   }, [mapLoaded, airportsData, /*citiesData,*/ mapStyle, addLayers]);
 
 
-  // When style changes, auto-adjust all label colors to be opposite of style-default halo colors
-  // BUT: only if labels are currently black/white (user hasn't customized them yet)
+    // Automatyczne dostosowanie koloru etykiet jeśli użytkownik nie ustawił własnych barw.
+    // Light style otrzymuje ciemne napisy a dark style jasne dla zachowania kontrastu.
   useEffect(() => {
     if (!mapLoaded) return;
     
@@ -931,7 +945,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     useColorStore.setState(updates);
   }, [mapLoaded, mapStyle]);
 
-  // Apply globe/flat projection whenever globeMode or map changes
+  // Aktywacja rzutu (projekcji) globusa lub płaskiego merkatora przy zmianie trybu globeMode
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
     try {
@@ -942,7 +956,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
   }, [mapLoaded, globeMode]);
 
 
-  // Toggle layer visibility
+  // Przełączanie widoczności warstw bez przeładowywania zasobów mapy
   useEffect(() => {
     if (!map.current || !mapLoaded || isMapLoading.current) return;
 
@@ -972,7 +986,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     setLayerVisibility('selected-routes', showAirports /*|| showCities*/);
   }, [showAirports, /*showCities,*/ mapLoaded]);
 
-  // Route animation — draws routes for all displayed flights, handles additions/removals/timezone changes.
+  // Logika animacji tras obsługująca rysowanie linii dla wszystkich wyświetlanych lotów
   useRouteAnimation({
     map,
     mapLoaded,
@@ -988,7 +1002,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     renderedHighlightedRef,
   });
 
-  // Re-apply all colors when colorStore values or selected airports change
+  // Reaplikacja wszystkich kolorów przy zmianie dowolnego parametru w colorStore
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
     applyColors();
@@ -1019,7 +1033,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
     }
   }, [flyToZoom, mapLoaded, setFlyToZoom]);
 
-  // Enforce zoom range from settings
+  // Wymuszanie zakresu przybliżenia zdefiniowanego w ustawieniach systemu
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
     const minZ = Math.max(1, Math.min(zoomRangeMin, zoomRangeMax));
