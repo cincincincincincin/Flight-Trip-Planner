@@ -128,7 +128,7 @@ export function useFlightLoader({
 
     try {
       const fromLocal = toLocalMinute(fromMs, airportTZ);
-      const toLocal = toLocalMinute(toMs, airportTZ); 
+      const toLocal = toLocalMinute(toMs - 1, airportTZ); 
 
       // We use raw fetch here instead of api/schedules.ts because we need NDJSON streaming (body.getReader())
       const url = `${CONFIG.API_BASE_URL}/schedules/${code}?from_local_datetime=${fromLocal}&to_local_datetime=${toLocal}&limit=${CONFIG.FLIGHT_LIMIT}`;
