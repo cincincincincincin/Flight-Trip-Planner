@@ -2,7 +2,7 @@ import React, { useState, useMemo, memo, forwardRef } from 'react';
 import type { Flight } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
 import { getLocalizedProp } from '../utils/geoUtils';
-import { useFlightOffersQuery, useAirportsQuery, useAirportInfoQuery } from '../hooks/queries';
+import { useAirportsQuery, useAirportInfoQuery, useFlightOffersQuery } from '../hooks/queries';
 import './FlightCard.css';
 import { useTexts } from '../hooks/useTexts';
 import { CONFIG } from '../constants/config';
@@ -17,12 +17,19 @@ interface FlightCardProps {
   hideAddToTrip?: boolean;
   displayTimezone?: string;   // the selected display timezone
   airportTimezone?: string;   // the departure airport's own timezone
+  isExpanded?: boolean;       // controlled expansion from parent
+  onToggleExpand?: () => void;
 }
 
-const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHighlight, onAddToTrip, hideAddToTrip = false, displayTimezone, airportTimezone }, ref) => {
+const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHighlight, onAddToTrip, hideAddToTrip = false, displayTimezone, airportTimezone, isExpanded = false, onToggleExpand }, ref) => {
   const t = useTexts();
   const { currency, travelDate, language } = useSettingsStore();
-  const [showPrices, setShowPrices] = useState(false);
+  const isDeparted = useMemo(() => {
+    if (!flight.scheduled_departure_utc) return false;
+    return new Date(flight.scheduled_departure_utc).getTime() < Date.now();
+  }, [flight.scheduled_departure_utc]);
+
+  const showPrices = isExpanded && !isDeparted; // controlled by parent, but blocked if departed
   const { data: airportsData } = useAirportsQuery();
 
   const airportCoordsMap = useMemo<Record<string, [number, number]>>(() => {
@@ -48,18 +55,11 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
     return map;
   }, [airportsData, language]);
 
-  // Use the flight's actual departure date for price queries so that prices
-  // shown in the TripItinerary popup match the stored flight, not the current
-  // travelDate filter setting.
-  const effectiveDate = useMemo(
-    () => flight.scheduled_departure_utc?.slice(0, 10) ?? travelDate,
-    [flight.scheduled_departure_utc, travelDate],
-  );
-
   const offersParams = useMemo(() => ({
     departure_at: flight.scheduled_departure_local,
     currency,
-  }), [flight.scheduled_departure_local, currency]);
+    flight_number: flight.flight_number,
+  }), [flight.scheduled_departure_local, flight.flight_number, currency]);
 
   const {
     data: offersResponse,
@@ -72,30 +72,8 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
     showPrices,
   );
 
-  const priceData = useMemo(() => {
-    if (!offersResponse?.success || !offersResponse.data?.length) return null;
-
-    const flightUtcMs = flight.scheduled_departure_utc ? new Date(flight.scheduled_departure_utc).getTime() : 0;
-    if (!flightUtcMs) return null;
-
-    const normalize = (fn?: string) => fn?.replace(/\s+/g, '').toUpperCase() ?? '';
-    const targetFn = normalize(flight.flight_number);
-
-    const matches = offersResponse.data.filter(o => {
-      if (o.origin_airport_code !== flight.origin_airport_code || o.destination_airport_code !== flight.destination_airport_code) {
-        return false;
-      }
-      const oMs = new Date(o.departure_at).getTime();
-      return Math.abs(oMs - flightUtcMs) < 60000;
-    });
-
-    if (matches.length === 0) return null;
-    if (matches.length === 1) return matches[0];
-
-    // If multiple matches for the same minute, try to find the one with the matching flight number
-    const perfectMatch = matches.find(o => normalize(o.flight_number) === targetFn);
-    return perfectMatch || matches[0];
-  }, [offersResponse, flight]);
+  // The backend already performs "Smart Match" and returns the best single offer
+  const priceData = offersResponse?.data?.[0];
 
   const formatTime = (dateString: string, tz?: string) => {
     if (!dateString) return t.card.na;
@@ -151,7 +129,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
     const abs = Math.abs(diff);
     const hours = Math.floor(abs);
     const mins = Math.round((abs - hours) * 60);
-    return mins > 0 ? `${sign}${hours}.${mins}h` : `${sign}${hours}h`;
+    return mins > 0 ? `${sign}${hours}h${mins}min` : `${sign}${hours}h`;
   };
 
   // Departure time: always show in the departure airport's own local timezone.
@@ -263,7 +241,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
     const airlineName = flight.airline_name || flight.airline_code || '';
     const origin = (flight.origin_airport_code || '').toLowerCase();
     const dest = (flight.destination_airport_code || '').toLowerCase();
-    const [year, month, day] = (effectiveDate || '').split('-');
+    const [year, month, day] = ((flight.scheduled_departure_utc?.slice(0, 10) ?? travelDate) || '').split('-');
     const date = year
       ? new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
           .toLocaleDateString(FORMAT_LOCALES.US, FORMAT_OPTIONS.DATE_LONG_YEAR)
@@ -293,14 +271,14 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
               </span>
             )}
           </div>
-          <div className="airport-name">{airportCityNameMap[flight.origin_airport_code] || flight.origin_city_name || t.card.origin}</div>
+          <div className="airport-name">{airportCityNameMap[flight.origin_airport_code] || t.card.origin}</div>
         </div>
 
         <div className="flight-path"></div>
 
         <div className="airport destination">
           <div className="airport-code">{flight.destination_airport_code}</div>
-          <div className="airport-name">{airportCityNameMap[flight.destination_airport_code] || flight.destination_city_name || t.card.destination}</div>
+          <div className="airport-name">{airportCityNameMap[flight.destination_airport_code] || t.card.destination}</div>
         </div>
       </div>
 
@@ -374,21 +352,23 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
             {t.card.addTrip}
           </button>
         )}
-        <div className="flight-actions-row">
-          <a
-            href={buildGoogleSearchUrl()}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="search-online-button"
-          >{t.card.searchOnline}</a>
-          <button
-            className={`price-button ${showPrices ? 'active' : ''}`}
-            onClick={() => setShowPrices(prev => !prev)}
-            disabled={priceLoading}
-          >
-            {priceLoading ? t.card.loading : showPrices ? t.card.hidePrices : t.card.showPrices}
-          </button>
-        </div>
+        {!isDeparted && (
+          <div className="flight-actions-row">
+            <a
+              href={buildGoogleSearchUrl()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="search-online-button"
+            >{t.card.searchOnline}</a>
+            <button
+              className={`price-button ${showPrices ? 'active' : ''}`}
+              onClick={() => onToggleExpand?.()}
+              disabled={priceLoading}
+            >
+              {priceLoading ? t.card.loading : showPrices ? t.card.hidePrices : t.card.showPrices}
+            </button>
+          </div>
+        )}
       </div>
 
       {showPrices && (

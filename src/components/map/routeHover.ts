@@ -22,6 +22,7 @@ export interface RouteHoverRefs {
   selectedAirportCodesRef: React.MutableRefObject<string[]>;
   explorationAirportCodesRef: React.MutableRefObject<string[]>;
   manualTransferAirportCodesRef: React.MutableRefObject<string[]>;
+  airportsDataRef: React.MutableRefObject<any>;
   airportCityKeyRef: React.MutableRefObject<Record<string, string>>;
   cityLabelCodeByCityRef: React.MutableRefObject<Record<string, string>>;
   highlightedCityLabelCodesRef: React.MutableRefObject<string[]>;
@@ -97,6 +98,7 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
     selectedAirportCodesRef,
     explorationAirportCodesRef,
     manualTransferAirportCodesRef,
+    airportsDataRef,
     airportCityKeyRef,
     cityLabelCodeByCityRef,
     highlightedCityLabelCodesRef,
@@ -262,8 +264,8 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
     const showDateHeaders = dateGroups.size > 1 || sourcesHaveDifferentDays;
     const srcAirportName = airportNamesMap.current[srcCode] ?? srcCode ?? texts.unknown;
     const destAirportName = airportNamesMap.current[destCode] ?? destCode;
-    const srcCityName = displayFlights[0]?.origin_city_name || srcAirportName;
-    const destCityName = displayFlights[0]?.destination_city_name || destAirportName;
+    const srcCityName = srcAirportName;
+    const destCityName = destAirportName;
 
     // ── Route duration for header ──────────────────────────────────────────────
     const { durationStr: headerDurationStr, estimated: headerDurationEstimated } = buildHeaderDuration(
@@ -290,7 +292,21 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
       if (destUTCOffset !== null && srcUTCOffset !== null) break;
     }
 
-    const rowOpts = { airportCoordsMap: airportCoordsMapRef.current, destUTCOffset, srcUTCOffset };
+    // Get timezones from airportsDataRef to ensure correct local time formatting
+    let destTimezone: string | undefined = undefined;
+    let srcTimezone: string | undefined = undefined;
+    if (airportsDataRef.current) {
+      const featD = airportsDataRef.current.features.find((f: any) => f.properties.code === destCode);
+      if (featD?.properties.time_zone) {
+        destTimezone = featD.properties.time_zone;
+      }
+      const featS = airportsDataRef.current.features.find((f: any) => f.properties.code === srcCode);
+      if (featS?.properties.time_zone) {
+        srcTimezone = featS.properties.time_zone;
+      }
+    }
+
+    const rowOpts = { airportCoordsMap: airportCoordsMapRef.current, destUTCOffset, srcUTCOffset, destTimezone, srcTimezone };
     const flightRows = [...dateGroups.entries()].map(([dateStr, groupFlights]) => {
       const header = showDateHeaders
         ? `<div class="mc-popup-date-header">${formatGroupDateLabel(dateStr)}</div>`

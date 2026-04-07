@@ -37,6 +37,17 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
     return map;
   }, [airportsData]);
 
+  const airportCoordsMap = useMemo<Record<string, [number, number]>>(() => {
+    if (!airportsData) return {};
+    const map: Record<string, [number, number]> = {};
+    airportsData.features.forEach(f => {
+      if (f.properties.code && f.geometry?.coordinates) {
+        map[f.properties.code] = f.geometry.coordinates as [number, number];
+      }
+    });
+    return map;
+  }, [airportsData]);
+
   const getTripMeta = (trip: SavedTrip) => {
     const { trip_state } = trip;
     // Visited countries
@@ -74,7 +85,7 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
 
   const renameMutation = useMutation({
     mutationFn: ({ trip, name }: { trip: SavedTrip; name: string }) =>
-      updateTrip(trip.id, { name, trip_state: trip.trip_state, trip_routes: trip.trip_routes }),
+      updateTrip(trip.id, { name, trip_state: trip.trip_state }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['user-trips'] });
       setRenamingTrip(null);
@@ -83,7 +94,22 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
 
   const handleLoad = (trip: SavedTrip) => {
     setTripState(trip.trip_state);
-    setTripRoutes(trip.trip_routes);
+    
+    // Calculate routes on the fly since they are no longer stored in the DB
+    const calculatedRoutes: any[] = [];
+    if (trip.trip_state.startAirport?.code && trip.trip_state.legs) {
+      let currentAirportCode = trip.trip_state.startAirport.code;
+      trip.trip_state.legs.forEach(leg => {
+        const fromCoord = airportCoordsMap[currentAirportCode];
+        const toCoord = airportCoordsMap[leg.toAirportCode];
+        if (fromCoord && toCoord) {
+          calculatedRoutes.push({ from: fromCoord, to: toCoord });
+        }
+        currentAirportCode = leg.toAirportCode;
+      });
+    }
+    
+    setTripRoutes(calculatedRoutes);
     setLoadedTrip(trip.id, JSON.stringify(trip.trip_state));
     onTripLoaded?.(trip);
     onClose();

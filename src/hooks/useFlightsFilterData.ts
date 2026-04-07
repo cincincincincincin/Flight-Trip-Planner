@@ -61,6 +61,18 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
     return m;
   }, [airportsData]);
 
+  const cityNameMap = useMemo(() => {
+    if (!airportsData) return {};
+    const m: Record<string, string> = {};
+    airportsData.features.forEach(f => {
+      const c = f.properties.city_code;
+      if (c && !m[c]) {
+        m[c] = getLocalizedProp(f.properties, 'city_name', language) || c;
+      }
+    });
+    return m;
+  }, [airportsData, language]);
+
   const airportNameMap = useMemo(() => {
     if (!airportsData) return {} as Record<string, string>;
     const m: Record<string, string> = {};
@@ -82,7 +94,7 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
       const aC = f.destination_airport_code;
       if (!aC) return false;
       if (airports.includes(aC)) return true;
-      const cityCode = f.destination_city_code || airportCityMap[aC];
+      const cityCode = airportCityMap[aC];
       if (cityCode && cities.includes(cityCode)) return true;
       const countryCode = airportCountryMap[aC];
       if (countryCode && countries.includes(countryCode)) return true;
@@ -95,7 +107,7 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
     destScopeFlights.forEach(f => {
       const aC = f.destination_airport_code;
       if (!aC) return;
-      const cityCode = f.destination_city_code || airportCityMap[aC];
+      const cityCode = airportCityMap[aC];
       const countryCode = airportCountryMap[aC];
       if (!countryCode) return;
 
@@ -105,7 +117,7 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
       const country = countriesMap.get(countryCode)!;
       let city = country.cities.find(c => c.code === cityCode);
       if (!city && cityCode) {
-        city = { code: cityCode, name: f.destination_city_name || cityCode, countryCode, airports: [] };
+        city = { code: cityCode, name: cityNameMap[cityCode] || cityCode, countryCode, airports: [] };
         country.cities.push(city);
       }
       const ap: DestAirport = { code: aC, name: airportNameMap[aC] || aC, cityCode, countryCode };

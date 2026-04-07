@@ -27,30 +27,31 @@ export interface Country {
 }
 
 export interface Flight {
+  flight_number: string;
+  airline_code?: string;
+  airline_name?: string;
   origin_airport_code: string;
   destination_airport_code: string;
-  origin_city_name?: string;
-  destination_city_name?: string;
-  origin_city_code?: string;
-  destination_city_code?: string;
-  origin_country_code?: string;
-  destination_country_code?: string;
-  airline_code?: string;
-  airline_iata?: string;
-  airline_name?: string;
-  flight_number?: string;
-  scheduled_departure_utc?: string;
+  scheduled_departure_utc: string;
   scheduled_arrival_utc?: string;
   scheduled_departure_local?: string;
   scheduled_arrival_local?: string;
   departure_terminal?: string;
   departure_gate?: string;
-  id?: string | number;
+  id: string | number;
+}
+
+export interface Schedule {
+  success: boolean;
+  data: Flight[];
+  count: number;
+  last_fetched_at?: string;
+  range_end_datetime?: string;
 }
 
 export interface FlightOffer {
-  origin_city_code?: string;
-  destination_city_code?: string;
+  origin_city_code: string;
+  destination_city_code: string;
   origin_airport_code: string;
   destination_airport_code: string;
   price: number;
@@ -164,12 +165,6 @@ export interface CityWithPagination {
     total?: number;
     next_offset?: number;
   };
-}
-
-export interface FlightsResponse {
-  flights: Flight[];
-  has_more?: boolean;
-  next_offset?: string;
 }
 
 export interface FlightOffersResponse {

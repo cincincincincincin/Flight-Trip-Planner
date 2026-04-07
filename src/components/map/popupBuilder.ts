@@ -1,5 +1,5 @@
 import type { Flight } from '../../types';
-import { formatTime, popupFormatDuration, getUTCOffH, formatTzLabel, popupHaversineKm } from './popupHelpers';
+import { formatTime, popupFormatDuration, getUTCOffH, formatTzLabel, popupHaversineKm, getOffsetForTz } from './popupHelpers';
 import { THEME_COLORS } from '../../constants/theme';
 import { UI_SYMBOLS } from '../../constants/ui';
 import { FORMAT_LOCALES } from '../../constants/format';
@@ -8,10 +8,12 @@ export interface BuildFlightRowOpts {
   airportCoordsMap: Record<string, [number, number]>;
   destUTCOffset: number | null;
   srcUTCOffset: number | null;
+  destTimezone?: string;
+  srcTimezone?: string;
 }
 
 export function buildFlightRow(f: Flight, opts: BuildFlightRowOpts): string {
-  const { airportCoordsMap, destUTCOffset, srcUTCOffset } = opts;
+  const { airportCoordsMap, destUTCOffset, srcUTCOffset, destTimezone, srcTimezone } = opts;
   const GOLD = THEME_COLORS.goldBg;
   const GOLD_BORDER = THEME_COLORS.goldBorder;
   const GOLD_TEXT = THEME_COLORS.goldText;
@@ -28,7 +30,7 @@ export function buildFlightRow(f: Flight, opts: BuildFlightRowOpts): string {
   let arrHtml = '';
   const hasArrival = !!(f.scheduled_arrival_local || f.scheduled_arrival_utc);
   if (hasArrival) {
-    const arrStr = formatTime(f.scheduled_arrival_local || f.scheduled_arrival_utc);
+    const arrStr = formatTime(f.scheduled_arrival_local || f.scheduled_arrival_utc, destTimezone);
     const depOff = getUTCOffH(f.scheduled_departure_local, f.scheduled_departure_utc);
     const arrOff = getUTCOffH(f.scheduled_arrival_local, f.scheduled_arrival_utc);
     const tzDiff = depOff !== null && arrOff !== null ? arrOff - depOff : null;
@@ -41,19 +43,24 @@ export function buildFlightRow(f: Flight, opts: BuildFlightRowOpts): string {
     const srcC = airportCoordsMap[f.origin_airport_code || ''];
     const dstC = airportCoordsMap[f.destination_airport_code || ''];
     if (srcC && dstC) {
+      const depDate = new Date(f.scheduled_departure_utc);
       const distKm = popupHaversineKm(srcC[0], srcC[1], dstC[0], dstC[1]);
       const blockMs = (distKm / 850 + 0.5) * 3600000;
-      const estArrUtc = new Date(new Date(f.scheduled_departure_utc).getTime() + blockMs);
+      const estArrUtc = new Date(depDate.getTime() + blockMs);
+      
+      // Try to resolve offsets from metadata if missing from flight data
+      const dOff = destUTCOffset ?? (destTimezone ? getOffsetForTz(destTimezone, estArrUtc) : null);
+      const sOff = srcUTCOffset ?? (srcTimezone ? getOffsetForTz(srcTimezone, depDate) : (f.scheduled_departure_local ? getUTCOffH(f.scheduled_departure_local, f.scheduled_departure_utc) : null));
+
       let estStr: string;
-      if (destUTCOffset !== null) {
-        const destLocalMs = estArrUtc.getTime() + destUTCOffset * 3600000;
+      if (dOff !== null) {
+        const destLocalMs = estArrUtc.getTime() + dOff * 3600000;
         const d = new Date(destLocalMs);
         estStr = `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
       } else {
-        estStr = formatTime(estArrUtc.toISOString());
+        estStr = formatTime(estArrUtc.toISOString(), destTimezone);
       }
-      const estTzDiff =
-        srcUTCOffset !== null && destUTCOffset !== null ? destUTCOffset - srcUTCOffset : null;
+      const estTzDiff = (sOff !== null && dOff !== null) ? dOff - sOff : null;
       const estTzLabel = estTzDiff !== null ? formatTzLabel(estTzDiff) : null;
       const estTzHtml = estTzLabel
         ? `<span style="font-size:10px;color:${estTzDiff! > 0 ? '#10b981' : '#ef4444'};margin-right:3px;">${estTzLabel}</span>`
@@ -64,7 +71,7 @@ export function buildFlightRow(f: Flight, opts: BuildFlightRowOpts): string {
 
   return `
     <div class="mc-popup-row">
-      <div class="mc-popup-time">${formatTime(f.scheduled_departure_local || f.scheduled_departure_utc)}</div>
+      <div class="mc-popup-time">${formatTime(f.scheduled_departure_local || f.scheduled_departure_utc, srcTimezone)}</div>
       <div class="mc-popup-airline">${centerLabel}</div>
       <div class="mc-popup-arr">${arrHtml}</div>
     </div>`;

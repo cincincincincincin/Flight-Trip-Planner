@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { getFlights } from '../api/flights';
+import { getSchedules } from '../api/schedules';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import type { Flight } from '../types';
@@ -9,9 +9,9 @@ import { CONFIG } from '../constants/config';
 // 24 hours — the fixed UTC window size for any single-day view (rolling in today mode)
 const WINDOW_MS = 24 * 60 * 60_000;
 const MIN_MS = 60_000;
-const ALIGN_MS = 30 * 60_000; // 30-minute alignment for stable rolling windows
+const ALIGN_MS = 60_000; // Alignment to 1 minute for exact rolling window start
 
-interface RawFlightsResponse {
+interface RawScheduleResponse {
   success: boolean;
   data: Flight[];
   last_fetched_at?: string;
@@ -107,7 +107,8 @@ export function useFlightLoader({
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', second: '2-digit',
     });
-    return s.replace(' ', 'T').substring(0, 16) + ':00';
+    // Rygorystycznie wycinamy sekundy: zostaje tylko YYYY-MM-DDTHH:MM
+    return s.replace(' ', 'T').substring(0, 16);
   }, []);
 
   // ── Fetch one airport for a bounded UTC range ───────────────────────────────
@@ -127,10 +128,12 @@ export function useFlightLoader({
 
     try {
       const fromLocal = toLocalMinute(fromMs, airportTZ);
-      const toLocal = toLocalMinute(toMs, airportTZ);
-      const url = `${CONFIG.API_BASE_URL}/flights/airport/${code}?from_local_datetime=${fromLocal}&to_local_datetime=${toLocal}&limit=${CONFIG.FLIGHT_LIMIT}&lang=${useSettingsStore.getState().language}`;
+      const toLocal = toLocalMinute(toMs, airportTZ); 
 
+      // We use raw fetch here instead of api/schedules.ts because we need NDJSON streaming (body.getReader())
+      const url = `${CONFIG.API_BASE_URL}/schedules/${code}?from_local_datetime=${fromLocal}&to_local_datetime=${toLocal}&limit=${CONFIG.FLIGHT_LIMIT}`;
       const response = await fetch(url);
+
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
         throw new Error(errData.detail ?? 'Failed to load flights');
@@ -153,7 +156,7 @@ export function useFlightLoader({
         for (const line of lines) {
           if (!line.trim()) continue;
           try {
-            const batch = JSON.parse(line) as RawFlightsResponse & { error?: string };
+            const batch = JSON.parse(line) as RawScheduleResponse & { error?: string };
             
             if (batch.success === false) {
               setError(batch.error ?? 'Failed to load flights batch');
@@ -281,8 +284,7 @@ export function useFlightLoader({
       // Airport removed or first load → full reset
       setRawFlights([]);
       perAirportLoadedRef.current = new Map();
-      // NOTE: We do NOT clear perAirportFetchingRef here to avoid race conditions 
-      // with already running background fetches during rapid re-renders.
+      perAirportFetchingRef.current = new Map();
       setPerAirportLoading({});
       setError(null);
       dateOrderRef.current = [];
@@ -291,6 +293,7 @@ export function useFlightLoader({
       // Only clear if NOT in the middle of a timezone transition (stable key change)
       if (!tzJustChanged) {
         perAirportLoadedRef.current = new Map();
+        perAirportFetchingRef.current = new Map();
       }
     }
 
@@ -303,13 +306,21 @@ export function useFlightLoader({
     let toMs: number;
 
     if (tripArrivalTimeUTC && isTodayMode) {
-      // Trip mode on arrival day: fetch 24h from the arrival moment
+      // Trip mode on arrival day: fetch window from the arrival moment to :59 of the prev hour tomorrow
       fromMs = Math.floor(new Date(tripArrivalTimeUTC).getTime() / MIN_MS) * MIN_MS;
-      toMs   = fromMs + WINDOW_MS;
+      
+      const arrObj = new Date(fromMs);
+      const minutes = arrObj.getMinutes();
+      toMs = fromMs + WINDOW_MS - (minutes + 1) * MIN_MS;
     } else if (isTodayMode) {
-      // Normal mode today: rolling window from now, aligned
+      // Normal mode today: rolling window from now, exact start
+      // End window at :59 of the previous hour on the next day (e.g. 03:04 -> 02:59)
       fromMs = Math.floor(now / ALIGN_MS) * ALIGN_MS;
-      toMs   = fromMs + WINDOW_MS;
+      
+      const nowObj = new Date(fromMs);
+      const minutes = nowObj.getMinutes();
+      // fromMs + 24h - (minutes + 1) minutes = :59 of the prev hour tomorrow
+      toMs = fromMs + WINDOW_MS - (minutes + 1) * MIN_MS;
     } else {
       // Manual date (or later day in Trip mode): compute window covering travelDate in all TZs
       const tzs = new Set<string>([timezone]);
@@ -348,7 +359,9 @@ export function useFlightLoader({
       toMs   = fromMs + WINDOW_MS;
     } else {
       fromMs = nowMin;
-      toMs   = nowMin + WINDOW_MS;
+      const nowObj = new Date(fromMs);
+      const minutes = nowObj.getMinutes();
+      toMs = fromMs + WINDOW_MS - (minutes + 1) * MIN_MS;
     }
 
     await Promise.all(airportCodes.map(code => {

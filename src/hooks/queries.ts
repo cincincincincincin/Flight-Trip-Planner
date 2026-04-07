@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { getInitData } from '../api/geo';
 import { CONFIG } from '../constants/config';
-import { getFlightOffers } from '../api/flights';
+import { getOffers } from '../api/offers';
 import type { AirportInfo, FlightOffersResponse } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useMemo } from 'react';
@@ -90,7 +90,19 @@ export const useFlightOffersQuery = (
 ) =>
   useQuery<FlightOffersResponse>({
     queryKey: ['flightOffers', origin, dest, params],
-    queryFn: () => getFlightOffers(origin!, dest!, params),
+    queryFn: () => {
+      const { departure_at, ...rest } = params;
+      // Enforce minute precision: YYYY-MM-DDTHH:MM (16 chars)
+      const minuteDepartureAt = typeof departure_at === 'string'
+        ? departure_at.substring(0, 16)
+        : departure_at;
+      return getOffers({
+        origin,
+        destination: dest,
+        departure_at: minuteDepartureAt,
+        ...rest,
+      });
+    },
     enabled: !!enabled,
     staleTime: CONFIG.CACHE_AIRPORT_INFO_MS,
   });

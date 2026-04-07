@@ -9,7 +9,7 @@ import { useTexts } from '../../hooks/useTexts';
 
 const SaveTripButton: React.FC = () => {
   const t = useTexts();
-  const { tripState, tripRoutes, savedTripId, savedTripStateJSON, setSavedTrip, editMode, isLoadedTrip } = useTripStore();
+  const { tripState, savedTripId, savedTripStateJSON, setSavedTrip, editMode, isLoadedTrip } = useTripStore();
   const qc = useQueryClient();
   const [showNameModal, setShowNameModal] = useState(false);
 
@@ -24,7 +24,7 @@ const SaveTripButton: React.FC = () => {
   const saveMutation = useMutation({
     mutationFn: ({ name, stateJSON }: { name: string; stateJSON: string }) => {
       void stateJSON; // carried via variables, not used here
-      return saveTrip({ name, trip_state: tripState!, trip_routes: tripRoutes });
+      return saveTrip({ name, trip_state: tripState! });
     },
     onSuccess: (data, { stateJSON }) => {
       qc.invalidateQueries({ queryKey: ['user-trips'] });
@@ -35,7 +35,7 @@ const SaveTripButton: React.FC = () => {
   const updateMutation = useMutation({
     mutationFn: ({ stateJSON }: { stateJSON: string }) => {
       void stateJSON;
-      return updateTrip(savedTripId!, { trip_state: tripState!, trip_routes: tripRoutes });
+      return updateTrip(savedTripId!, { trip_state: tripState! });
     },
     onSuccess: (data, { stateJSON }) => {
       qc.invalidateQueries({ queryKey: ['user-trips'] });

@@ -6,7 +6,6 @@ export interface SavedTrip {
   user_id: string;
   name: string | null;
   trip_state: TripState;
-  trip_routes: TripRoute[];
   created_at: string;
   updated_at: string;
 }
@@ -14,7 +13,6 @@ export interface SavedTrip {
 export interface SaveTripPayload {
   name?: string;
   trip_state: TripState;
-  trip_routes: TripRoute[];
 }
 
 export const fetchTrips = async (): Promise<SavedTrip[]> => {

@@ -95,6 +95,26 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       return () => { clearTimeout(timeoutId); clearInterval(intervalId); };
     }, []);
 
+    // ── Expansion state (Smart Collapse) ──────────────────────────────────────
+    const [expandedFlightIds, setExpandedFlightIds] = useState<string[]>([]);
+    const { currency } = useSettingsStore();
+
+    // Kiedy waluta się zmienia, zwijamy wszystko oprócz ostatnio rozwiniętego lotu
+    useEffect(() => {
+      if (expandedFlightIds.length > 1) {
+        const lastId = expandedFlightIds[expandedFlightIds.length - 1];
+        setExpandedFlightIds([lastId]);
+      }
+    }, [currency]);
+
+    const handleToggleExpand = useCallback((id: string) => {
+      setExpandedFlightIds(prev => 
+        prev.includes(id) 
+          ? prev.filter(x => x !== id) 
+          : [...prev, id] // Dodajemy na koniec (ostatni rozwinięty)
+      );
+    }, []);
+
     // ── Unfiltered flights for the selected day only ───────────────────────────
     const todayFlights = useMemo(
       () => (flightsByDate[travelDate] || []),
@@ -115,7 +135,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       (flight: Flight): boolean => {
         if (!isFilterActive) return true;
         const destAirport = flight.destination_airport_code;
-        const destCity = flight.destination_city_code || airportCityMap[destAirport];
+        const destCity = airportCityMap[destAirport];
         const destCountry = airportCountryMap[destAirport];
         const airline = flight.airline_code;
 
@@ -179,7 +199,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       }
 
       const newCities = new Set<string>(
-        sourceFlights.map(f => f.destination_city_code).filter(Boolean) as string[]
+        sourceFlights.map(f => airportCityMap[f.destination_airport_code]).filter(Boolean) as string[]
       );
       const prevC = prevHighlightedCitiesRef.current;
       if (newCities.size !== prevC.size || Array.from(newCities).some(c => !prevC.has(c))) {
@@ -215,7 +235,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       (flight: Flight) => {
         if (!tripStartAirport) return null;
         const destCode = flight.destination_airport_code;
-        const destCityCode = flight.destination_city_code;
+        const destCityCode = airportCityMap[destCode];
         if (destCode === tripStartAirport.code) return 'airport';
         if (destCityCode && destCityCode === tripStartAirport.city_code) return 'city';
         if (airportCountryMap?.[destCode] && airportCountryMap[destCode] === tripStartAirport.country_code)
@@ -345,11 +365,13 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
                 return (
                   <FlightCard
                     flight={flight}
-                    ref={(el: unknown) => { flightRefsMap.current.set(flight.id, el); }}
+                    ref={(el: HTMLDivElement | null) => { if (flight.id) flightRefsMap.current.set(flight.id.toString(), el); }}
                     tripHighlight={getTripHighlight(flight) ?? undefined}
                     onAddToTrip={onAddToTrip}
                     displayTimezone={timezone}
                     airportTimezone={airportTimezones?.[flight.origin_airport_code]}
+                    isExpanded={!!flight.id && expandedFlightIds.includes(flight.id.toString())}
+                    onToggleExpand={() => flight.id && handleToggleExpand(flight.id.toString())}
                   />
                 );
               }}

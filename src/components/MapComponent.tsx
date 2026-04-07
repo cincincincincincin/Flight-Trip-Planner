@@ -267,7 +267,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       if (!hasFilters) return true;
 
       const destAirport = flight.destination_airport_code;
-      const destCity = flight.destination_city_code || airportCityMap[destAirport];
+      const destCity = airportCityMap[destAirport];
       const destCountry = airportCountryMap[destAirport];
       const airline = flight.airline_code;
 
@@ -648,6 +648,7 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       selectedAirportCodesRef,
       explorationAirportCodesRef,
       manualTransferAirportCodesRef,
+      airportsDataRef,
       airportCityKeyRef,
       cityLabelCodeByCityRef,
       highlightedCityLabelCodesRef,

@@ -92,6 +92,7 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
   };
 
   const [hoveredFlight, setHoveredFlight] = useState<Flight | null>(null);
+  const [isPopupExpanded, setIsPopupExpanded] = useState(false);
   const [popupPos, setPopupPos] = useState<{ top: number; left: number } | null>(null);
   const [estimatedTooltipPos, setEstimatedTooltipPos] = useState<{ top: number; left: number } | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -140,6 +141,7 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
     hideTimerRef.current = setTimeout(() => {
       setHoveredFlight(null);
       setPopupPos(null);
+      setIsPopupExpanded(false);
     }, 150);
   };
 
@@ -342,6 +344,8 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
             flight={hoveredFlight}
             hideAddToTrip={true}
             airportTimezone={airportTimezoneMap[hoveredFlight.origin_airport_code ?? '']}
+            isExpanded={isPopupExpanded}
+            onToggleExpand={() => setIsPopupExpanded(!isPopupExpanded)}
           />
         </div>,
         document.body
