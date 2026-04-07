@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getInitData } from '../api/geo';
 import { CONFIG } from '../constants/config';
 import { getOffers } from '../api/offers';
-import type { AirportInfo, FlightOffersResponse } from '../types';
+import type { AirportInfo, FlightOfferResponse } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useMemo } from 'react';
 import { getLocalizedProp } from '../utils/geoUtils';
@@ -88,7 +88,7 @@ export const useFlightOffersQuery = (
   params: Record<string, unknown>,
   enabled: boolean,
 ) =>
-  useQuery<FlightOffersResponse>({
+  useQuery<FlightOfferResponse>({
     queryKey: ['flightOffers', origin, dest, params],
     queryFn: () => {
       const { departure_at, ...rest } = params;

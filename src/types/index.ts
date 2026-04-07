@@ -36,6 +36,7 @@ export interface Flight {
   scheduled_arrival_utc?: string;
   scheduled_departure_local?: string;
   scheduled_arrival_local?: string;
+  departure_terminal?: string;
   departure_gate?: string;
 }
 
