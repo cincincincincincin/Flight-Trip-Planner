@@ -36,9 +36,7 @@ export interface Flight {
   scheduled_arrival_utc?: string;
   scheduled_departure_local?: string;
   scheduled_arrival_local?: string;
-  departure_terminal?: string;
   departure_gate?: string;
-  id: string | number;
 }
 
 export interface Schedule {
@@ -167,9 +165,4 @@ export interface CityWithPagination {
   };
 }
 
-export interface FlightOffersResponse {
-  success: boolean;
-  data: FlightOffer[];
-  count: number;
-  last_fetched_at?: string;
-}
+export type FlightOfferResponse = FlightOffer;

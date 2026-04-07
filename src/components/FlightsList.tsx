@@ -362,16 +362,18 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
               itemContent={(index: number) => {
                 const flight = displayedFlatFlights[index];
                 if (!flight) return null;
+                const flightKey = `${flight.flight_number}-${flight.scheduled_departure_utc}`;
                 return (
                   <FlightCard
+                    key={flightKey}
                     flight={flight}
-                    ref={(el: HTMLDivElement | null) => { if (flight.id) flightRefsMap.current.set(flight.id.toString(), el); }}
+                    ref={(el: HTMLDivElement | null) => { if (el) flightRefsMap.current.set(flightKey, el); }}
                     tripHighlight={getTripHighlight(flight) ?? undefined}
                     onAddToTrip={onAddToTrip}
                     displayTimezone={timezone}
                     airportTimezone={airportTimezones?.[flight.origin_airport_code]}
-                    isExpanded={!!flight.id && expandedFlightIds.includes(flight.id.toString())}
-                    onToggleExpand={() => flight.id && handleToggleExpand(flight.id.toString())}
+                    isExpanded={expandedFlightIds.includes(flightKey)}
+                    onToggleExpand={() => handleToggleExpand(flightKey)}
                   />
                 );
               }}

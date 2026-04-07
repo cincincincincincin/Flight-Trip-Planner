@@ -6,8 +6,6 @@ export interface SavedTrip {
   user_id: string;
   name: string | null;
   trip_state: TripState;
-  created_at: string;
-  updated_at: string;
 }
 
 export interface SaveTripPayload {

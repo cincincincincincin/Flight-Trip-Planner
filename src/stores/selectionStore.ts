@@ -51,8 +51,10 @@ export const useSelectionStore = create<SelectionState>(set => ({
   setFlightsData: v => set({ flightsData: v }),
   setDisplayedFlights: v => set({ displayedFlights: v }),
   appendFlights: newFlights => set(state => {
-    const existingIds = new Set(state.flightsData.map(f => f.id));
-    const unique = newFlights.filter(f => !existingIds.has(f.id));
+    // Generujemy unikalny klucz syntetyczny dla standardu Ultra-Lean
+    const getFlightKey = (f: Flight) => `${f.flight_number}-${f.scheduled_departure_utc}`;
+    const existingKeys = new Set(state.flightsData.map(getFlightKey));
+    const unique = newFlights.filter(f => !existingKeys.has(getFlightKey(f)));
     return { flightsData: [...state.flightsData, ...unique] };
   }),
   clearSelection: () => set({

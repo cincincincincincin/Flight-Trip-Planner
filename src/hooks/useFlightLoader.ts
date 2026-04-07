@@ -165,8 +165,11 @@ export function useFlightLoader({
 
             if (batch.data) {
               setRawFlights(prev => {
-                const ids = new Set(prev.map(f => f.id));
-                const fresh = batch.data.filter(f => !ids.has(f.id));
+                // Generujemy unikalny klucz syntetyczny dla standardu Ultra-Lean
+                const getFlightKey = (f: Flight) => `${f.flight_number}-${f.scheduled_departure_utc}`;
+                const existingKeys = new Set(prev.map(getFlightKey));
+                const fresh = batch.data.filter(f => !existingKeys.has(getFlightKey(f)));
+                
                 if (!fresh.length) return prev;
                 return [...prev, ...fresh].sort((a, b) =>
                   (a.scheduled_departure_utc ?? a.scheduled_departure_local ?? '')

@@ -72,8 +72,8 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
     showPrices,
   );
 
-  // The backend already performs "Smart Match" and returns the best single offer
-  const priceData = offersResponse?.data?.[0];
+  // Serwer zwraca teraz bezpośrednio pojedynczą, najlepszą ofertę (Single-Offer)
+  const priceData = offersResponse;
 
   const formatTime = (dateString: string, tz?: string) => {
     if (!dateString) return t.card.na;
