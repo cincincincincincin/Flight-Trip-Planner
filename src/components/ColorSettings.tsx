@@ -215,7 +215,7 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
               <div key={`${minKey}-${maxKey}`} className="size-group">
                 <span className="color-row-label">{label}</span>
                 <span className="size-value">
-                  {minVal.toFixed(precision)} @{loZ} → {maxVal.toFixed(precision)} @{hiZ}
+                  {minVal.toFixed(precision)} (Oddalenie @{loZ}) → {maxVal.toFixed(precision)} (Przybliżenie @{hiZ})
                 </span>
                 <RangeSlider
                   min={min} max={max} step={step}

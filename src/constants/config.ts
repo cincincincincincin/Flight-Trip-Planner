@@ -98,8 +98,6 @@ export const CONFIG = {
 
   /** Minimum zoom level at which airport/city labels become visible */
   LABEL_MIN_ZOOM: 5,
-  /** Minutes in a full day (used in TripItinerary.tsx duration formatting) */
-  MINUTES_PER_DAY: 1440,
   /** Scaling factor applied to a style property at the minimum zoom anchor in ziLegacy (MapComponent.tsx) */
   SIZE_INTERPOLATION_MIN_FACTOR: 0.3,
   /** Scaling factor applied to a style property at the maximum zoom anchor in ziLegacy (MapComponent.tsx) */
@@ -126,10 +124,6 @@ export const CONFIG = {
   /** Delay (ms) before restoring scroll position after search panel closes */
   SCROLL_RESTORE_DELAY_MS: 50,
 
-  /** Earth radius in kilometres (used in the Haversine formula) */
-  EARTH_RADIUS_KM: 6371,
-  /** Degrees to radians conversion factor */
-  DEG_TO_RAD: Math.PI / 180,
 
   /** App-wide limits */
 
@@ -156,7 +150,7 @@ export const CONFIG = {
   OUTLIER_MAX_DEG: 5,
   /** Maximum zoom level at which a country view is rendered instead of zooming in further */
   MAX_ZOOM_FOR_COUNTRY: 7,
-  /** Default map center [lng, lat] (central Europe) */
+  /** Default map center [lon, lat] (central Europe) */
   DEFAULT_MAP_CENTER: [19.0, 52.0] as [number, number],
   /** Default map zoom level on initial load */
   DEFAULT_MAP_ZOOM: 4,
@@ -215,7 +209,8 @@ export const CONFIG = {
   /** Domyślny minimalny zakres zoomu mapy */
   MAP_ZOOM_MIN_DEFAULT: 1.3,
   /** Domyślny maksymalny zakres zoomu mapy */
-  MAP_ZOOM_MAX_DEFAULT: 5.5,
+  MAP_ZOOM_MAX_DEFAULT: 12.0,
+
 
   // ──────────────────────────────────────────────────────────────────────────
   // MapComponent.tsx – layer radius/text size arrays
@@ -289,6 +284,17 @@ export const CONFIG = {
 
   /** Base URL for the backend API */
   API_BASE_URL: import.meta.env.VITE_API_URL ?? '',
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // User Settings Defaults
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /** Default currency selected on first run */
+  DEFAULT_CURRENCY: 'PLN',
+  /** Default minimum transfer time (hours) for automatic flights */
+  DEFAULT_MIN_TRANSFER_HOURS: 2,
+  /** Default minimum transfer time (hours) for manual/custom trip segments */
+  DEFAULT_MIN_MANUAL_TRANSFER_HOURS: 1,
 
   /** Poziomy przybliżenia mapy zależne od liczby lotnisk w danym kraju */
   COUNTRY_ZOOM_LEVELS: {

@@ -1,174 +1,181 @@
 import { create } from 'zustand';
-import type { TripState, TripRoute, SelectedItem, Flight } from '../types';
 import { useSelectionStore } from './selectionStore';
 import type { ExplorationItem } from './selectionStore';
+import type { TripState, TripRoute, SelectedItem, Flight } from '../types';
 
+/**
+ * STRUKTURA DANYCH OBRAZU PODRÓŻY (SNAPSHOT)
+ * Przechowuje pełny kontekst stanu we wszystkich powiązanych magazynach.
+ * Używane do mechanizmu Time-Travel (Undo/Redo).
+ */
 export interface TripSnapshot {
   tripState: TripState | null;
   tripRoutes: TripRoute[];
+  // Kontekst selekcji synchronizowany z podróżą (MapComponent.tsx)
   selectedItem: SelectedItem | null;
   selectedAirportCode: string | null;
   selectedAirportCodes: string[];
   highlightedAirports: string[];
-  flightsData: Flight[];
   explorationItems: ExplorationItem[];
 }
 
+/**
+ * INTERFEJS MAGAZYNU TRIPSTORE
+ * Centralne ogniwo orkiestrujące proces planowania i persystencji podróży.
+ */
 interface TripStoreState {
+  // --- Stan Główny (Core Logic) ---
+  /** Model lotów i lotniska startowego. Główne źródło prawdy dla TripItinerary.tsx. */
   tripState: TripState | null;
+  /** Kolekcja ścieżek geograficznych do renderowania linii na mapie (MapComponent.tsx). */
   tripRoutes: TripRoute[];
-  pastTrips: TripSnapshot[];
-  futureTrips: TripSnapshot[];
+  /** Aktualnie podglądane lotnisko na mapie (animacje preview). */
   previewAirportCode: string | null;
+  /** Bufor przesiadek manualnych (Draft State) przed ich zatwierdzeniem do tripState. */
   manualTransferAirportCodes: string[];
-  // Save / load tracking
+
+  // --- Metadane Persystencji (SQL Sync) ---
+  /** Klucz główny podróży z bazy danych (Supabase/PostgreSQL). */
   savedTripId: number | null;
+  /** Zserializowany obraz ostatniej zapisanej wersji - używany do "Dirty Checking" w SaveTripButton.tsx. */
   savedTripStateJSON: string | null;
+  /** Flaga wskazująca, czy podróż pochodzi z bazy danych (tryb tylko do odczytu/edycji). */
   isLoadedTrip: boolean;
+  /** Tryb modyfikacji istniejącej podróży (wpływa na restrykcje Undo w przyszłości). */
   editMode: boolean;
-  setTripState: (v: TripState | null) => void;
-  setTripRoutes: (v: TripRoute[]) => void;
+
+  // --- Mechanizm Time-Travel (History Management) ---
+  /** Stos LIFO przechowujący stany historyczne (Undo). */
+  pastTrips: TripSnapshot[];
+  /** Stos LIFO przechowujący stany wycofane (Redo). */
+  futureTrips: TripSnapshot[];
+
+  // --- Akcje (Atomic Actions) ---
+  /** 
+   * Jedyny punkt wejścia do modyfikacji stanu (Atomic Update Pattern). 
+   * Umożliwia batchowanie zmian wielu pól w jednym cyklu renderowania React.
+   */
+  updateTrip: (values: Partial<Omit<TripStoreState, 'updateTrip'>>) => void;
+  /** Zrzut bieżącego stanu na stos historii - musi być wywołany bezpośrednio przed mutacją. */
   pushToHistory: () => void;
+  /** Przywrócenie stanu ze stosu pastTrips. */
   undo: () => void;
+  /** Przywrócenie stanu ze stosu futureTrips. */
   redo: () => void;
-  setPreviewAirportCode: (v: string | null) => void;
-  setManualTransferAirportCodes: (v: string[]) => void;
-  clearHistory: () => void;
+  /** Całkowity reset magazynu do wartości początkowych. */
   clearTrip: () => void;
-  setSavedTrip: (id: number, stateJSON: string) => void;
-  setLoadedTrip: (id: number, stateJSON: string) => void;
-  setEditMode: (v: boolean) => void;
-  setPastTrips: (snapshots: TripSnapshot[]) => void;
 }
 
+/**
+ * POMOCNIK TWORZENIA MIGAWKI (SNAPSHOT HELPER)
+ * Agreguje stan z dwóch niezależnych atomów (tripStore + selectionStore).
+ * Zapewnia spójność kontekstu wizualnego (mapa) i logicznego (trasa) podczas podróży w czasie.
+ */
+const createCurrentSnapshot = (state: TripStoreState): TripSnapshot => {
+  const selection = useSelectionStore.getState();
+  return {
+    // INŻYNIERSKA OPTYMALIZACJA (Faza 2: Deep Isolation):
+    // Używamy structuredClone dla tripState, aby izolować historie Undo/Redo.
+    // Odzwierciedla to atomowość zapisu JSONB w PostgreSQL (każdy stan to osobny rekord).
+    tripState: state.tripState ? structuredClone(state.tripState) : null,
+    tripRoutes: [...state.tripRoutes],
+    selectedItem: selection.selectedItem,
+    selectedAirportCode: selection.selectedAirportCode,
+    selectedAirportCodes: [...selection.selectedAirportCodes],
+    highlightedAirports: [...selection.highlightedAirports],
+    // flightsData (globalny cache lotów) nie jest częścią migawki (Zero-Waste).
+    explorationItems: selection.explorationItems,
+  };
+};
+
+/**
+ * MAGAZYN ZUSTAND: TRIPSTORE
+ * Implementacja wzorca State Container z wbudowaną obsługą historii migawkowej.
+ */
 export const useTripStore = create<TripStoreState>((set, get) => ({
   tripState: null,
   tripRoutes: [],
-  pastTrips: [],
-  futureTrips: [],
   previewAirportCode: null,
   manualTransferAirportCodes: [],
   savedTripId: null,
   savedTripStateJSON: null,
   isLoadedTrip: false,
   editMode: false,
+  pastTrips: [],
+  futureTrips: [],
 
-  setTripState: v => set({ tripState: v }),
-  setTripRoutes: v => set({ tripRoutes: v }),
+  updateTrip: (values) => set((state) => ({ ...state, ...values })),
+
   pushToHistory: () => {
-    const { tripState, tripRoutes, pastTrips } = get();
-    const { 
-      selectedItem, selectedAirportCode, selectedAirportCodes, 
-      highlightedAirports, flightsData, explorationItems 
-    } = useSelectionStore.getState();
-
-    set({
-      pastTrips: [...pastTrips, { 
-        tripState, tripRoutes: [...tripRoutes],
-        selectedItem, selectedAirportCode, selectedAirportCodes: [...selectedAirportCodes],
-        highlightedAirports: [...highlightedAirports],
-        flightsData: [...flightsData],
-        explorationItems: [...explorationItems]
-      }],
-      futureTrips: []
-    });
+    const current = get();
+    const snapshot = createCurrentSnapshot(current);
+    set((state) => ({
+      pastTrips: [...state.pastTrips, snapshot],
+      futureTrips: [], // Nowa akcja przerywa linię redo (zgodnie ze standardami UX)
+    }));
   },
+
   undo: () => {
-    const { pastTrips, futureTrips, tripState, tripRoutes } = get();
+    const { pastTrips, futureTrips } = get();
     if (pastTrips.length === 0) return;
-    
-    const previous = pastTrips[pastTrips.length - 1];
-    const newPast = pastTrips.slice(0, -1);
-    
-    const { 
-      selectedItem, selectedAirportCode, selectedAirportCodes, 
-      highlightedAirports, flightsData, explorationItems 
-    } = useSelectionStore.getState();
 
-    const currentSnapshot: TripSnapshot = {
-        tripState, tripRoutes: [...tripRoutes],
-        selectedItem, selectedAirportCode, selectedAirportCodes: [...selectedAirportCodes],
-        highlightedAirports: [...highlightedAirports],
-        flightsData: [...flightsData],
-        explorationItems: [...explorationItems]
-    };
-    
+    const currentSnapshot = createCurrentSnapshot(get());
+    const previousSnapshot = pastTrips[pastTrips.length - 1];
+    const remainingPast = pastTrips.slice(0, pastTrips.length - 1);
+
+    // Atomowa aplikacja stanu z migawki do obu magazynów
+    useSelectionStore.getState().setFullSelection({
+      selectedItem: previousSnapshot.selectedItem,
+      selectedAirportCode: previousSnapshot.selectedAirportCode,
+      selectedAirportCodes: previousSnapshot.selectedAirportCodes,
+      highlightedAirports: previousSnapshot.highlightedAirports,
+      explorationItems: previousSnapshot.explorationItems,
+    });
+
     set({
-      pastTrips: newPast,
+      tripState: previousSnapshot.tripState,
+      tripRoutes: previousSnapshot.tripRoutes,
+      pastTrips: remainingPast,
       futureTrips: [currentSnapshot, ...futureTrips],
-      tripState: previous.tripState,
-      tripRoutes: previous.tripRoutes,
-    });
-
-    useSelectionStore.setState({
-      selectedItem: previous.selectedItem,
-      selectedAirportCode: previous.selectedAirportCode,
-      selectedAirportCodes: previous.selectedAirportCodes,
-      highlightedAirports: previous.highlightedAirports,
-      flightsData: previous.flightsData,
-      explorationItems: previous.explorationItems,
     });
   },
+
   redo: () => {
-    const { pastTrips, futureTrips, tripState, tripRoutes } = get();
+    const { pastTrips, futureTrips } = get();
     if (futureTrips.length === 0) return;
-    
-    const next = futureTrips[0];
-    const newFuture = futureTrips.slice(1);
-    
-    const { 
-      selectedItem, selectedAirportCode, selectedAirportCodes, 
-      highlightedAirports, flightsData, explorationItems 
-    } = useSelectionStore.getState();
 
-    const currentSnapshot: TripSnapshot = {
-        tripState, tripRoutes: [...tripRoutes],
-        selectedItem, selectedAirportCode, selectedAirportCodes: [...selectedAirportCodes],
-        highlightedAirports: [...highlightedAirports],
-        flightsData: [...flightsData],
-        explorationItems: [...explorationItems]
-    };
-    
-    set({
-      pastTrips: [...pastTrips, currentSnapshot],
-      futureTrips: newFuture,
-      tripState: next.tripState,
-      tripRoutes: next.tripRoutes,
+    const currentSnapshot = createCurrentSnapshot(get());
+    const nextSnapshot = futureTrips[0];
+    const remainingFuture = futureTrips.slice(1);
+
+    console.log(`[RACE-DEBUG] {tripStore} -> REDO | Snapshot:`, nextSnapshot);
+
+    useSelectionStore.getState().setFullSelection({
+      selectedItem: nextSnapshot.selectedItem,
+      selectedAirportCode: nextSnapshot.selectedAirportCode,
+      selectedAirportCodes: nextSnapshot.selectedAirportCodes,
+      highlightedAirports: nextSnapshot.highlightedAirports,
+      explorationItems: nextSnapshot.explorationItems,
     });
 
-    useSelectionStore.setState({
-      selectedItem: next.selectedItem,
-      selectedAirportCode: next.selectedAirportCode,
-      selectedAirportCodes: next.selectedAirportCodes,
-      highlightedAirports: next.highlightedAirports,
-      flightsData: next.flightsData,
-      explorationItems: next.explorationItems,
+    set({
+      tripState: nextSnapshot.tripState,
+      tripRoutes: nextSnapshot.tripRoutes,
+      pastTrips: [...pastTrips, currentSnapshot],
+      futureTrips: remainingFuture,
     });
   },
-  setPreviewAirportCode: v => set({ previewAirportCode: v }),
-  setManualTransferAirportCodes: v => set({ manualTransferAirportCodes: v }),
-  clearHistory: () => set({ pastTrips: [], futureTrips: [] }),
+
   clearTrip: () => set({
     tripState: null,
     tripRoutes: [],
-    pastTrips: [],
-    futureTrips: [],
     previewAirportCode: null,
     manualTransferAirportCodes: [],
     savedTripId: null,
     savedTripStateJSON: null,
+    pastTrips: [],
+    futureTrips: [],
     isLoadedTrip: false,
     editMode: false,
   }),
-  setSavedTrip: (id, stateJSON) => set({ savedTripId: id, savedTripStateJSON: stateJSON }),
-  setLoadedTrip: (id, stateJSON) => set({
-    savedTripId: id,
-    savedTripStateJSON: stateJSON,
-    isLoadedTrip: true,
-    editMode: false,
-    pastTrips: [],
-    futureTrips: [],
-  }),
-  setEditMode: (v) => set({ editMode: v }),
-  setPastTrips: (snapshots) => set({ pastTrips: snapshots, futureTrips: [] }),
 }));

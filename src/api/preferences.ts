@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { PrefsSnapshot } from '../utils/i18n';
+import type { PrefsSnapshot } from '../utils/prefsUtils';
 
 interface PreferencesResponse {
   data: PrefsSnapshot;

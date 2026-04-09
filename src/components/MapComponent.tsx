@@ -1,38 +1,55 @@
-import { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle, useMemo } from 'react';
-import maplibregl from 'maplibre-gl';
+/**
+ * KOMPONENT MAPY (MapComponent.tsx)
+ * Główny moduł wizualizacji kartograficznej oparty na MapLibre GL.
+ * Implementuje architekturę Ultra-Lean (Zero-Waste) z optymalizacjami O(1).
+ */
+
+// console.log('MapComponent.tsx module loaded');
+
+import { forwardRef, useRef, useState, useEffect, useMemo, useCallback, useImperativeHandle } from 'react';
+import maplibregl, { LngLatBoundsLike, FlyToOptions } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { BasemapStyle } from '@esri/maplibre-arcgis';
-import type { SelectedItem, Viewport, Flight, TripRoute } from '../types';
+import {
+  resolveMapStyle,
+  arcGISTransformRequest,
+  BLANK_STYLE
+} from './map/styleResolver';
+
+import type { SelectedItem, Viewport, Flight } from '../types';
 import { useMapStore } from '../stores/mapStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useTripStore } from '../stores/tripStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { getLocalizedProp } from '../utils/geoUtils';
 import { useColorStore } from '../stores/colorStore';
-import { useFilterStore } from '../stores/filterStore';
-import { useAirportsQuery } from '../hooks/queries';
-import { generateGreatCircle, getTextColorForHaloColor, isBlackOrWhiteColor } from './map/utils';
-import { addAirportsLayer, AIRPORT_LABEL_LAYERS, airportLabelField, airportCityLabelField } from './map/airportsLayer';
+import {
+  useAirportsQuery,
+  useAirportIndexes,
+  useTripVisibleAirports,
+  useHighlightedState
+} from '../hooks/queries';
+import { addAirportsLayer, removeAirportsLayer } from './map/airportsLayer';
 
-import { startPreviewAnimation } from './map/routeAnimations';
-import type { GCPath } from './map/routeAnimations';
 import './MapComponent.css';
 import './FlightCard.css';
-import { useTexts } from '../hooks/useTexts';
-import { MAP_STYLES } from '../constants/mapStyles';
-import { THEME_COLORS } from '../constants/theme';
-import { CONFIG } from '../constants/config';
-import { ARCGIS_API_KEY, isArcGISPluginStyle, toPluginStyleName, arcGISTransformRequest, resolveMapStyle } from './map/styleResolver';
-import { applyMapColors } from './map/colorApplier';
-import { applyMapAirportFilters } from './map/filterApplier';
-import { setupRouteLayers } from './map/layerSetup';
+import { setupRouteLayers, removeRouteLayers } from './map/layerSetup';
 import { useMapHover } from './map/useMapHover';
 import type { MapHoverRefs } from './map/useMapHover';
+import { useMapColors } from './map/useMapColors';
+import { applyMapColors } from './map/colorApplier';
+import { useRouteAnimation } from './map/useRouteAnimation';
+import { startPreviewAnimation } from './map/routeAnimations';
+import { generateGreatCircle } from './map/utils';
+import type { GCPath } from './map/routeAnimations';
+import { applyMapAirportFilters } from './map/filterApplier';
 import { setupRouteHoverListeners } from './map/routeHover';
 import type { RouteHoverRefs } from './map/routeHover';
-import { useMapColors } from './map/useMapColors';
-import { useRouteAnimation } from './map/useRouteAnimation';
-import { useAirportLayerFilter } from './map/useAirportLayerFilter';
+
+export interface MapComponentRef {
+  flyTo: (options: FlyToOptions) => void;
+  getZoom: () => number | undefined;
+  once: (event: string, callback: (...args: unknown[]) => void) => void;
+  fitBounds: (bounds: [[number, number], [number, number]], options?: { padding?: number; duration?: number; maxZoom?: number }) => void;
+}
 
 interface MapComponentProps {
   onViewportChange: (viewport: Viewport) => void;
@@ -40,600 +57,316 @@ interface MapComponentProps {
   rightPanelRef: React.RefObject<{ scrollToFlight: (code: string) => void } | null>;
 }
 
-const MapComponent = forwardRef<unknown, MapComponentProps>(({
-  onViewportChange,
+const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
   onSelectItem,
-  rightPanelRef,
 }, ref) => {
-  const t = useTexts();
-
-  // Subskrypcje do magazynów stanu (Stores)
-  const { showAirports, mapStyle, globeMode, flyToZoom, setFlyToZoom } = useMapStore();
-  const { highlightedAirports, selectedAirportCode, selectedAirportCodes, highlightedCities, flightsData, displayedFlights, explorationItems } = useSelectionStore();
-  const { tripState, tripRoutes, previewAirportCode, manualTransferAirportCodes } = useTripStore();
-  const { travelDate, timezone, language } = useSettingsStore();
-  const { destinationFilter, airlineFilter } = useFilterStore();
-
-  // Subskrypcja kolorów i rozmiarów – używamy konkretnych wartości, żeby efekty reagowały na ich zmianę
-  const {
-    startPoints, clrGeneral, clrDestination, clrTripAirport, clrTripRoute, clrTransferRoute,
-    clrTripHover, clrGeneralHover, clrDestinationHover, clrTransferRouteHover,
-    clrGeneralLabelHover, clrGeneralLabel, clrDestinationLabel, clrDestinationLabelHover,
-    clrTripLabel, clrTripLabelHover,
-    szRouteWidthMin, szRouteWidthMax, szRouteHoverWidthMin, szRouteHoverWidthMax,
-    szHighlightedRadiusMin, szHighlightedRadiusMax, szHighlightedHoverRadiusMin, szHighlightedHoverRadiusMax,
-    szGeneralRadiusMin, szGeneralRadiusMax, szGeneralHoverRadiusMin, szGeneralHoverRadiusMax,
-    szTripRouteWidthMin, szTripRouteWidthMax, szTripRouteHoverWidthMin, szTripRouteHoverWidthMax,
-    clrHighlightedCity, clrGeneralCity, szHighlightedCityRadius, szGeneralCityRadius,
-    szGeneralLabelSizeMin, szGeneralLabelSizeMax, szGeneralLabelHoverSizeMin, szGeneralLabelHoverSizeMax,
-    szHighlightedLabelSizeMin, szHighlightedLabelSizeMax, szHighlightedLabelHoverSizeMin, szHighlightedLabelHoverSizeMax,
-    zoomRangeMin, zoomRangeMax,
-  } = useMapColors();
-
-  // Dane lotnisk z API (React Query)
-  const { data: airportsData } = useAirportsQuery();
-
-
-  // Logika obliczeniowa dla widocznych kodów lotnisk w planie podróży
-  const tripVisibleAirportCodes = useMemo(() => {
-    if (!tripState) return null;
-    return [tripState.startAirport.code, ...tripState.legs.map(l => l.toAirportCode)];
-  }, [tripState]);
-
-  // Referencje do instancji mapy i DOM – kluczowe dla wydajności (unikamy zbędnych renderów Reacta)
-  const mapContainer = useRef<HTMLDivElement | null>(null);
+  const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
-  const [webglSupported, setWebglSupported] = useState(true);
-  const isMapLoading = useRef(false);
-  const onSelectItemRef = useRef(onSelectItem);
-  const animationRef = useRef<number | null>(null);
-  const previewAnimationRef = useRef<number | null>(null);
-  
-  // Referencje pomocnicze do animacji i zarządzania stanem bez wyzwalania re-renderu
-  const completedPathsRef = useRef<GCPath[]>([]);
-  const currentAnimatingRef = useRef<GCPath[]>([]);
-  const renderedHighlightedRef = useRef<Set<string>>(new Set());
-  const hoveredRouteId = useRef<string | number | null>(null);
-  const hoveredTripRouteId = useRef<string | number | null>(null);
-  const hoveredTransferRouteId = useRef<string | number | null>(null);
-  const routeHoverAtPointRef = useRef<((point: { x: number; y: number }) => void) | null>(null);
-  const clearRouteHoverRef = useRef<((opts?: { keepLabels?: boolean }) => void) | null>(null);
-  const currentPopup = useRef<maplibregl.Popup | null>(null);
 
-  // Synchronizacja referencji z aktualnym stanem (do użytku wewnątrz stabilnych callbacków)
-  const tripVisibleAirportCodesRef = useRef<string[] | null>(null);
-  const highlightedAirportsRef = useRef<string[]>([]);
-  const airportsDataRef = useRef(airportsData);
-  const highlightedLabelCodesRef = useRef<string[]>([]); 
-  const selectedAirportCodeRef = useRef<string | null>(null);
-  const selectedAirportCodesRef = useRef<string[]>([]);
-  const explorationAirportCodesRef = useRef<string[]>([]);
-  const tripRoutesRef = useRef<TripRoute[]>([]);
-  const manualTransferAirportCodesRef = useRef<string[]>([]);
+  const { mapStyle, showAirports, globeMode } = useMapStore();
+  const {
+    selectedItem,
+    displayedFlights,
+    flightsByRouteMap,
+    flightsByRouteGroupMap
+  } = useSelectionStore();
+  const { tripState, tripRoutes, previewAirportCode, manualTransferAirportCodes } = useTripStore();
+  const tripVisibleAirportCodes = useTripVisibleAirports();
+  const { highlightedAirports, selectedAirportCodes, explorationCodes } = useHighlightedState();
+  const { language, travelDate, timezone } = useSettingsStore();
 
-  // Ref do śledzenia aktualnego stanu hover dla tras
-  const isRouteHoveredRef = useRef<boolean>(false);
+  const { coordsMap, cityMap, cityLabelCodes, cityLabelCodeByCity } = useAirportIndexes();
+  const { data: airportsGeoJSON } = useAirportsQuery();
+  const { zoomRangeMin, zoomRangeMax } = useColorStore();
 
-  // Flaga informująca, czy listenery hover zostały już przypięte do tej instancji mapy
-  const listenersAttachedRef = useRef(false);
-
-  // Parametry rozmiarów dla hoverowania tras ładowane z centralnej konfiguracji
-  const highlightedAirportHoverRadiusMinRef = useRef<number>(CONFIG.HOVER_STOP_DELAY_MS);
-  const highlightedAirportHoverRadiusMaxRef = useRef<number>(CONFIG.HOVER_CLEAR_DELAY_MS);
-  const highlightedLabelHoverSizeMinRef = useRef<number>(CONFIG.MAP_HOVER_LABEL_MIN_SIZE);
-  const highlightedLabelHoverSizeMaxRef = useRef<number>(CONFIG.MAP_HOVER_LABEL_MAX_SIZE);
-  const zoomRangeMinRef = useRef<number>(CONFIG.MAP_ZOOM_MIN_DEFAULT);
-  const zoomRangeMaxRef = useRef<number>(CONFIG.MAP_ZOOM_MAX_DEFAULT);
-
-  // Zarządzanie stanem hover lotnisk bezpośrednio przez map.setFilter (brak delayów Reacta)
-  const hoveredAirportCodeRef = useRef<string | null>(null);
-  // Kesz pixelowych pozycji widocznych lotnisk – przebudowywany przy każdym ruchu mapy (moveend)
+  // --- REFS FOR HOOKS ---
   const projectedAirportsRef = useRef<Array<{ code: string; x: number; y: number }>>([]);
+  const spatialGridRef = useRef<Record<string, string[]>>({}); // SIATKA (Faza 1): Key: "row,col", Value: [codes]
+  const hoveredAirportCodeRef = useRef<string | null>(null);
   const lastDetectedCodeRef = useRef<string | null>(null);
-  const hoverSampleCountRef = useRef(0);
+  const hoveredRouteId = useRef<string | number | null>(null);
+  const isRouteHoveredRef = useRef<boolean>(false);
   const mouseStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoverClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverSampleCountRef = useRef<number>(0);
   const hoverLockUntilRef = useRef<number>(0);
+  const pendingStyleChangeRef = useRef<boolean>(false); // ZERO WASTE: Strażnik transformacji stylu
 
-  // Mapy pomocnicze do szybkiego wyszukiwania kodów miast i współrzędnych
-  const airportNamesMap = useRef<Record<string, string>>({});
-  const airportCoordsMapRef = useRef<Record<string, [number, number]>>({});
-  const airportCityKeyRef = useRef<Record<string, string>>({});
-  const cityLabelCodeByCityRef = useRef<Record<string, string>>({});
-  const cityLabelCodesRef = useRef<string[]>([]);
+  const highlightedLabelCodesRef = useRef<string[]>([]);
   const highlightedCityLabelCodesRef = useRef<string[]>([]);
-  const flightDetailsMap = useRef<Record<string, Flight[]>>({});
-  const matchesFilterRef = useRef<((flight: Flight) => boolean) | null>(null);
+  const highlightedAirportsRef = useRef<string[]>([]);
+  const selectedAirportCodesRef = useRef<string[]>([]);
+  const explorationAirportCodesRef = useRef<string[]>([]);
+  const tripVisibleAirportCodesRef = useRef<string[] | null>(null);
+  const renderedHighlightedRef = useRef<Set<string>>(new Set());
+  const completedPathsRef = useRef<GCPath[]>([]);
+  const currentAnimatingRef = useRef<GCPath[]>([]);
+  const animationRef = useRef<number | null>(null);
 
-  // Synchronizacja selekcji z referencjami – pozwala uniknąć domknięć (closures) w eventach mapy
-  useEffect(() => {
-    onSelectItemRef.current = (item) => {
-      // W trybie planowania trasy, kliknięcie w lotnisko filtruje tylko loty do tego miejsca
-      if (
-        tripVisibleAirportCodesRef.current &&
-        tripVisibleAirportCodesRef.current.length > 0 &&
-        item.type === 'airport'
-      ) {
-        if (tripVisibleAirportCodesRef.current.includes(item.data.code)) return;
-        useFilterStore.getState().setDestinationFilter({ airports: [item.data.code], cities: [], countries: [] });
-        return;
-      }
-      onSelectItem(item);
-    };
-  }, [onSelectItem]);
+  // POPUP & HOVER TRACKING (Faza 2)
+  const currentPopup = useRef<maplibregl.Popup | null>(null);
+  const routeHoverAtPointRef = useRef<((point: { x: number; y: number }) => void) | null>(null);
+  const clearRouteHoverRef = useRef<((opts?: { keepLabels?: boolean }) => void) | null>(null);
+  const hoveredTripRouteId = useRef<string | number | null>(null);
+  const hoveredTransferRouteId = useRef<string | number | null>(null);
+  const previewAnimationRef = useRef<number | null>(null);
 
-  // Aktualizacje referencji przy zmianach stanu (stability)
-  useEffect(() => { tripVisibleAirportCodesRef.current = tripVisibleAirportCodes; }, [tripVisibleAirportCodes]);
-  useEffect(() => { highlightedAirportsRef.current = highlightedAirports; }, [highlightedAirports]);
-  useEffect(() => { airportsDataRef.current = airportsData; }, [airportsData]);
-  useEffect(() => { selectedAirportCodeRef.current = selectedAirportCode; }, [selectedAirportCode]);
-  useEffect(() => { selectedAirportCodesRef.current = selectedAirportCodes; }, [selectedAirportCodes]);
-  useEffect(() => {
-    explorationAirportCodesRef.current = explorationItems.flatMap(i => i.airportCodes);
-  }, [explorationItems]);
-  useEffect(() => { tripRoutesRef.current = tripRoutes; }, [tripRoutes]);
-  useEffect(() => { manualTransferAirportCodesRef.current = manualTransferAirportCodes; }, [manualTransferAirportCodes]);
+  const tripRoutesRef = useRef<any[]>(tripRoutes || []);
+  const tripStateRef = useRef<any>(tripState);
+  const coordsMapRef = useRef<Record<string, [number, number]>>(coordsMap || {});
 
-  // Synchronizacja parametrów hoverowania
-  useEffect(() => {
-    highlightedAirportHoverRadiusMinRef.current = szHighlightedHoverRadiusMin;
-    highlightedAirportHoverRadiusMaxRef.current = szHighlightedHoverRadiusMax;
-    highlightedLabelHoverSizeMinRef.current = szHighlightedLabelHoverSizeMin;
-    highlightedLabelHoverSizeMaxRef.current = szHighlightedLabelHoverSizeMax;
-    zoomRangeMinRef.current = zoomRangeMin;
-    zoomRangeMaxRef.current = zoomRangeMax;
-  }, [szHighlightedHoverRadiusMin, szHighlightedHoverRadiusMax, szHighlightedLabelHoverSizeMin, szHighlightedLabelHoverSizeMax, zoomRangeMin, zoomRangeMax]);
-
-  const highlightedCitiesRef = useRef<string[]>([]);
-  useEffect(() => { highlightedCitiesRef.current = highlightedCities; }, [highlightedCities]);
-
-  const previewAirportCodeRef = useRef<string | null>(null);
-  useEffect(() => { previewAirportCodeRef.current = previewAirportCode; }, [previewAirportCode]);
-
-  const travelDateRef = useRef<string | null>(null);
-  useEffect(() => { travelDateRef.current = travelDate; }, [travelDate]);
-
-  const timezoneRef = useRef<string | null>(null);
-  useEffect(() => { timezoneRef.current = timezone; }, [timezone]);
-
-  // Budowanie map pomocniczych danych po załadowaniu lotnisk
-  useEffect(() => {
-    if (airportsData) {
-      const nameMap: Record<string, string> = {};
-      const coordsMap: Record<string, [number, number]> = {};
-      const codeToCity: Record<string, string> = {};
-      const cityToCode: Record<string, string> = {};
-      airportsData.features.forEach(f => {
-        const code = f.properties.code;
-        nameMap[code] = getLocalizedProp(f.properties, 'name', language);
-        coordsMap[code] = f.geometry.coordinates as [number, number];
-        const cityKey = f.properties.city_code || code;
-        codeToCity[code] = cityKey;
-        if (!cityToCode[cityKey]) cityToCode[cityKey] = code;
-      });
-      airportNamesMap.current = nameMap;
-      airportCoordsMapRef.current = coordsMap;
-      airportCityKeyRef.current = codeToCity;
-      cityLabelCodeByCityRef.current = cityToCode;
-      cityLabelCodesRef.current = Object.values(cityToCode);
-    }
-  }, [airportsData, language]);
-
-  // Update map label expressions when language changes
-  useEffect(() => {
-    if (!map.current || !mapLoaded) return;
-    const cityLayers = ['airports-labels-normal-city', 'airports-labels-highlighted-city'];
-    for (const id of AIRPORT_LABEL_LAYERS) {
-      if (!map.current.getLayer(id)) continue;
-      const field = cityLayers.includes(id)
-        ? airportCityLabelField(language)
-        : airportLabelField(language);
-      map.current.setLayoutProperty(id, 'text-field', field);
-    }
-  }, [language, mapLoaded]);
-
-  // Mapy pomocnicze city oraz country używane do filtrowania wyników
-  const airportCityMap = useMemo<Record<string, string>>(() => {
-    if (!airportsData) return {};
-    const map: Record<string, string> = {};
-    airportsData.features.forEach(f => {
-      if (f.properties.code && f.properties.city_code) {
-        map[f.properties.code] = f.properties.city_code;
-      }
-    });
-    return map;
-  }, [airportsData]);
-
-  const airportCountryMap = useMemo<Record<string, string>>(() => {
-    if (!airportsData) return {};
-    const map: Record<string, string> = {};
-    airportsData.features.forEach(f => {
-      if (f.properties.code) {
-        map[f.properties.code] = f.properties.country_code ?? '';
-      }
-    });
-    return map;
-  }, [airportsData]);
-
-  // Funkcja sprawdzająca czy dany lot pasuje do aktualnych filtrów (analogiczna do logiki z listy lotów)
-  const matchesFilter = useCallback(
-    (flight: Flight): boolean => {
-      const hasFilters = destinationFilter.airports.length > 0 ||
-        destinationFilter.cities.length > 0 ||
-        destinationFilter.countries.length > 0 ||
-        airlineFilter.length > 0;
-
-      if (!hasFilters) return true;
-
-      const destAirport = flight.destination_airport_code;
-      const destCity = airportCityMap[destAirport];
-      const destCountry = airportCountryMap[destAirport];
-      const airline = flight.airline_code;
-
-      const destFilterActive = destinationFilter.airports.length > 0 ||
-        destinationFilter.cities.length > 0 ||
-        destinationFilter.countries.length > 0;
-
-      let destMatch = true;
-      if (destFilterActive) {
-        destMatch = !!(destAirport && destinationFilter.airports.includes(destAirport)) ||
-          !!(destCity && destinationFilter.cities.includes(destCity)) ||
-          !!(destCountry && destinationFilter.countries.includes(destCountry));
-      }
-
-      let airlineMatch = true;
-      if (airlineFilter.length > 0) {
-        airlineMatch = !!(airline && airlineFilter.includes(airline));
-      }
-
-      return destMatch && airlineMatch;
-    },
-    [destinationFilter, airlineFilter, airportCityMap, airportCountryMap]
-  );
-
-  // Przechowujemy matchesFilter w referencji żeby mieć do niego dostęp wewnątrz callbacków mapy
-  useEffect(() => {
-    matchesFilterRef.current = matchesFilter;
-  }, [matchesFilter]);
-
-  // Keep a ref for flightsData (all accumulated flights) for backward-compat uses.
-  const flightsDataRef = useRef<Flight[]>(flightsData);
-  useEffect(() => { flightsDataRef.current = flightsData; }, [flightsData]);
-
-  // displayedFlights = only the flights currently visible in the RightPanel list
-  // (today's TZ window, respecting filters). Used for route drawing and popup.
   const displayedFlightsRef = useRef<Flight[]>(displayedFlights);
-  useEffect(() => {
-    displayedFlightsRef.current = displayedFlights;
-    const map: Record<string, Flight[]> = {};
-    displayedFlights.forEach(flight => {
-      const destCode = flight.destination_airport_code;
-      if (!map[destCode]) map[destCode] = [];
-      map[destCode].push(flight);
-    });
-    flightDetailsMap.current = map;
-  }, [displayedFlights]);
+  const onSelectItemRef = useRef(onSelectItem);
+  const airportCityKeyRef = useRef(cityMap);
+  const cityLabelCodeByCityRef = useRef(cityLabelCodeByCity);
+  const cityLabelCodesInternalRef = useRef<string[]>([]);
+  const airportsDataRef = useRef(airportsGeoJSON);
 
-  // Sprawdzanie wsparcia dla WebGL przy starcie komponentu
+  // Sync Refs (Zero-Waste: automatyczna synchronizacja z selektorami queries.ts)
+  useEffect(() => { displayedFlightsRef.current = displayedFlights; }, [displayedFlights]);
+  useEffect(() => { onSelectItemRef.current = onSelectItem; }, [onSelectItem]);
+  useEffect(() => { airportCityKeyRef.current = cityMap; }, [cityMap]);
+  useEffect(() => { cityLabelCodeByCityRef.current = cityLabelCodeByCity; }, [cityLabelCodeByCity]);
+  useEffect(() => { cityLabelCodesInternalRef.current = cityLabelCodes; }, [cityLabelCodes]);
+  useEffect(() => { airportsDataRef.current = airportsGeoJSON; }, [airportsGeoJSON]);
+  
+  useEffect(() => { highlightedAirportsRef.current = highlightedAirports; }, [highlightedAirports]);
+  useEffect(() => { selectedAirportCodesRef.current = selectedAirportCodes; }, [selectedAirportCodes]);
+  useEffect(() => { explorationAirportCodesRef.current = explorationCodes; }, [explorationCodes]);
+  useEffect(() => { tripVisibleAirportCodesRef.current = tripVisibleAirportCodes; }, [tripVisibleAirportCodes]);
+  useEffect(() => { tripRoutesRef.current = tripRoutes || []; }, [tripRoutes]);
+  useEffect(() => { tripStateRef.current = tripState; }, [tripState]);
+  useEffect(() => { coordsMapRef.current = coordsMap || {}; }, [coordsMap]);
+
+  const addLayersRef = useRef<((mapInstance?: maplibregl.Map) => void) | null>(null);
+  const applyAirportFiltersRef = useRef<(() => void) | null>(null);
+
+  const selectedAirportCode = useMemo(() =>
+    selectedItem?.type === 'airport' ? selectedItem.data.code : null
+    , [selectedItem]);
+
+  // --- HOOKS ---
+  // Sync flight map for O(1) lookup during hover
+  const flightsByRouteMapRef = useRef(flightsByRouteMap);
+  const flightsByRouteGroupMapRef = useRef(flightsByRouteGroupMap);
   useEffect(() => {
-    const canvas = document.createElement('canvas');
-    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-    if (!gl) {
-      console.error('WebGL is not supported');
-      setWebglSupported(false);
+    flightsByRouteMapRef.current = flightsByRouteMap;
+    flightsByRouteGroupMapRef.current = flightsByRouteGroupMap;
+  }, [flightsByRouteMap, flightsByRouteGroupMap]);
+
+  const hoverRefs: MapHoverRefs = {
+    map, projectedAirportsRef, spatialGridRef, hoveredAirportCodeRef, lastDetectedCodeRef,
+    hoverSampleCountRef, mouseStopTimerRef, hoverClearTimerRef, hoverLockUntilRef,
+    isRouteHoveredRef, hoveredRouteId, airportCityKeyRef, cityLabelCodeByCityRef,
+    cityLabelCodesRef: cityLabelCodesInternalRef, highlightedLabelCodesRef,
+    highlightedCityLabelCodesRef, highlightedAirportsRef, selectedAirportCodesRef,
+    explorationAirportCodesRef, tripVisibleAirportCodesRef, airportsDataRef,
+    onSelectItemRef,
+    flightsByRouteMapRef,
+    selectedAirportCodeRef: { current: selectedAirportCode },
+    tripRoutesRef,
+    tripStateRef,
+    coordsMapRef
+  };
+
+  useMapHover(hoverRefs, mapLoaded, showAirports);
+  const colors = useMapColors();
+  // --- OPTYMALIZACJA WEBGL: Throttling Kolorów ---
+  const lastColorUpdateTimeRef = useRef<number>(0);
+  const colorUpdateRequestedRef = useRef<boolean>(false);
+
+  const throttledApplyColors = useCallback(() => {
+    const now = performance.now();
+    const wait = 32; // Inżynierski kompromis: ~30 FPS (płynna zmiana kolorów bez thrashingu GPU)
+    
+    if (now - lastColorUpdateTimeRef.current >= wait) {
+      if (map.current && mapLoaded) {
+        const context = {
+          selectedAirportCodes: selectedAirportCodesRef.current,
+          tripVisibleAirportCodes: tripVisibleAirportCodesRef.current,
+          highlightedAirports: highlightedAirportsRef.current,
+          manualTransferAirportCodes: manualTransferAirportCodes,
+          explorationAirportCodes: explorationAirportCodesRef.current,
+          selectedAirportCode: selectedAirportCode,
+          highlightedLabelCodes: highlightedLabelCodesRef.current,
+        };
+        applyMapColors(map.current, context);
+      }
+      lastColorUpdateTimeRef.current = now;
+      colorUpdateRequestedRef.current = false;
+    } else if (!colorUpdateRequestedRef.current) {
+      colorUpdateRequestedRef.current = true;
+      setTimeout(throttledApplyColors, wait - (now - lastColorUpdateTimeRef.current));
     }
-  }, []);
+  }, [mapLoaded, selectedAirportCode, manualTransferAirportCodes, mapStyle]);
 
-  useImperativeHandle(ref, () => ({
+  useEffect(() => {
+    if (mapLoaded) throttledApplyColors();
+  }, [mapLoaded, colors, selectedAirportCode, manualTransferAirportCodes, mapStyle, throttledApplyColors]);
+
+  useRouteAnimation({
+    map, mapLoaded, highlightedAirports, coordsMap,
+    selectedAirportCode, selectedAirportCodes, displayedFlights,
+    displayedFlightsRef, completedPathsRef, currentAnimatingRef,
+    animationRef, renderedHighlightedRef
+  });
+
+  useImperativeHandle(ref as React.Ref<MapComponentRef>, () => ({
     flyTo: (options: maplibregl.FlyToOptions) => {
-      if (map.current) {
-        map.current.flyTo(options);
-      }
+      if (map.current) map.current.flyTo(options);
     },
-    getZoom: () => {
-      return map.current?.getZoom();
-    },
+    getZoom: () => map.current?.getZoom(),
     once: (event: string, callback: (...args: unknown[]) => void) => {
-      if (map.current) {
-        map.current.once(event, callback as maplibregl.Listener);
-      }
+      if (map.current) map.current.once(event, callback as any);
     },
     fitBounds: (bounds: [[number, number], [number, number]], options?: { padding?: number; duration?: number; maxZoom?: number }) => {
-      if (map.current) map.current.fitBounds(bounds as maplibregl.LngLatBoundsLike, options);
+      if (map.current) map.current.fitBounds(bounds as LngLatBoundsLike, options);
     },
   }));
 
-  const initMapId = useRef(0);
+  // --- LOGIKA FILTROWANIA I WARSTW ---
 
-  // Główna funkcja inicjalizująca instancję mapy
-  const initMap = useCallback(() => {
-    if (!webglSupported || !mapContainer.current) return;
-
-    if (map.current) {
-      try {
-        map.current.remove();
-      } catch (e) {
-        console.warn('Error removing old map:', e);
-      }
-      map.current = null;
-      listenersAttachedRef.current = false; // Nowa instancja mapy wymaga ponownego podpięcia listenerów
-      setMapLoaded(false);
-    }
-
-    isMapLoading.current = true;
-    const initId = ++initMapId.current;
-
-    const currentGlobeMode = useMapStore.getState().globeMode;
-    const isPlugin = isArcGISPluginStyle(mapStyle);
-    const resolvedStyle = resolveMapStyle(mapStyle, currentGlobeMode);
-
-    const doCreateMap = (style: string | maplibregl.StyleSpecification) => {
-      if (initId !== initMapId.current || !mapContainer.current) return;
-      try {
-        map.current = new maplibregl.Map({
-          container: mapContainer.current,
-          style,
-          center: [19.0, 52.0],
-          zoom: 4,
-          attributionControl: false,
-          antialias: true,
-          preserveDrawingBuffer: true,
-          failIfMajorPerformanceCaveat: false,
-          desynchronized: false,
-          dragRotate: false,
-          transformRequest: arcGISTransformRequest,
-        } as maplibregl.MapOptions);
-
-        const onMapReady = () => {
-          isMapLoading.current = false;
-          setMapLoaded(true);
-          addControls();
-          addLayers();
-          const { zoomRangeMin, zoomRangeMax } = useColorStore.getState();
-          const minZ = Math.max(1, Math.min(zoomRangeMin, zoomRangeMax));
-          const maxZ = Math.min(12, Math.max(zoomRangeMin, zoomRangeMax));
-          map.current?.setMinZoom(minZ);
-          map.current?.setMaxZoom(maxZ);
-        };
-
-        map.current.on('load', () => {
-          if (isPlugin) {
-            // Styl Blank jest załadowany co pozwala na bezpieczne wywołanie applyStyle
-            const bs = BasemapStyle.applyStyle(map.current!, {
-              map: map.current!,
-              style: toPluginStyleName(mapStyle),
-              token: ARCGIS_API_KEY,
-            });
-            bs.on('BasemapStyleLoad', () => {
-              console.log('ArcGIS plugin style loaded:', mapStyle);
-              onMapReady();
-              
-              // Wstrzykiwanie własnej atrybucji dla stylów ArcGIS i przesunięcie jej do lewego dolnego rogu
-              requestAnimationFrame(() => {
-                if (!map.current) return;
-                const c = map.current.getContainer();
-                const attrib = c.querySelector<HTMLElement>('.maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib');
-                const bottomLeft = c.querySelector('.maplibregl-ctrl-bottom-left');
-                if (attrib && bottomLeft) {
-                  bottomLeft.appendChild(attrib);
-                }
-                const inner = c.querySelector('.maplibregl-ctrl-attrib-inner');
-                if (inner) {
-                  inner.innerHTML = '© <a href="https://www.esri.com/" target="_blank" rel="noopener noreferrer">Esri</a> and contributors';
-                }
-              });
-            });
-            bs.on('BasemapStyleError', (err: Error) => {
-              console.error('ArcGIS basemap style error:', err);
-              isMapLoading.current = false;
-            });
-          } else {
-            console.log('Map loaded successfully');
-            onMapReady();
-          }
-        });
-
-        map.current.on('move', () => {
-          if (!map.current || !onViewportChange) return;
-          const center = map.current.getCenter();
-          const zoom = map.current.getZoom();
-          const pitch = map.current.getPitch();
-          const bearing = map.current.getBearing();
-          onViewportChange({
-            center: [center.lng, center.lat],
-            zoom,
-            pitch,
-            bearing
-          });
-        });
-
-        map.current.on('error', (e) => {
-          console.error('Map error:', e.error?.message || e);
-        });
-      } catch (error) {
-        console.error('Error initializing map:', error);
-        isMapLoading.current = false;
-      }
-    };
-
-    // Obsługa stylów bazujących na URL w trybie globusa poprzez modyfikację specyfikacji JSON
-    if (currentGlobeMode && typeof resolvedStyle === 'string') {
-      fetch(resolvedStyle)
-        .then(r => r.json())
-        .then((json: maplibregl.StyleSpecification) => {
-          (json as any).projection = { type: 'globe' };
-          doCreateMap(json);
-        })
-        .catch(() => doCreateMap(resolvedStyle));
-    } else {
-      doCreateMap(resolvedStyle);
-    }
-  }, [mapStyle, onViewportChange, webglSupported]);
-
-  useEffect(() => {
-    initMap();
-    return () => {
-      if (map.current) {
-        try {
-          map.current.remove();
-        } catch (e) {}
-        map.current = null;
-        setMapLoaded(false);
-      }
-      isMapLoading.current = false;
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-      if (previewAnimationRef.current) {
-        cancelAnimationFrame(previewAnimationRef.current);
-      }
-      if (currentPopup.current) {
-        currentPopup.current.remove();
-      }
-    };
-  }, [initMap]);
-
-  // Funkcja addControls odpowiedzialna za dodawanie narzędzi nawigacyjnych i skali
-  const addControls = useCallback(() => {
-    if (!map.current) return;
-    try {
-      map.current.addControl(new maplibregl.NavigationControl({
-        showCompass: true,
-        showZoom: true,
-        visualizePitch: true
-      }), 'top-right');
-      map.current.addControl(new maplibregl.ScaleControl({
-        maxWidth: 120,
-        unit: 'metric'
-      }), 'bottom-right');
-      if (!isArcGISPluginStyle(mapStyle)) {
-        const isDemotiles = mapStyle === MAP_STYLES.LIGHT;
-        const customAttribution = isDemotiles
-          ? '© <a href="https://maplibre.org/">MapLibre</a> | © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          : undefined;
-        map.current.addControl(
-          new maplibregl.AttributionControl({ compact: false, customAttribution }),
-          'bottom-left'
-        );
-      }
-    } catch (error) {
-      console.error('Error adding controls:', error);
-    }
-  }, [mapStyle]);
-
-  const safeRemoveLayer = useCallback((id: string) => {
-    if (map.current && map.current.getLayer(id)) {
-      map.current.removeLayer(id);
-    }
-  }, []);
-
-  const safeRemoveSource = useCallback((id: string) => {
-    if (map.current && map.current.getSource(id)) {
-      map.current.removeSource(id);
-    }
-  }, []);
-
-  // Centralna funkcja aktualizująca filtry lotnisk i trasy podróży korzystająca z referencji
   const applyAirportFilters = useCallback(() => {
     if (!map.current) return;
     applyMapAirportFilters(
       map.current,
       {
-        tripVisibleAirportCodes: tripVisibleAirportCodesRef.current,
+        tripVisibleAirportCodes: tripVisibleAirportCodesRef.current || [],
         highlightedAirports: highlightedAirportsRef.current,
-        selectedAirportCode: selectedAirportCodeRef.current,
+        selectedAirportCode: selectedAirportCode,
         selectedAirportCodes: selectedAirportCodesRef.current ?? [],
         explorationAirportCodes: explorationAirportCodesRef.current ?? [],
         hoveredAirportCode: hoveredAirportCodeRef.current,
-        cityLabelCodes: cityLabelCodesRef.current,
+        cityLabelCodes: cityLabelCodesInternalRef.current || [],
         airportCityKeyMap: airportCityKeyRef.current,
         cityLabelCodeByCity: cityLabelCodeByCityRef.current,
-        manualTransferAirportCodes: manualTransferAirportCodesRef.current,
+        manualTransferAirportCodes: manualTransferAirportCodes,
         isRouteHovered: isRouteHoveredRef.current,
-        tripRoutes: tripRoutesRef.current,
+        tripRoutes: tripRoutes || [],
+        tripState: tripState,
+        coordsMap: coordsMap || {},
       },
       { highlightedLabelCodesRef, highlightedCityLabelCodesRef },
     );
-  }, []); // Funkcja stabilna oparta wyłącznie na referencjach
+  }, [mapLoaded, mapStyle, selectedAirportCode, manualTransferAirportCodes, tripState]);
 
-  // Funkcja applyColors aktualizuje właściwości warstw na podstawie danych z colorStore
-  const applyColors = useCallback(() => {
+  useEffect(() => {
+    applyAirportFiltersRef.current = applyAirportFilters;
+  }, [applyAirportFilters]);
+
+  useEffect(() => {
+    if (mapLoaded) applyAirportFilters();
+  }, [mapLoaded, applyAirportFilters]);
+
+  const addControls = useCallback(() => {
     if (!map.current) return;
-    applyMapColors(map.current, {
-      selectedAirportCodes: selectedAirportCodesRef.current ?? [],
-      tripVisibleAirportCodes: tripVisibleAirportCodesRef.current,
-      highlightedAirports: highlightedAirportsRef.current,
-      manualTransferAirportCodes: manualTransferAirportCodesRef.current ?? [],
-      explorationAirportCodes: explorationAirportCodesRef.current ?? [],
-      selectedAirportCode: selectedAirportCodeRef.current,
-      highlightedLabelCodes: highlightedLabelCodesRef.current,
-    });
-  }, []); // Funkcja korzysta z referencji dla zwiększenia stabilności
+    if (!map.current.hasControl(new maplibregl.NavigationControl() as any)) {
+      map.current.addControl(new maplibregl.NavigationControl(), 'top-right');
+    }
+  }, []);
 
-  // Main function adding all layers
-  const addLayers = useCallback(() => {
-    if (!map.current || !mapLoaded || isMapLoading.current) return;
+  const rebuildProjectedCache = useCallback(() => {
+    if (!map.current || !airportsDataRef.current) return;
+    const m = map.current;
+    
+    const b = m.getBounds();
+    const pad = 1.0; 
+    const minLng = b.getWest() - pad, maxLng = b.getEast() + pad;
+    const minLat = b.getSouth() - pad, maxLat = b.getNorth() + pad;
 
-      safeRemoveLayer('airports-circles');
-      safeRemoveLayer('airports-highlighted');
-      safeRemoveLayer('airports-trip');
-      safeRemoveLayer('airports-hover');
-      safeRemoveLayer('airports-selected');
-      safeRemoveLayer('airports-route-hover');
-      safeRemoveLayer('airports-labels-normal');
-      safeRemoveLayer('airports-labels-normal-city');
-      safeRemoveLayer('airports-labels-highlighted-city');
-      safeRemoveLayer('airports-labels-highlighted');
-      safeRemoveLayer('airports-labels-hover');
-      safeRemoveLayer('airports-labels-hover-general');
+    const projected = airportsDataRef.current.features
+      .filter(f => {
+        const [lng, lat] = f.geometry.coordinates;
+        return lng >= minLng && lng <= maxLng && lat >= minLat && lat <= maxLat;
+      })
+      .map(f => {
+        const p = m.project(f.geometry.coordinates as [number, number]);
+        return { code: f.properties.code, x: p.x, y: p.y };
+      });
 
-    safeRemoveLayer('routes-lines');
-    safeRemoveLayer('selected-routes');
-    safeRemoveLayer('trip-permanent-routes-line');
-    safeRemoveLayer('transfer-preview-route-line');
-    safeRemoveLayer('manual-transfer-preview-line');
-    safeRemoveSource('airports');
-    safeRemoveSource('cities');
-    safeRemoveSource('routes');
-    safeRemoveSource('selected-routes');
-    safeRemoveSource('trip-permanent-routes');
-    safeRemoveSource('transfer-preview-route');
-    safeRemoveSource('manual-transfer-preview');
+    projectedAirportsRef.current = projected;
 
+    // INŻYNIERSKA OPTYMALIZACJA (Faza 1): Budowa siatki przestrzennej (Spatial Grid)
+    // Pozwala na wyszukiwanie lotnisk w czasie O(1) podczas ruchu myszy.
+    // Używamy requestIdleCallback, aby nie blokować głównego wątku podczas zoomu/pan.
+    const GRID_SIZE = 60;
+    const processGrid = () => {
+      const grid: Record<string, string[]> = {};
+      projected.forEach(ap => {
+        const col = Math.floor(ap.x / GRID_SIZE);
+        const row = Math.floor(ap.y / GRID_SIZE);
+        const key = `${row},${col}`;
+        if (!grid[key]) grid[key] = [];
+        grid[key].push(ap.code);
+      });
+      spatialGridRef.current = grid;
+      projectedAirportsRef.current = projected;
+    };
 
-
-    setupRouteLayers(map.current);
-
-    // Airport and city layers on top of all route lines
-    if (airportsData && showAirports) {
-      addAirportsLayer(map.current, airportsData, mapStyle, language);
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(() => processGrid(), { timeout: 100 });
+    } else {
+      processGrid();
     }
 
+    // const end = performance.now();
+    // if (showConsoleLogs) console.debug(`[MapComponent] Projected ${projectedAirportsRef.current.length} airports in ${(end - start).toFixed(2)}ms`);
+  }, [airportsGeoJSON]);
 
+  // PROSTA IMPLEMENTACJA THROTTLE (Brak loda-sh - oszczędność bundle size)
+  const lastRebuildTimeRef = useRef<number>(0);
+  const rebuildRequestedRef = useRef<boolean>(false);
 
-    // Wyciąganie warstw interaktywnych na wierzch stosu aby były nad trasami i etykietami miast
-    const bringToFront = (ids: string[]) => {
-      for (const id of ids) {
-        if (map.current?.getLayer(id)) map.current.moveLayer(id);
-      }
-    };
-    bringToFront([
-      'airports-circles',
-      'airports-highlighted',
-      'airports-trip',
-      'airports-selected',
-      'airports-route-hover',
-      'airports-hover',
-      'airports-labels-normal',
-      'airports-labels-normal-city',
-      'airports-labels-highlighted-city',
-      'airports-labels-highlighted',
-      'airports-labels-hover-general',
-      'airports-labels-hover',
-    ]);
+  const throttledRebuild = useCallback(() => {
+    const now = performance.now();
+    const wait = 24; // Celujemy w ~40 FPS dla aktualizacji rzutowania (płynny hover)
+    
+    if (now - lastRebuildTimeRef.current >= wait) {
+      rebuildProjectedCache();
+      lastRebuildTimeRef.current = now;
+      rebuildRequestedRef.current = false;
+    } else if (!rebuildRequestedRef.current) {
+      rebuildRequestedRef.current = true;
+      setTimeout(throttledRebuild, wait - (now - lastRebuildTimeRef.current));
+    }
+  }, [rebuildProjectedCache]);
 
-    // Obsługa hoverowania tras oraz logika popupów delegowana do modułu routeHover.ts
+  const addLayers = useCallback((mapInstance?: maplibregl.Map) => {
+    const m = mapInstance || map.current;
+    if (!m) return;
+
+    const currentSession = currentSessionIdRef.current;
+    if ((m as any)._sessionId !== currentSession) {
+      console.log(`addLayers: ABORTING, map session ${(m as any)._sessionId} !== current session ${currentSession}`);
+      return;
+    }
+
+    const geoData = airportsDataRef.current;
+    
+    console.log(`[RACE-DEBUG] {MapComponent} -> addLayers check [sess:${(m as any)._sessionId}]`, {
+      isStyleLoaded: m.isStyleLoaded(),
+      isLoaded: m.loaded(),
+      hasGeoJSON: !!geoData,
+      geoFeatures: geoData?.features?.length ?? 0
+    });
+    
+    if (!m || !m.isStyleLoaded() || !geoData) return;
+    
+    try {
+      setupRouteLayers(m);
+      addAirportsLayer(
+        m, 
+        geoData, 
+        mapStyle, 
+        language,
+        (m as any)._sessionId
+      );
+      console.log(`[RACE-DEBUG] {MapComponent} -> addLayers SUCCESS [sess:${(m as any)._sessionId}] | Total layers: ${m.getStyle().layers?.length}`);
+    } catch (err) {
+      console.error(`[RACE-DEBUG] {MapComponent} -> addLayers FAIL [sess:${(m as any)._sessionId}]`, err);
+    }
+    
     const routeHoverRefs: RouteHoverRefs = {
       map,
       projectedAirportsRef,
@@ -644,430 +377,217 @@ const MapComponent = forwardRef<unknown, MapComponentProps>(({
       isRouteHoveredRef,
       tripVisibleAirportCodesRef,
       highlightedAirportsRef,
-      selectedAirportCodeRef,
+      selectedAirportCodeRef: { current: selectedAirportCode },
       selectedAirportCodesRef,
       explorationAirportCodesRef,
-      manualTransferAirportCodesRef,
+      manualTransferAirportCodesRef: { current: manualTransferAirportCodes },
       airportsDataRef,
       airportCityKeyRef,
       cityLabelCodeByCityRef,
       highlightedCityLabelCodesRef,
-      flightDetailsMap,
-      airportNamesMap,
-      airportCoordsMapRef,
+      flightDetailsMap: { current: {} },
+      flightsByRouteGroupMapRef,
+      airportNamesMap: { current: {} },
+      airportCoordsMapRef: { current: coordsMap || {} },
       currentPopup,
       routeHoverAtPointRef,
       clearRouteHoverRef,
       applyAirportFilters,
       texts: {
-        noFlightsForDate: t.card.noFlightsForDate,
-        clickRouteToFilter: t.card.clickRouteToFilter,
-        unknown: t.common.unknown,
-      },
-    };
-    if (!listenersAttachedRef.current) {
-      setupRouteHoverListeners(map.current, routeHoverRefs);
-      listenersAttachedRef.current = true;
-    }
-
-    const setLayerVisibility = (id: string, visible: boolean) => {
-      if (map.current?.getLayer(id)) {
-        map.current.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+        noFlightsForDate: 'Brak lotów w tym dniu',
+        clickRouteToFilter: 'Kliknij, aby filtrować trasy',
+        unknown: 'Nieznane'
       }
     };
-
-    setLayerVisibility('airports-circles', showAirports);
-    setLayerVisibility('airports-highlighted', showAirports);
-    setLayerVisibility('airports-trip', showAirports);
-    setLayerVisibility('airports-hover', showAirports);
-    setLayerVisibility('airports-selected', showAirports);
-    setLayerVisibility('airports-route-hover', showAirports);
-    setLayerVisibility('airports-labels-normal', showAirports);
-    setLayerVisibility('airports-labels-normal-city', showAirports);
-    setLayerVisibility('airports-labels-highlighted-city', showAirports);
-    setLayerVisibility('airports-labels-highlighted', showAirports);
-    setLayerVisibility('airports-labels-hover', showAirports);
-    setLayerVisibility('airports-labels-hover-general', showAirports);
-    setLayerVisibility('selected-routes', showAirports);
+    setupRouteHoverListeners(m as NonNullable<maplibregl.Map>, routeHoverRefs);
 
     applyAirportFilters();
-    applyColors();
-  }, [mapLoaded, airportsData, mapStyle, showAirports, safeRemoveLayer, safeRemoveSource, applyAirportFilters, applyColors, rightPanelRef]);
+    rebuildProjectedCache(); 
+  }, [mapStyle, language, applyAirportFilters, rebuildProjectedCache, coordsMap, manualTransferAirportCodes, selectedAirportCode]);
 
-  // Aktualizacja filtrów warstw lotnisk przy zmianie podświetlenia (bez przebudowy źródła danych)
-  useAirportLayerFilter({
-    map,
-    mapLoaded,
-    highlightedAirports,
-    previewAirportCode,
-    selectedAirportCode,
-    selectedAirportCodes,
-    explorationItems,
-    tripVisibleAirportCodes,
-    manualTransferAirportCodes,
-    cityLabelCodesRef,
-    airportCityKeyRef,
-    cityLabelCodeByCityRef,
-    isRouteHoveredRef,
-    highlightedLabelCodesRef,
-    highlightedCityLabelCodesRef,
-  });
-
-  // Synchronizacja podświetlenia miast przy zmianie stanu zaznaczenia
   useEffect(() => {
-    if (!map.current || !mapLoaded) return;
-    if (map.current.getLayer('cities-highlighted')) {
-      if (highlightedCities.length > 0) {
-        map.current.setFilter('cities-highlighted', ['in', 'code', ...highlightedCities]);
-        map.current.setFilter('cities-labels-highlighted', ['in', 'code', ...highlightedCities]);
-      } else {
-        map.current.setFilter('cities-highlighted', ['in', 'code', '']);
-        map.current.setFilter('cities-labels-highlighted', ['in', 'code', '']);
-      }
-    }
-  }, [highlightedCities, mapLoaded]);
+    addLayersRef.current = addLayers;
+  }, [addLayers]);
 
-  // Utrzymywanie spójności kolorów hovera z zaznaczonymi lotniskami
-  useEffect(() => {
-    if (!map.current || !mapLoaded) return;
-    applyColors();
-  }, [highlightedAirports, selectedAirportCode, selectedAirportCodes, explorationItems, tripVisibleAirportCodes, manualTransferAirportCodes, mapLoaded, applyColors]);
+  const currentSessionIdRef = useRef<number>(0);
 
-  // Przebudowa kesza projekcji lotnisk do przestrzeni pikseli przy każdym ruchu mapy.
-  // Zdarzenie move odpala się z częstotliwością odświeżania ekranu co zapewnia płynność.
-  // Dzięki temu mousemove wykonuje tylko proste operacje arytmetyczne na gotowej tablicy.
-  useEffect(() => {
-    if (!mapLoaded || !map.current || !airportsData) return;
-    const m = map.current;
-
-    const rebuildCache = () => {
-      const b = m.getBounds();
-      const pad = 1;
-      const minLng = b.getWest() - pad, maxLng = b.getEast() + pad;
-      const minLat = b.getSouth() - pad, maxLat = b.getNorth() + pad;
-      const result: Array<{ code: string; x: number; y: number }> = [];
-      for (const feat of airportsData.features) {
-        const [lng, lat] = feat.geometry.coordinates as [number, number];
-        if (lng < minLng || lng > maxLng || lat < minLat || lat > maxLat) continue;
-        const px = m.project([lng, lat]);
-        result.push({ code: feat.properties.code, x: px.x, y: px.y });
-      }
-      projectedAirportsRef.current = result;
-    };
-
-    rebuildCache();
-
-    // Ograniczanie częstotliwości przebudowy kesza za pomocą requestAnimationFrame podczas animacji.
-    // Zapobiega to efektowi przesunięcia hovera przy bezwładnym przesuwaniu mapy (inertia pan).
-    let rafId: number | null = null;
-    const scheduleRebuild = () => {
-      if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => { rafId = null; rebuildCache(); });
-    };
-
-    const onMoveEnd = () => {
-      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
-      rebuildCache();
-      // Czyszczenie starego stanu hover opartego na nieaktualnych pozycjach z kesza
-      hoveredAirportCodeRef.current = null;
-      lastDetectedCodeRef.current = null;
-      if (m.getLayer('airports-hover')) m.setFilter('airports-hover', ['==', 'code', '']);
-    };
-
-    m.on('move', scheduleRebuild);
-    m.on('moveend', onMoveEnd);
-    return () => {
-      m.off('move', scheduleRebuild);
-      m.off('moveend', onMoveEnd);
-      if (rafId !== null) cancelAnimationFrame(rafId);
-    };
-  }, [mapLoaded, airportsData]);
-
-  // Podpięcie logiki hovera lotnisk do surowego zdarzenia mousemove na płótnie mapy
-  const hoverRefs: MapHoverRefs = {
-    map,
-    projectedAirportsRef,
-    hoveredAirportCodeRef,
-    lastDetectedCodeRef,
-    hoverSampleCountRef,
-    mouseStopTimerRef,
-    hoverClearTimerRef,
-    hoverLockUntilRef,
-    isRouteHoveredRef,
-    hoveredRouteId,
-    airportCityKeyRef,
-    cityLabelCodeByCityRef,
-    cityLabelCodesRef,
-    highlightedLabelCodesRef,
-    highlightedCityLabelCodesRef,
-    highlightedAirportsRef,
-    selectedAirportCodesRef,
-    explorationAirportCodesRef,
-    tripVisibleAirportCodesRef,
-    airportsDataRef,
-    onSelectItemRef,
-  };
-  useMapHover(hoverRefs, mapLoaded, showAirports);
-
-
-  // Odświeżanie stałych tras podróży użytkownika (permanentny trip)
-  useEffect(() => {
-    if (!map.current || !mapLoaded) return;
-    const source = map.current.getSource('trip-permanent-routes') as maplibregl.GeoJSONSource | undefined;
-    if (!source) return;
-    const features = tripRoutes.map((route, i) => ({
-      type: 'Feature' as const,
-      id: i,
-      geometry: { type: 'LineString' as const, coordinates: generateGreatCircle(route.from, route.to) },
-      properties: {}
-    }));
-    source.setData({ type: 'FeatureCollection', features });
-  }, [tripRoutes, mapLoaded]);
-
-  // Rysowanie przerywanych linii podglądu dla ręcznego dodawania lotnisk przesiadkowych
-  useEffect(() => {
-    if (!map.current || !mapLoaded || !airportsData) return;
-    const source = map.current.getSource('manual-transfer-preview') as maplibregl.GeoJSONSource | undefined;
-    if (!source) return;
-
-    const features: Array<{ type: 'Feature'; id: number; geometry: { type: 'LineString'; coordinates: number[][] }; properties: Record<string, unknown> }> = [];
-    let id = 0;
-
-    if (tripState && manualTransferAirportCodes.length > 0) {
-      const currentCode = tripState.legs.length > 0
-        ? tripState.legs[tripState.legs.length - 1].toAirportCode
-        : tripState.startAirport.code;
-      const currentFeat = airportsData.features.find(f => f.properties.code === currentCode);
-      if (currentFeat) {
-        for (const code of manualTransferAirportCodes) {
-          const feat = airportsData.features.find(f => f.properties.code === code);
-          if (feat) {
-            features.push({
-              type: 'Feature',
-              id: id++,
-              geometry: {
-                type: 'LineString',
-                coordinates: generateGreatCircle(
-                  currentFeat.geometry.coordinates as [number, number],
-                  feat.geometry.coordinates as [number, number]
-                ),
-              },
-              properties: {},
-            });
-          }
-        }
-      }
-    }
-    source.setData({ type: 'FeatureCollection', features });
-  }, [manualTransferAirportCodes, tripState, airportsData, mapLoaded]);
-
-  // Animacja podglądu dla lotniska wybranego manualnie jako przesiadka
-  useEffect(() => {
-    if (!map.current || !mapLoaded || !airportsData) return;
-    startPreviewAnimation(map.current, previewAnimationRef, previewAirportCode, selectedAirportCode, airportsData);
-  }, [previewAirportCode, selectedAirportCode, airportsData, mapLoaded]);
-
-  // Aktualizacja filtru zaznaczonego lotniska (steruje widocznością kółka zaznaczenia)
-  useEffect(() => {
-    if (!map.current || !mapLoaded) return;
-    const layer = map.current.getLayer('airports-selected');
-    if (layer) {
-      if (selectedAirportCodes && selectedAirportCodes.length > 0) {
-        map.current.setFilter('airports-selected', ['in', 'code', ...selectedAirportCodes]);
-      } else if (selectedAirportCode) {
-        map.current.setFilter('airports-selected', ['==', 'code', selectedAirportCode]);
-      } else {
-        map.current.setFilter('airports-selected', ['==', 'code', '']);
-      }
-    }
-  }, [selectedAirportCode, selectedAirportCodes, mapLoaded]);
-
-  // Przebudowa wszystkich warstw przy zmianie danych bazowych lub stylu mapy
-  useEffect(() => {
-    if (!mapLoaded) return;
-    addLayers();
-  }, [mapLoaded, airportsData, /*citiesData,*/ mapStyle, addLayers]);
-
-
-    // Automatyczne dostosowanie koloru etykiet jeśli użytkownik nie ustawił własnych barw.
-    // Light style otrzymuje ciemne napisy a dark style jasne dla zachowania kontrastu.
-  useEffect(() => {
-    if (!mapLoaded) return;
+  const doCreateMap = (styleUrl: string | maplibregl.StyleSpecification) => {
+    const sessionId = ++currentSessionIdRef.current;
+    const finalStyle = typeof styleUrl === 'string' ? `${styleUrl}?t=${Date.now()}` : styleUrl;
     
-    // Determine style-default halo color (light style = white, dark style = black)
-    const isLight = !mapStyle || (
-      !mapStyle.includes('dark-matter') &&
-      !mapStyle.includes('satelite') &&          // legacy typo kept for any cached value
-      !mapStyle.startsWith(MAP_STYLES.ARCGIS_SATELLITE) && // our inline satellite styles
-      !isArcGISPluginStyle(mapStyle)             // arcgis/imagery etc. are dark/satellite
-    );
-    const styleDefaultHalo = isLight ? THEME_COLORS.textInverse : THEME_COLORS.textBlack;
+    console.log(`[RACE-DEBUG] {MapComponent} -> doCreateMap [NEW session:${sessionId}] | Style:`, typeof finalStyle === 'string' ? finalStyle : 'spec');
     
-    // Calculate opposite text color
-    const styleDefaultText = getTextColorForHaloColor(styleDefaultHalo);
-    
-    // Get current color state
-    const currentState = useColorStore.getState();
-    
-    // Update only if current colors are black/white (meaning user hasn't customized them)
-    const updates: any = {};
-    
-    if (isBlackOrWhiteColor(currentState.generalLabelColor)) {
-      updates.generalLabelColor = styleDefaultText;
+    if (!mapContainer.current) {
+      console.warn('doCreateMap: mapContainer.current is null!');
+      return;
     }
-    if (isBlackOrWhiteColor(currentState.generalLabelHoverColor)) {
-      updates.generalLabelHoverColor = styleDefaultText;
-    }
-    if (isBlackOrWhiteColor(currentState.destinationLabelColor)) {
-      updates.destinationLabelColor = styleDefaultText;
-    }
-    if (isBlackOrWhiteColor(currentState.destinationLabelHoverColor)) {
-      updates.destinationLabelHoverColor = styleDefaultText;
-    }
-    if (isBlackOrWhiteColor(currentState.tripLabelColor)) {
-      updates.tripLabelColor = styleDefaultText;
-    }
-    if (isBlackOrWhiteColor(currentState.tripLabelHoverColor)) {
-      updates.tripLabelHoverColor = styleDefaultText;
-    }
-    
-    // Also update start points labels, but only if they are black/white
-    updates.startPoints = currentState.startPoints.map(sp => {
-      const updated = { ...sp };
-      if (isBlackOrWhiteColor(sp.label)) {
-        updated.label = styleDefaultText;
-      }
-      if (isBlackOrWhiteColor(sp.labelHover)) {
-        updated.labelHover = styleDefaultText;
-      }
-      return updated;
-    });
-    
-    useColorStore.setState(updates);
-  }, [mapLoaded, mapStyle]);
 
-  // Aktywacja rzutu (projekcji) globusa lub płaskiego merkatora przy zmianie trybu globeMode
-  useEffect(() => {
-    if (!map.current || !mapLoaded) return;
+    // Clean up previous map if exists (atomic replace)
+    if (map.current) {
+      console.log(`doCreateMap [session:${sessionId}]: cleaning up previous map instance`);
+      map.current.remove();
+      map.current = null;
+    }
+
     try {
-      (map.current as any).setProjection(globeMode ? { type: 'globe' } : { type: 'mercator' });
+      const instance = new maplibregl.Map({
+        container: mapContainer.current,
+        style: finalStyle,
+        center: [19.0, 52.0],
+        zoom: 4,
+        attributionControl: true as any,
+        antialias: true,
+        transformRequest: (url: string, resourceType?: string) => {
+          return arcGISTransformRequest(url, resourceType);
+        },
+      } as any);
+
+      map.current = instance;
+      (instance as any)._sessionId = sessionId;
+      (instance as any)._currentStyleUrl = finalStyle;
+
+      instance.on('load', () => {
+        if (sessionId !== currentSessionIdRef.current) {
+          console.warn(`[RACE-DEBUG] {MapComponent} -> on(load) ABORTED [sess:${sessionId} !== current:${currentSessionIdRef.current}]`);
+          return;
+        }
+        console.log(`[RACE-DEBUG] {MapComponent} -> on(load) [sess:${sessionId}]`);
+        setMapLoaded(true);
+        addControls();
+        addLayersRef.current?.(instance);
+        applyAirportFiltersRef.current?.();
+      });
+
+      instance.on('styledata', () => {
+        if (sessionId !== currentSessionIdRef.current) return;
+        const isLoaded = instance.isStyleLoaded();
+        console.log(`[RACE-DEBUG] {MapComponent} -> on(styledata) [sess:${sessionId}] | isLoaded: ${isLoaded}`);
+        
+        // Zero-Waste: Tylko jeśli styl jest w pełni gotowy i nie jesteśmy w trakcie zmiany
+        if (isLoaded && !pendingStyleChangeRef.current) {
+          addLayersRef.current?.(instance);
+          applyAirportFiltersRef.current?.();
+        }
+      });
+
+      instance.on('styleimagemissing', (e: any) => {
+        if (sessionId !== currentSessionIdRef.current) return;
+        const id = e.id;
+        const canvas = document.createElement('canvas');
+        canvas.width = 1; canvas.height = 1;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          const data = ctx.getImageData(0, 0, 1, 1).data;
+          instance.addImage(id, { width: 1, height: 1, data: new Uint8Array(data) });
+        }
+      });
+
+      instance.on('move', () => {
+        if (sessionId !== currentSessionIdRef.current) return;
+        throttledRebuild();
+      });
     } catch (e) {
-      console.warn('setProjection failed:', e);
+      console.error('Failed to create map:', e);
     }
-  }, [mapLoaded, globeMode]);
+  };
 
+  // --- CYKL ŻYCIA MAPY (Initialization & Zero-Waste Style Switching) ---
 
-  // Przełączanie widoczności warstw bez przeładowywania zasobów mapy
+  // Inicjalizacja i czyszczenie (Tylko raz przy mountowaniu komponentu)
   useEffect(() => {
-    if (!map.current || !mapLoaded || isMapLoading.current) return;
+    const initialState = useMapStore.getState();
+    doCreateMap(resolveMapStyle(initialState.mapStyle, initialState.globeMode));
+    return () => {
+      if (map.current) {
+        map.current.remove();
+        map.current = null;
+      }
+      setMapLoaded(false);
+    };
+  }, []);
 
-    const setLayerVisibility = (id: string, visible: boolean) => {
-      if (map.current?.getLayer(id)) {
-        map.current.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+  // Płynna zmiana stylu (Faza 2: Style Diffing & Atomic Re-addition)
+  useEffect(() => {
+    if (!mapLoaded || !map.current || pendingStyleChangeRef.current) return;
+    
+    const rawUrl = resolveMapStyle(mapStyle, globeMode);
+    const m = map.current;
+    if (!m) return;
+
+    // Zero-Waste: Unikaj resetowania stylu, jeśli jest taki sam
+    if ((m as any)._currentStyleUrl === rawUrl) return;
+
+    pendingStyleChangeRef.current = true;
+    (m as any)._currentStyleUrl = rawUrl;
+    
+    const isArcGIS = mapStyle.startsWith('ArcGIS_');
+    const styleWithBuster = typeof rawUrl === 'string' ? `${rawUrl}?t=${Date.now()}` : rawUrl;
+
+    console.log(`[RACE-DEBUG] {MapComponent} -> setStyle START [sess:${(m as any)._sessionId}] | Style: ${mapStyle}, Diff: ${!isArcGIS}`);
+
+    // JAWNE CZYSZCZENIE przed zmianą (Zapobiega konfliktom w silniku Placement)
+    removeAirportsLayer(m);
+    removeRouteLayers(m);
+
+    m.setStyle(styleWithBuster, { diff: !isArcGIS });
+
+    const finalize = () => {
+      if ((m as any)._sessionId === currentSessionIdRef.current) {
+        console.log(`[RACE-DEBUG] {MapComponent} -> setStyle FINALIZED (idle) [sess:${(m as any)._sessionId}]`);
+        addLayers(m);
+        pendingStyleChangeRef.current = false;
       }
     };
 
-    setLayerVisibility('airports-circles', showAirports);
-    setLayerVisibility('airports-highlighted', showAirports);
-    setLayerVisibility('airports-trip', showAirports);
-    setLayerVisibility('airports-hover', showAirports);
-    setLayerVisibility('airports-selected', showAirports);
-    setLayerVisibility('airports-route-hover', showAirports);
-    setLayerVisibility('airports-labels-normal', showAirports);
-    setLayerVisibility('airports-labels-normal-city', showAirports);
-    setLayerVisibility('airports-labels-highlighted-city', showAirports);
-    setLayerVisibility('airports-labels-highlighted', showAirports);
-    setLayerVisibility('airports-labels-hover', showAirports);
-    setLayerVisibility('airports-labels-hover-general', showAirports);
-    // setLayerVisibility('cities-circles', showCities);
-    // setLayerVisibility('cities-labels', showCities);
-    // setLayerVisibility('cities-highlighted', showCities);
-    // setLayerVisibility('cities-labels-highlighted', showCities);
-    // setLayerVisibility('routes-lines', showRoutes);
-    setLayerVisibility('selected-routes', showAirports /*|| showCities*/);
-  }, [showAirports, /*showCities,*/ mapLoaded]);
+    // Hybrydowy strażnik: czekamy na 'idle' (ciężkie style) lub 'styledata' (lekkie)
+    m.once('idle', finalize);
+  }, [mapStyle, globeMode, mapLoaded, addLayers]);
 
-  // Logika animacji tras obsługująca rysowanie linii dla wszystkich wyświetlanych lotów
-  useRouteAnimation({
-    map,
-    mapLoaded,
-    highlightedAirports,
-    airportsData,
-    selectedAirportCode,
-    selectedAirportCodes,
-    displayedFlights,
-    displayedFlightsRef,
-    completedPathsRef,
-    currentAnimatingRef,
-    animationRef,
-    renderedHighlightedRef,
-  });
-
-  // Reaplikacja wszystkich kolorów przy zmianie dowolnego parametru w colorStore
+  // Reakcja na dane (tylko jeśli mapa już jest stabilna)
   useEffect(() => {
-    if (!map.current || !mapLoaded) return;
-    applyColors();
-  }, [
-    mapLoaded, applyColors,
-    // Color store subscriptions (trigger re-run when any color changes):
-    startPoints, clrGeneral, clrDestination, clrTripAirport,
-    clrTripRoute, clrTransferRoute,
-    clrTripHover, clrGeneralHover, clrDestinationHover, clrTransferRouteHover,
-    clrGeneralLabelHover, clrGeneralLabel, clrDestinationLabel, clrDestinationLabelHover, clrTripLabel, clrTripLabelHover,
-    szRouteWidthMin, szRouteWidthMax, szRouteHoverWidthMin, szRouteHoverWidthMax,
-    szTripRouteWidthMin, szTripRouteWidthMax, szTripRouteHoverWidthMin, szTripRouteHoverWidthMax,
-    szHighlightedRadiusMin, szHighlightedRadiusMax, szHighlightedHoverRadiusMin, szHighlightedHoverRadiusMax,
-    szGeneralRadiusMin, szGeneralRadiusMax, szGeneralHoverRadiusMin, szGeneralHoverRadiusMax,
-    clrHighlightedCity, clrGeneralCity, szHighlightedCityRadius, szGeneralCityRadius,
-    szGeneralLabelSizeMin, szGeneralLabelSizeMax, szGeneralLabelHoverSizeMin, szGeneralLabelHoverSizeMax,
-    szHighlightedLabelSizeMin, szHighlightedLabelSizeMax, szHighlightedLabelHoverSizeMin, szHighlightedLabelHoverSizeMax,
-    zoomRangeMin, zoomRangeMax,
-    // Also re-apply when selected airports change (for per-airport color matching):
-    selectedAirportCodes, tripVisibleAirportCodes,
-  ]);
-
-  // Fly to zoom when requested from settings panel
-  useEffect(() => {
-    if (flyToZoom !== null && map.current && mapLoaded) {
-      map.current.flyTo({ zoom: flyToZoom });
-      setFlyToZoom(null);
+    if (mapLoaded && airportsGeoJSON && !pendingStyleChangeRef.current) {
+      addLayers();
     }
-  }, [flyToZoom, mapLoaded, setFlyToZoom]);
+  }, [mapLoaded, airportsGeoJSON, addLayers]);
 
-  // Wymuszanie zakresu przybliżenia zdefiniowanego w ustawieniach systemu
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
-    const minZ = Math.max(1, Math.min(zoomRangeMin, zoomRangeMax));
-    const maxZ = Math.min(12, Math.max(zoomRangeMin, zoomRangeMax));
+    const minZ = Math.min(zoomRangeMin, zoomRangeMax);
+    const maxZ = Math.max(zoomRangeMin, zoomRangeMax);
     map.current.setMinZoom(minZ);
     map.current.setMaxZoom(maxZ);
-    const current = map.current.getZoom();
-    if (current < minZ || current > maxZ) {
-      map.current.setZoom(Math.min(maxZ, Math.max(minZ, current)));
-    }
-  }, [zoomRangeMin, zoomRangeMax, mapLoaded]);
+  }, [mapLoaded, zoomRangeMin, zoomRangeMax]);
 
-  if (!webglSupported) {
-    return (
-      <div style={{
-        width: '100%', height: '100%',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        backgroundColor: THEME_COLORS.gray100, color: THEME_COLORS.gray600,
-        fontFamily: 'Arial, sans-serif', padding: '20px', textAlign: 'center'
-      }}>
-        <div>
-          <h3 style={{ marginBottom: '10px', color: THEME_COLORS.errorRed }}>{t.errors.mapNotLoaded}</h3>
-          <p>{t.errors.webglNotSupported}</p>
-        </div>
-      </div>
-    );
-  }
+  // --- RESTORED: TRIP PREVIEWS (Animation) ---
+
+  // Preview Animation (Pulsing Circle)
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !mapLoaded || !airportsGeoJSON) return;
+    const sessionId = (m as any)._sessionId;
+
+    if (sessionId !== currentSessionIdRef.current) return;
+    startPreviewAnimation(m, previewAnimationRef, previewAirportCode, selectedAirportCode, coordsMap);
+
+    return () => {
+      if (previewAnimationRef.current) {
+        cancelAnimationFrame(previewAnimationRef.current);
+        previewAnimationRef.current = null;
+      }
+    };
+  }, [previewAirportCode, selectedAirportCode, airportsGeoJSON, mapLoaded]);
+
 
   return (
     <div className="map-root">
-      <div ref={mapContainer} className="map" />
+      <div
+        ref={mapContainer}
+        className="map"
+      />
+      {!mapLoaded && <div className="map-loader">Ładowanie mapy...</div>}
     </div>
   );
 });
 
+MapComponent.displayName = 'MapComponent';
 export default MapComponent;

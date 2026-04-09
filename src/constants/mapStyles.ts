@@ -1,12 +1,29 @@
 export const MAP_STYLES = {
-  LIGHT: "https://demotiles.maplibre.org/style.json",
-  DARK_MATTER: "https://tiles.basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
-  POSITRON: "https://tiles.basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-  VOYAGER: "https://tiles.basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
-  ARCGIS_SATELLITE: "arcgis:satellite",
-  ARCGIS_IMAGERY: "arcgis:imagery",
-  ARCGIS_CHARTED: "arcgis:charted-territory",
-  ARCGIS_COMMUNITY: "arcgis:community"
+  LIGHT: "MapLibre_Light",
+  ARCGIS_IMAGERY: "ArcGIS_Imagery",
+  ARCGIS_CHARTED: "ArcGIS_ChartedTerritory",
+  ARCGIS_COMMUNITY: "ArcGIS_Community",
+  ARCGIS_HUMAN_GEOGRAPHY: "ArcGIS_HumanGeography"
+} as const;
+
+export type MapStyleKey = keyof typeof MAP_STYLES;
+
+/**
+ * Rozwiązuje URL stylu mapy na podstawie wybranego stylu i trybu Globu.
+ * Dla stylów ArcGIS wybiera lokalny, statyczny plik JSON (zoptymalizowany diff).
+ */
+export const resolveMapStyle = (mapStyle: string, globeMode: boolean): string => {
+  // Jeśli styl jest kluczem zestawu ArcGIS (np. ArcGIS_Imagery)
+  if (mapStyle.startsWith("ArcGIS_")) {
+    const base = mapStyle;
+    const suffix = globeMode ? "_globe" : "";
+    return `/data/styles/${base}${suffix}.json`;
+  }
+
+  // Dla zewnętrznych stylów (MapLibre Demo, Carto) zwracamy oryginalny URL
+  // Uwaga: Te style mogą nie wspierać płynnego diffa dla Globu bez dodatkowej obróbki
+  const found = Object.values(MAP_STYLES).find(v => v === mapStyle);
+  return found || mapStyle;
 };
 
 export const MAP_ASSETS = {

@@ -1,10 +1,7 @@
 import { useState, useRef, useCallback, useMemo } from 'react';
 import type { Country, City, Airport, SearchPhaseInfo } from '../types';
-import type { AirportFeatureProps } from '../types';
-import type { Feature, Point } from 'geojson';
 import { useSettingsStore } from '../stores/settingsStore';
-import { useAirportsQuery } from './queries';
-import { getLocalizedProp } from '../utils/geoUtils';
+import { useAirportsMap, useSearchIndex } from './queries';
 
 type PhaseData = { 1: Country[]; 2: Country[]; 3: Country[] };
 type HasMore = { 1: boolean; 2: boolean; 3: boolean };
@@ -34,55 +31,17 @@ function normalize(str: string): string {
   return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-function featureToAirport(f: Feature<Point, AirportFeatureProps>, lang: string): Airport {
-  return {
-    type: 'airport',
-    code: f.properties.code,
-    name: getLocalizedProp(f.properties, 'name', lang),
-    city_code: f.properties.city_code,
-    city_name: getLocalizedProp(f.properties, 'city_name', lang),
-    country_code: f.properties.country_code,
-    country_name: getLocalizedProp(f.properties, 'country_name', lang),
-  };
-}
-
-function buildIndex(features: Feature<Point, AirportFeatureProps>[], lang: string) {
-  const countryMap: Record<string, { name: string; cities: Record<string, { name: string; airports: Airport[] }> }> = {};
-
-  for (const f of features) {
-    const { code, city_code, country_code } = f.properties;
-    const country_name = getLocalizedProp(f.properties, 'country_name', lang);
-    const city_name = getLocalizedProp(f.properties, 'city_name', lang);
-    if (!country_code || !city_code) continue;
-    if (!countryMap[country_code]) {
-      countryMap[country_code] = { name: country_name || country_code, cities: {} };
-    }
-    if (!countryMap[country_code].cities[city_code]) {
-      countryMap[country_code].cities[city_code] = { name: city_name || city_code, airports: [] };
-    }
-    countryMap[country_code].cities[city_code].airports.push(featureToAirport(f, lang));
-  }
-
-  const countriesCache: Record<string, CountryCacheEntry> = {};
-  const citiesCache: Record<string, CityCacheEntry> = {};
-  const now = Date.now();
-
-  for (const [cc, { cities }] of Object.entries(countryMap)) {
-    const cityList: City[] = Object.entries(cities)
-      .map(([cityCode, { name, airports }]) => {
-        citiesCache[cityCode] = { airports, fetchedAt: now };
-        return { type: 'city' as const, code: cityCode, name, country_code: cc, airports };
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
-    countriesCache[cc] = { cities: cityList, pagination: { offset: cityList.length, hasMore: false, total: cityList.length }, fetchedAt: now };
-  }
-
-  return { countryMap, countriesCache, citiesCache };
-}
-
+/**
+ * LOGIKA WYSZUKIWANIA (Phases 1-3)
+ * 
+ * Implementacja wzorca "Progressive Disclosure". Wyszukiwarka filtruje dane 
+ * w trzech fazach (Dokładne dopasowanie kraju -> Miasta -> Lotniska), 
+ * zapewniając czytelność wyników przy dużych zbiorach danych.
+ */
 function computePhaseData(
-  countryMap: Record<string, { name: string; cities: Record<string, { name: string; airports: Airport[] }> }>,
+  countryMap: Record<string, { name: string; n: string; cities: Record<string, { name: string; n: string; airports: Airport[] }> }>,
   query: string,
+  iataMap: Record<string, Airport>,
 ): { phaseData: PhaseData; searchMode: 'prefix' | 'contains'; exactAirport: Airport | null; phase2Cache: Record<string, PhaseCacheEntry>; phase3Cache: Record<string, PhaseCacheEntry> } {
   const q = normalize(query.trim());
 
@@ -94,21 +53,12 @@ function computePhaseData(
     return { phaseData: { 1: allCountries, 2: [], 3: [] }, searchMode: 'prefix', exactAirport: null, phase2Cache: {}, phase3Cache: {} };
   }
 
-  // Exact IATA match (3 chars)
-  let exactAirport: Airport | null = null;
-  if (q.length === 3) {
-    for (const { cities } of Object.values(countryMap)) {
-      for (const { airports } of Object.values(cities)) {
-        const found = airports.find(a => a.code.toLowerCase() === q);
-        if (found) { exactAirport = found; break; }
-      }
-      if (exactAirport) break;
-    }
-  }
+  // Exact IATA match (3 chars) - O(1)
+  const exactAirport = q.length === 3 ? (iataMap[q] || null) : null;
 
   for (const mode of ['prefix', 'contains'] as const) {
-    const matches = (str: string) => {
-      const n = normalize(str);
+    const matches = (n?: string) => {
+      if (!n) return false;
       return mode === 'prefix' ? n.startsWith(q) : n.includes(q);
     };
 
@@ -117,8 +67,8 @@ function computePhaseData(
     const p3Cache: Record<string, PhaseCacheEntry> = {};
     const now = Date.now();
 
-    for (const [cc, { name: countryName, cities }] of Object.entries(countryMap)) {
-      if (matches(countryName)) {
+    for (const [cc, { name: countryName, n: countryN, cities }] of Object.entries(countryMap)) {
+      if (matches(countryN)) {
         const cityList = Object.entries(cities)
           .map(([cityCode, { name, airports }]) => ({ type: 'city' as const, code: cityCode, name, country_code: cc, airports }))
           .sort((a, b) => a.name.localeCompare(b.name));
@@ -129,11 +79,11 @@ function computePhaseData(
       const matchingCities: City[] = [];
       const airportMatchCities: City[] = [];
 
-      for (const [cityCode, { name: cityName, airports }] of Object.entries(cities)) {
-        if (matches(cityName)) {
+      for (const [cityCode, { name: cityName, n: cityN, airports }] of Object.entries(cities)) {
+        if (matches(cityN)) {
           matchingCities.push({ type: 'city', code: cityCode, name: cityName, country_code: cc, airports });
         } else {
-          const matched = airports.filter(a => matches(a.name));
+          const matched = airports.filter(a => matches(a.n));
           if (matched.length > 0) {
             airportMatchCities.push({ type: 'city', code: cityCode, name: cityName, country_code: cc, airports: matched });
           }
@@ -164,17 +114,34 @@ function computePhaseData(
 }
 
 export function useSearchData({ query }: UseSearchDataParams) {
-  const language = useSettingsStore(s => s.language);
-  const { data: airportsData } = useAirportsQuery();
+  const airportsMap = useAirportsMap();
+  const { countryMap, iataMap } = useSearchIndex();
 
-  const { countryMap, countriesCache, citiesCache } = useMemo(
-    () => airportsData ? buildIndex(airportsData.features, language) : { countryMap: {}, countriesCache: {}, citiesCache: {} },
-    [airportsData, language],
-  );
+  const { countriesCache, citiesCache } = useMemo(() => {
+    const ccCache: Record<string, CountryCacheEntry> = {};
+    const ciCache: Record<string, CityCacheEntry> = {};
+    const now = Date.now();
+
+    for (const [cc, { cities }] of Object.entries(countryMap)) {
+      const cityList: City[] = Object.entries(cities)
+        .map(([cityCode, { name, airports }]) => {
+          ciCache[cityCode] = { airports, fetchedAt: now };
+          return { type: 'city' as const, code: cityCode, name, country_code: cc, airports };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+      
+      ccCache[cc] = { 
+        cities: cityList, 
+        pagination: { offset: cityList.length, hasMore: false, total: cityList.length }, 
+        fetchedAt: now 
+      };
+    }
+    return { countriesCache: ccCache, citiesCache: ciCache };
+  }, [countryMap]);
 
   const { phaseData, searchMode, exactAirport, phase2Cache, phase3Cache } = useMemo(
-    () => computePhaseData(countryMap, query),
-    [countryMap, query],
+    () => computePhaseData(countryMap, query, iataMap),
+    [countryMap, query, iataMap],
   );
 
   const currentPhase = useMemo<1 | 2 | 3>(() => {
@@ -193,7 +160,7 @@ export function useSearchData({ query }: UseSearchDataParams) {
     total_in_current_phase: phaseData[currentPhase].length,
   }), [phaseData, currentPhase]);
 
-  const loading = { search: !airportsData, expand: false };
+  const loading = { search: Object.keys(airportsMap).length === 0, expand: false };
 
   const [isMainScrollPaused, setIsMainScrollPaused] = useState(false);
   const [activeNestedScrolls, setActiveNestedScrolls] = useState(new Set<string>());

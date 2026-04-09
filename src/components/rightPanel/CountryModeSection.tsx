@@ -1,11 +1,11 @@
 import React from 'react';
-import type { FeatureCollection, Point } from 'geojson';
-import type { AirportFeatureProps, CountryAirport } from '../../types';
 import { useTexts } from '../../hooks/useTexts';
 import { CONFIG } from '../../constants/config';
 import type { buildTzGroups } from '../../utils/timezoneUtils';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { getLocalizedProp } from '../../utils/geoUtils';
+import { getLocalizedProp } from '../../utils/i18n';
+import { useAirportsMap } from '../../hooks/queries';
+import type { CountryAirport } from '../../types';
 
 type TzGroups = ReturnType<typeof buildTzGroups>;
 
@@ -16,7 +16,6 @@ interface CountryModeSectionProps {
   selectedFlatAirports: CountryAirport[];
   onAirportToggle: (airport: CountryAirport) => void;
   onConfirm: () => void;
-  airportsData: FeatureCollection<Point, AirportFeatureProps> | undefined;
   getCountryTzRelativeOffset: (tz: string) => string | null;
 }
 
@@ -27,9 +26,9 @@ const CountryModeSection: React.FC<CountryModeSectionProps> = ({
   selectedFlatAirports,
   onAirportToggle,
   onConfirm,
-  airportsData,
   getCountryTzRelativeOffset,
 }) => {
+  const airportsMap = useAirportsMap();
   const t = useTexts();
   const language = useSettingsStore(s => s.language);
 
@@ -39,7 +38,7 @@ const CountryModeSection: React.FC<CountryModeSectionProps> = ({
   const renderAirportCheckbox = (airport: { code: string; name: string }) => {
     const isSelected = selectedFlatAirports.some(a => a.code === airport.code);
     const canSelect = isSelected || selectedFlatAirports.length < CONFIG.MAX_AIRPORTS;
-    const feat = airportsData?.features.find(f => f.properties.code === airport.code);
+    const feat = airportsMap[airport.code];
     const localName = feat ? getLocalizedProp(feat.properties, 'name', language) : airport.name;
     return (
       <label key={airport.code}

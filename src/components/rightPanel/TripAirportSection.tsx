@@ -5,16 +5,13 @@ import { UI_SYMBOLS } from '../../constants/ui';
 import { useTexts } from '../../hooks/useTexts';
 import { CONFIG } from '../../constants/config';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { getLocalizedProp } from '../../utils/geoUtils';
-import type { FeatureCollection, Point } from 'geojson';
-
-type AirportsGeoData = FeatureCollection<Point, AirportFeatureProps>;
+import { getLocalizedProp } from '../../utils/i18n';
+import { useAirportsMap } from '../../hooks/queries';
 
 interface TripAirportSectionProps {
   selectedAirport: Airport;
   transferAirports: string[];
   setTransferAirports: React.Dispatch<React.SetStateAction<string[]>>;
-  airportsData: AirportsGeoData | undefined;
   getAltTimeDisplay: (code: string) => string | null;
   onSwitchTimezone: (code: string) => void;
   selectedTimezoneAirportCode: string | null;
@@ -28,7 +25,6 @@ const TripAirportSection = ({
   selectedAirport,
   transferAirports,
   setTransferAirports,
-  airportsData,
   getAltTimeDisplay,
   onSwitchTimezone,
   selectedTimezoneAirportCode,
@@ -37,6 +33,7 @@ const TripAirportSection = ({
   onPreviewAirport,
   onClearPreview,
 }: TripAirportSectionProps) => {
+  const airportsMap = useAirportsMap();
   const t = useTexts();
   const language = useSettingsStore(s => s.language);
 
@@ -60,7 +57,7 @@ const TripAirportSection = ({
         {t.panel.transferAirports}
         {transferAirports.map(code => {
           const tzDisplay = getAltTimeDisplay(code);
-          const feat = airportsData?.features.find(f => f.properties.code === code);
+          const feat = airportsMap[code];
           const label = feat ? getLocalizedProp(feat.properties, 'name', language) : code;
           return (
             <div key={code} className="trip-airport-item">

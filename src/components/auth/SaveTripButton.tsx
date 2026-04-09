@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { saveTrip, updateTrip } from '../../api/trips';
+import type { SavedTrip } from '../../api/trips';
 import { useTripStore } from '../../stores/tripStore';
 import TripNameModal from '../TripNameModal';
 import './SaveTripButton.css';
@@ -9,7 +10,7 @@ import { useTexts } from '../../hooks/useTexts';
 
 const SaveTripButton: React.FC = () => {
   const t = useTexts();
-  const { tripState, savedTripId, savedTripStateJSON, setSavedTrip, editMode, isLoadedTrip } = useTripStore();
+  const { tripState, savedTripId, savedTripStateJSON, updateTrip: updateTripStore, editMode, isLoadedTrip } = useTripStore();
   const qc = useQueryClient();
   const [showNameModal, setShowNameModal] = useState(false);
 
@@ -21,25 +22,25 @@ const SaveTripButton: React.FC = () => {
   // All hooks must come before any conditional return.
   // We pass stateJSON through mutation variables so onSuccess uses the exact client JSON
   // (server may reformat trip_state, causing a spurious mismatch if we used data.trip_state).
-  const saveMutation = useMutation({
+  const saveMutation = useMutation<SavedTrip, Error, { name: string; stateJSON: string }>({
     mutationFn: ({ name, stateJSON }: { name: string; stateJSON: string }) => {
       void stateJSON; // carried via variables, not used here
       return saveTrip({ name, trip_state: tripState! });
     },
     onSuccess: (data, { stateJSON }) => {
       qc.invalidateQueries({ queryKey: ['user-trips'] });
-      setSavedTrip(data.id, stateJSON);
+      updateTripStore({ savedTripId: data.id, savedTripStateJSON: stateJSON });
     },
   });
 
-  const updateMutation = useMutation({
+  const updateMutation = useMutation<SavedTrip, Error, { stateJSON: string }>({
     mutationFn: ({ stateJSON }: { stateJSON: string }) => {
       void stateJSON;
       return updateTrip(savedTripId!, { trip_state: tripState! });
     },
     onSuccess: (data, { stateJSON }) => {
       qc.invalidateQueries({ queryKey: ['user-trips'] });
-      setSavedTrip(data.id, stateJSON);
+      updateTripStore({ savedTripId: data.id, savedTripStateJSON: stateJSON });
     },
   });
 

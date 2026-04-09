@@ -1,11 +1,17 @@
+/**
+ * HOOK INTERAKCJI MAPY (useMapHover.ts)
+ * Zarządza logiką hover, selekcji oraz dynamicznego filtrowania warstw etykiet.
+ * Wykorzystuje Spatial Grid Indexing (O(1)) dla zapewnienia wysokiego FPS przy 3000+ lotniskach.
+ */
 import { useEffect } from 'react';
 import maplibregl from 'maplibre-gl';
-import type { SelectedItem, AirportFeatureProps } from '../../types';
+import type { SelectedItem, AirportFeatureProps, Flight } from '../../types';
 import { useColorStore } from '../../stores/colorStore';
 import { useFilterStore } from '../../stores/filterStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { getLocalizedProp } from '../../utils/geoUtils';
+import { getLocalizedProp } from '../../utils/i18n';
 import { CONFIG } from '../../constants/config';
+import { applyMapAirportFilters } from './filterApplier';
 
 interface AirportFeature {
   properties: AirportFeatureProps;
@@ -19,6 +25,7 @@ interface AirportsGeoJSON {
 export interface MapHoverRefs {
   map: React.MutableRefObject<maplibregl.Map | null>;
   projectedAirportsRef: React.MutableRefObject<Array<{ code: string; x: number; y: number }>>;
+  spatialGridRef: React.MutableRefObject<Record<string, string[]>>;
   hoveredAirportCodeRef: React.MutableRefObject<string | null>;
   lastDetectedCodeRef: React.MutableRefObject<string | null>;
   hoverSampleCountRef: React.MutableRefObject<number>;
@@ -38,6 +45,11 @@ export interface MapHoverRefs {
   tripVisibleAirportCodesRef: React.MutableRefObject<string[] | null>;
   airportsDataRef: React.MutableRefObject<AirportsGeoJSON | undefined>;
   onSelectItemRef: React.MutableRefObject<(item: SelectedItem) => void>;
+  flightsByRouteMapRef: React.MutableRefObject<Map<string, Flight>>;
+  selectedAirportCodeRef: React.MutableRefObject<string | null>;
+  tripRoutesRef: React.MutableRefObject<any[]>;
+  tripStateRef: React.MutableRefObject<any>;
+  coordsMapRef: React.MutableRefObject<Record<string, [number, number]>>;
 }
 
 export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports: boolean): void {
@@ -52,11 +64,26 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
 
     const getNearbyAirportCodes = (point: { x: number; y: number }) => {
       const rSq = LABEL_CLEAR_RADIUS * LABEL_CLEAR_RADIUS;
+      const GRID_SIZE = 60;
       const codes = new Set<string>();
-      for (const ap of refs.projectedAirportsRef.current) {
-        const dx = ap.x - point.x;
-        const dy = ap.y - point.y;
-        if (dx * dx + dy * dy <= rSq) codes.add(ap.code);
+      
+      const col = Math.floor(point.x / GRID_SIZE);
+      const row = Math.floor(point.y / GRID_SIZE);
+
+      for (let r = row - 1; r <= row + 1; r++) {
+        for (let c = col - 1; c <= col + 1; c++) {
+          const key = `${r},${c}`;
+          const cellCodes = refs.spatialGridRef.current[key];
+          if (!cellCodes) continue;
+
+          for (const apCode of cellCodes) {
+            const ap = refs.projectedAirportsRef.current.find(a => a.code === apCode);
+            if (!ap) continue;
+            const dx = ap.x - point.x;
+            const dy = ap.y - point.y;
+            if (dx * dx + dy * dy <= rSq) codes.add(ap.code);
+          }
+        }
       }
       return [...codes];
     };
@@ -64,45 +91,25 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
     const applyHover = (code: string | null, point?: { x: number; y: number }) => {
       const sameCode = code === refs.hoveredAirportCodeRef.current;
       if (sameCode && !point) return;
+      
       refs.hoveredAirportCodeRef.current = code;
-      if (m.getCanvas()) {
-        m.getCanvas().style.cursor = code ? 'pointer' : '';
+      if (canvas) {
+        canvas.style.cursor = code ? 'pointer' : '';
       }
-      if (m.getLayer('airports-hover')) {
-        m.setFilter('airports-hover', ['==', 'code', code ?? '']);
-      }
+
       const prevRouteId = refs.hoveredRouteId.current;
       if (code !== null && prevRouteId != null) {
         m.setFeatureState({ source: 'selected-routes', id: prevRouteId }, { hover: false });
         refs.hoveredRouteId.current = null;
-        m.setFilter('airports-route-hover', ['==', 'code', '']);
-        m.setFilter('airports-labels-hover', ['==', 'code', '']);
-        m.setFilter('airports-labels-hover-general', ['==', 'code', '']);
       }
-      if (code !== null || refs.hoveredRouteId.current === null) {
-        const isFocused =
-          code !== null &&
-          (refs.highlightedAirportsRef.current.includes(code) ||
-            refs.selectedAirportCodesRef.current.includes(code) ||
-            refs.explorationAirportCodesRef.current.includes(code) ||
-            (refs.tripVisibleAirportCodesRef.current?.includes(code) ?? false));
-        if (m.getLayer('airports-labels-hover')) {
-          m.setFilter('airports-labels-hover', [
-            '==',
-            'code',
-            isFocused || code === null ? code ?? '' : '',
-          ]);
-        }
-        if (m.getLayer('airports-labels-hover-general')) {
-          m.setFilter('airports-labels-hover-general', [
-            '==',
-            'code',
-            !isFocused && code !== null ? code : '',
-          ]);
-        }
-      }
-      // Exclude nearby labels around hover to avoid overlaps
-      const inTripMode = !!(refs.tripVisibleAirportCodesRef.current?.length);
+
+      const isFocused =
+        code !== null &&
+        (refs.highlightedAirportsRef.current.includes(code) ||
+          refs.selectedAirportCodesRef.current.includes(code) ||
+          refs.explorationAirportCodesRef.current.includes(code) ||
+          (refs.tripVisibleAirportCodesRef.current?.includes(code) ?? false));
+
       const cityKey = code ? refs.airportCityKeyRef.current[code] : null;
       const cityRep = cityKey ? refs.cityLabelCodeByCityRef.current[cityKey] : null;
       const nearbyAirports = point ? getNearbyAirportCodes(point) : [];
@@ -114,78 +121,33 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       }
       const nearby = [...new Set([...nearbyAirports, ...nearbyCityReps])].filter(c => c !== code);
       const excludeCodes = code ? [code, ...(cityRep ? [cityRep] : []), ...nearby] : nearby;
-      if (m.getLayer('airports-labels-normal')) {
-        if (inTripMode) {
-          m.setFilter('airports-labels-normal', ['==', 'code', '']);
-        } else {
-          const baseFilter: maplibregl.LegacyFilterSpecification | null =
-            refs.highlightedLabelCodesRef.current.length > 0
-              ? ['!in', 'code', ...refs.highlightedLabelCodesRef.current]
-              : null;
-          if (excludeCodes.length > 0 && baseFilter) {
-            m.setFilter('airports-labels-normal', [
-              'all',
-              baseFilter,
-              ['!in', 'code', ...excludeCodes],
-            ] as maplibregl.FilterSpecification);
-          } else if (excludeCodes.length > 0) {
-            m.setFilter('airports-labels-normal', ['!in', 'code', ...excludeCodes]);
-          } else if (baseFilter) {
-            m.setFilter('airports-labels-normal', baseFilter);
-          } else {
-            m.setFilter('airports-labels-normal', null);
-          }
+
+      // ZERO WASTE: Reprezentatywne wywołanie zbiorczego filtra zamiast serii m.setFilter
+      applyMapAirportFilters(
+        m,
+        {
+          tripVisibleAirportCodes: refs.tripVisibleAirportCodesRef.current,
+          highlightedAirports: refs.highlightedAirportsRef.current,
+          selectedAirportCode: refs.selectedAirportCodeRef.current,
+          selectedAirportCodes: refs.selectedAirportCodesRef.current,
+          explorationAirportCodes: refs.explorationAirportCodesRef.current,
+          hoveredAirportCode: code,
+          cityLabelCodes: refs.cityLabelCodesRef.current,
+          airportCityKeyMap: refs.airportCityKeyRef.current,
+          cityLabelCodeByCity: refs.cityLabelCodeByCityRef.current,
+          manualTransferAirportCodes: [], 
+          isRouteHovered: refs.isRouteHoveredRef.current,
+          tripRoutes: refs.tripRoutesRef.current,
+          tripState: refs.tripStateRef.current,
+          coordsMap: refs.coordsMapRef.current,
+          excludeCodes,
+          isHoverFocused: isFocused,
+        },
+        {
+          highlightedLabelCodesRef: refs.highlightedLabelCodesRef,
+          highlightedCityLabelCodesRef: refs.highlightedCityLabelCodesRef,
         }
-      }
-      if (m.getLayer('airports-labels-normal-city')) {
-        if (inTripMode) {
-          m.setFilter('airports-labels-normal-city', ['==', 'code', '']);
-        } else {
-          const baseCityFilter: maplibregl.LegacyFilterSpecification | null =
-            refs.cityLabelCodesRef.current.length > 0
-              ? ['in', 'code', ...refs.cityLabelCodesRef.current]
-              : null;
-          const highlightedCityFilter: maplibregl.LegacyFilterSpecification | null =
-            refs.highlightedCityLabelCodesRef.current.length > 0
-              ? ['!in', 'code', ...refs.highlightedCityLabelCodesRef.current]
-              : null;
-          const hoverCityFilter: maplibregl.LegacyFilterSpecification | null =
-            excludeCodes.length > 0 ? ['!in', 'code', ...excludeCodes] : null;
-          const allFilters = [baseCityFilter, highlightedCityFilter, hoverCityFilter].filter(
-            Boolean,
-          ) as maplibregl.FilterSpecification[];
-          if (allFilters.length > 1) {
-            m.setFilter('airports-labels-normal-city', [
-              'all',
-              ...allFilters,
-            ] as maplibregl.FilterSpecification);
-          } else if (allFilters.length === 1) {
-            m.setFilter('airports-labels-normal-city', allFilters[0]);
-          } else {
-            m.setFilter('airports-labels-normal-city', null);
-          }
-        }
-      }
-      // Don't update highlighted labels while route hover is active
-      if (!refs.isRouteHoveredRef.current) {
-        const hlCodes = refs.highlightedLabelCodesRef.current;
-        const filteredHl =
-          excludeCodes.length > 0 ? hlCodes.filter(c => !excludeCodes.includes(c)) : hlCodes;
-        const hlFilter: maplibregl.FilterSpecification =
-          filteredHl.length === 0 ? ['==', 'code', ''] : ['in', 'code', ...filteredHl];
-        if (m.getLayer('airports-labels-highlighted'))
-          m.setFilter('airports-labels-highlighted', hlFilter);
-        if (m.getLayer('airports-labels-highlighted-city')) {
-          const hlCityCodes = refs.highlightedCityLabelCodesRef.current;
-          const filteredCity =
-            excludeCodes.length > 0
-              ? hlCityCodes.filter(c => !excludeCodes.includes(c))
-              : hlCityCodes;
-          const hlCityFilter: maplibregl.FilterSpecification =
-            filteredCity.length === 0 ? ['==', 'code', ''] : ['in', 'code', ...filteredCity];
-          m.setFilter('airports-labels-highlighted-city', hlCityFilter);
-        }
-      }
+      );
     };
 
     const handleMouseMove = (e: MouseEvent) => {
@@ -197,23 +159,41 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       let code: string | null = null;
       if (showAirports) {
         const THRESHOLD = CONFIG.HOVER_RADIUS_FALLBACK;
+        const GRID_SIZE = 60;
         const tSq = THRESHOLD * THRESHOLD;
         let bestDist = Infinity;
-        for (const ap of refs.projectedAirportsRef.current) {
-          const dx = ap.x - x;
-          const dy = ap.y - y;
-          const dist = dx * dx + dy * dy;
-          if (dist <= tSq && dist < bestDist) {
-            bestDist = dist;
-            code = ap.code;
+
+        const col = Math.floor(x / GRID_SIZE);
+        const row = Math.floor(y / GRID_SIZE);
+
+        for (let r = row - 1; r <= row + 1; r++) {
+          for (let c = col - 1; c <= col + 1; c++) {
+            const key = `${r},${c}`;
+            const cellCodes = refs.spatialGridRef.current[key];
+            if (!cellCodes) continue;
+
+            for (const apCode of cellCodes) {
+              const ap = refs.projectedAirportsRef.current.find(a => a.code === apCode);
+              if (!ap) continue;
+
+              const dx = ap.x - x;
+              const dy = ap.y - y;
+              const dist = dx * dx + dy * dy;
+              if (dist <= tSq && dist < bestDist) {
+                bestDist = dist;
+                code = ap.code;
+              }
+            }
           }
         }
         if (code !== null) {
           refs.hoverLockUntilRef.current = Date.now() + CONFIG.HOVER_LOCK_DURATION_MS;
           const tripCodes = refs.tripVisibleAirportCodesRef.current;
+          const hlCodes = refs.highlightedAirportsRef.current;
           if (tripCodes && tripCodes.length > 0) {
-            if (!new Set([...tripCodes, ...refs.highlightedAirportsRef.current]).has(code))
-              code = null;
+            const isTripPart = tripCodes.includes(code);
+            const isHighlighted = hlCodes.includes(code);
+            if (!isTripPart && !isHighlighted) code = null;
           }
         }
       }
@@ -236,12 +216,11 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
           const t = (clamped - zMin) / (zMax - zMin);
           return min + (max - min) * t;
         };
-        const keepRadius =
-          Math.max(
-            CONFIG.HOVER_RADIUS_FALLBACK,
-            interp(highlightedAirportHoverRadiusMin, highlightedAirportHoverRadiusMax),
-            interp(generalAirportHoverRadiusMin, generalAirportHoverRadiusMax),
-          ) + 6;
+        const keepRadius = Math.max(
+          CONFIG.HOVER_RADIUS_FALLBACK,
+          interp(highlightedAirportHoverRadiusMin, highlightedAirportHoverRadiusMax),
+          interp(generalAirportHoverRadiusMin, generalAirportHoverRadiusMax),
+        ) + 6;
         const keepRadiusSq = keepRadius * keepRadius;
         const hoveredCode = refs.hoveredAirportCodeRef.current;
         const hoveredPoint = refs.projectedAirportsRef.current.find(ap => ap.code === hoveredCode);
@@ -286,7 +265,6 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
         refs.hoverClearTimerRef.current = null;
       }
 
-      // After mouse stops moving: snap to exact current position
       if (refs.mouseStopTimerRef.current !== null) clearTimeout(refs.mouseStopTimerRef.current);
       refs.mouseStopTimerRef.current = setTimeout(() => {
         refs.mouseStopTimerRef.current = null;
@@ -317,24 +295,15 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       if (!refs.airportsDataRef.current || !refs.map.current) return;
       const code = refs.hoveredAirportCodeRef.current;
       if (!code) return;
-
       const feat = refs.airportsDataRef.current.features.find(f => f.properties.code === code);
       if (!feat) return;
-
       const isTripAirport = (refs.tripVisibleAirportCodesRef.current ?? []).includes(code);
       if (isTripAirport) return;
-
-      const inTripMode =
-        refs.tripVisibleAirportCodesRef.current &&
-        refs.tripVisibleAirportCodesRef.current.length > 0;
-
+      const inTripMode = refs.tripVisibleAirportCodesRef.current && refs.tripVisibleAirportCodesRef.current.length > 0;
       if (inTripMode) {
-        useFilterStore
-          .getState()
-          .setDestinationFilter({ airports: [code], cities: [], countries: [] });
+        useFilterStore.getState().setDestinationFilter({ airports: [code], cities: [], countries: [] });
         return;
       }
-
       const isHighlighted = refs.highlightedAirportsRef.current.includes(code);
       const data = {
         code: feat.properties.code,
@@ -346,32 +315,19 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
         time_zone: feat.properties.time_zone || null,
         coordinates: { lon: feat.geometry.coordinates[0], lat: feat.geometry.coordinates[1] },
       };
-      
-      refs.onSelectItemRef.current?.({
-        type: 'airport',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        data: data as any,
-        isHighlighted,
-        fromMap: true,
-      });
+      refs.onSelectItemRef.current?.({ type: 'airport', data: data as any, isHighlighted, fromMap: true });
     };
 
     canvas.addEventListener('mousemove', handleMouseMove);
     canvas.addEventListener('mouseleave', handleMouseLeave);
     canvas.addEventListener('click', handleClick);
+
     return () => {
       canvas.removeEventListener('mousemove', handleMouseMove);
       canvas.removeEventListener('mouseleave', handleMouseLeave);
       canvas.removeEventListener('click', handleClick);
-      if (refs.mouseStopTimerRef.current !== null) {
-        clearTimeout(refs.mouseStopTimerRef.current);
-        refs.mouseStopTimerRef.current = null;
-      }
-      if (refs.hoverClearTimerRef.current !== null) {
-        clearTimeout(refs.hoverClearTimerRef.current);
-        refs.hoverClearTimerRef.current = null;
-      }
+      if (refs.mouseStopTimerRef.current !== null) clearTimeout(refs.mouseStopTimerRef.current);
+      if (refs.hoverClearTimerRef.current !== null) clearTimeout(refs.hoverClearTimerRef.current);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapLoaded, showAirports, language]);
 }

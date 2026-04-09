@@ -58,6 +58,9 @@ export function useFlightLoader({
   const perAirportLoadedRef = useRef<Map<string, { fromMs: number; toMs: number }>>(new Map());
   // Keys: code, Value: current target toMs — prevents concurrent redundant fetches for the same airport
   const perAirportFetchingRef = useRef<Map<string, number>>(new Map());
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const flightUpdateBufferRef = useRef<Flight[]>([]);
+  const flightBatchTimerRef = useRef<number | null>(null);
   // Cache key: travelDate + airportCodes. Tracked separately from `timezone` so that
   // a timezone-only change does NOT clear the loaded ranges — the global UTC window
   // already covers all TZs, and ensureLoaded handles any new gaps.
@@ -129,10 +132,11 @@ export function useFlightLoader({
     try {
       const fromLocal = toLocalMinute(fromMs, airportTZ);
       const toLocal = toLocalMinute(toMs - 1, airportTZ); 
+      
+      console.log(`[RACE-DEBUG] {useFlightLoader} -> fetchAirportRange START | Airport: ${code}, From: ${fromLocal}, To: ${toLocal}`);
 
-      // We use raw fetch here instead of api/schedules.ts because we need NDJSON streaming (body.getReader())
       const url = `${CONFIG.API_BASE_URL}/schedules/${code}?from_local_datetime=${fromLocal}&to_local_datetime=${toLocal}&limit=${CONFIG.FLIGHT_LIMIT}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: abortControllerRef.current?.signal });
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
@@ -159,30 +163,44 @@ export function useFlightLoader({
             const batch = JSON.parse(line) as RawScheduleResponse & { error?: string };
             
             if (batch.success === false) {
+              console.warn(`[RACE-DEBUG] {useFlightLoader} -> fetchAirportRange BATCH ERROR | Airport: ${code}, Err: ${batch.error}`);
               setError(batch.error ?? 'Failed to load flights batch');
               continue;
             }
 
             if (batch.data) {
-              setRawFlights(prev => {
-                // Generujemy unikalny klucz syntetyczny dla standardu Ultra-Lean
-                const getFlightKey = (f: Flight) => `${f.flight_number}-${f.scheduled_departure_utc}`;
-                const existingKeys = new Set(prev.map(getFlightKey));
-                const fresh = batch.data.filter(f => !existingKeys.has(getFlightKey(f)));
-                
-                if (!fresh.length) return prev;
-                return [...prev, ...fresh].sort((a, b) =>
-                  (a.scheduled_departure_utc ?? a.scheduled_departure_local ?? '')
-                    .localeCompare(b.scheduled_departure_utc ?? b.scheduled_departure_local ?? '')
-                );
-              });
+              // ZERO WASTE: RAF-based batching state updates
+              flightUpdateBufferRef.current.push(...batch.data);
+              
+              if (flightBatchTimerRef.current === null) {
+                flightBatchTimerRef.current = requestAnimationFrame(() => {
+                  const items = flightUpdateBufferRef.current;
+                  flightUpdateBufferRef.current = [];
+                  flightBatchTimerRef.current = null;
+                  
+                  if (items.length === 0) return;
+                  
+                  console.log(`[RACE-DEBUG] {useFlightLoader} -> RAF BATCH UPDATE | Items: ${items.length}, Airport: ${code}`);
+                  
+                  setRawFlights(prev => {
+                    const getFlightKey = (f: Flight) => `${f.flight_number}-${f.scheduled_departure_utc}`;
+                    const existingKeys = new Set(prev.map(getFlightKey));
+                    const fresh = items.filter(f => !existingKeys.has(getFlightKey(f)));
+                    if (!fresh.length) return prev;
+                    return [...prev, ...fresh].sort((a, b) =>
+                      (a.scheduled_departure_utc ?? a.scheduled_departure_local ?? '')
+                        .localeCompare(b.scheduled_departure_utc ?? b.scheduled_departure_local ?? '')
+                    );
+                  });
+                  appendFlights(items);
+                });
+              }
 
               if (batch.last_fetched_at) {
                 setLastFetched(prev =>
                   !prev || batch.last_fetched_at! > prev ? batch.last_fetched_at! : prev
                 );
               }
-              appendFlights(batch.data);
             }
 
             // Update airport's loaded UTC range incrementally based on range_end_datetime if provided
@@ -208,7 +226,12 @@ export function useFlightLoader({
         toMs:   lastLoad ? Math.max(lastLoad.toMs,   toMs)   : toMs,
       });
     } catch (err: any) {
-      setError(err.message ?? 'Failed to load flights');
+      if (err.name === 'AbortError') {
+        console.warn(`[RACE-DEBUG] {useFlightLoader} -> fetchAirportRange ABORTED | Airport: ${code}`);
+      } else {
+        console.error(`[RACE-DEBUG] {useFlightLoader} -> fetchAirportRange FAIL | Airport: ${code}, Err:`, err);
+        setError(err.message ?? 'Failed to load flights');
+      }
     } finally {
       if (perAirportFetchingRef.current.get(code) === toMs) {
         perAirportFetchingRef.current.delete(code);
@@ -281,10 +304,15 @@ export function useFlightLoader({
     const isAdditionOnly   = isNewSet && prevCodes.length > 0 && prevCodes.every(c => airportCodes.includes(c));
     const dateOrAirportsChanged = prevCacheKey !== cacheKey;
 
+    console.log(`[RACE-DEBUG] {useFlightLoader} -> EFFECT TRIGGER | CacheKey: ${cacheKey}, changed: ${dateOrAirportsChanged}, additionOnly: ${isAdditionOnly}`);
     if (dateOrAirportsChanged) cacheKeyRef.current = cacheKey;
 
     if (isNewSet && !isAdditionOnly) {
       // Airport removed or first load → full reset
+      console.log(`[RACE-DEBUG] {useFlightLoader} -> RESET (New Airport Set) | Codes: ${codesKey}`);
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+      abortControllerRef.current = new AbortController();
+
       setRawFlights([]);
       perAirportLoadedRef.current = new Map();
       perAirportFetchingRef.current = new Map();
@@ -293,8 +321,11 @@ export function useFlightLoader({
       dateOrderRef.current = [];
     } else if (dateOrAirportsChanged && !isAdditionOnly) {
       // travelDate changed (airports same) → clear loaded ranges to re-fetch for new date.
-      // Only clear if NOT in the middle of a timezone transition (stable key change)
       if (!tzJustChanged) {
+        console.log(`[RACE-DEBUG] {useFlightLoader} -> CLEAR (Date Changed) | New Date: ${travelDate}`);
+        if (abortControllerRef.current) abortControllerRef.current.abort();
+        abortControllerRef.current = new AbortController();
+
         perAirportLoadedRef.current = new Map();
         perAirportFetchingRef.current = new Map();
       }

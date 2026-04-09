@@ -2,9 +2,9 @@ import { useState, useMemo, useCallback } from 'react';
 import { CONFIG } from '../constants/config';
 import type { Flight } from '../types';
 import { useFilterStore } from '../stores/filterStore';
-import { useAirportsQuery } from './queries';
+import { useAirportIndexes, useAirportNamesMap, useCityInfoMap, useCountryInfoMap } from './queries';
 import { useSettingsStore } from '../stores/settingsStore';
-import { getLocalizedProp } from '../utils/geoUtils';
+import { getLocalizedProp } from '../utils/i18n';
 import type { Language } from '../constants/text';
 
 export interface DestAirport { code: string; name: string; cityCode?: string; countryCode?: string; }
@@ -35,52 +35,17 @@ export interface UseFlightsFilterDataResult {
 export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterDataResult {
   const language = useSettingsStore(s => s.language as Language);
   const { destinationFilter, airlineFilter, setDestinationFilter, setAirlineFilter, clearFilters } = useFilterStore();
-  const { data: airportsData } = useAirportsQuery();
+  
+  const { countryMap: airportCountryMap, cityMap: airportCityMap } = useAirportIndexes();
+  const airportNameMap = useAirportNamesMap();
+  const cityInfoMap = useCityInfoMap();
+  const countryInfoMap = useCountryInfoMap();
+  
   const [destQuery, setDestQuery] = useState('');
 
   const getCountryName = useMemo(() => {
-    try {
-      const regionNames = new Intl.DisplayNames([language], { type: 'region' });
-      return (code: string) => regionNames.of(code) || code;
-    } catch {
-      return (code: string) => code;
-    }
-  }, [language]);
-
-  const airportCountryMap = useMemo(() => {
-    if (!airportsData) return {};
-    const m: Record<string, string> = {};
-    airportsData.features.forEach(f => { if (f.properties.code && f.properties.country_code) m[f.properties.code] = f.properties.country_code; });
-    return m;
-  }, [airportsData]);
-
-  const airportCityMap = useMemo(() => {
-    if (!airportsData) return {};
-    const m: Record<string, string> = {};
-    airportsData.features.forEach(f => { if (f.properties.code && f.properties.city_code) m[f.properties.code] = f.properties.city_code; });
-    return m;
-  }, [airportsData]);
-
-  const cityNameMap = useMemo(() => {
-    if (!airportsData) return {};
-    const m: Record<string, string> = {};
-    airportsData.features.forEach(f => {
-      const c = f.properties.city_code;
-      if (c && !m[c]) {
-        m[c] = getLocalizedProp(f.properties, 'city_name', language) || c;
-      }
-    });
-    return m;
-  }, [airportsData, language]);
-
-  const airportNameMap = useMemo(() => {
-    if (!airportsData) return {} as Record<string, string>;
-    const m: Record<string, string> = {};
-    airportsData.features.forEach(f => {
-      if (f.properties.code) m[f.properties.code] = getLocalizedProp(f.properties, 'name', language) || f.properties.code;
-    });
-    return m;
-  }, [airportsData, language]);
+    return (code: string) => countryInfoMap[code]?.name || code;
+  }, [countryInfoMap]);
 
   const destScopeFlights = useMemo(() => {
     if (airlineFilter.length === 0) return allFlights;
@@ -102,6 +67,10 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
     });
   }, [allFlights, destinationFilter, airportCityMap, airportCountryMap]);
 
+  /** 
+   * AGREGACJA DANYCH DOCELOWYCH (O(Flights))
+   * Buduje hierarchiczną strukturę krajów i miast na podstawie aktywnych lotów.
+   */
   const destData = useMemo<DestCountry[]>(() => {
     const countriesMap = new Map<string, DestCountry>();
     destScopeFlights.forEach(f => {
@@ -117,7 +86,7 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
       const country = countriesMap.get(countryCode)!;
       let city = country.cities.find(c => c.code === cityCode);
       if (!city && cityCode) {
-        city = { code: cityCode, name: cityNameMap[cityCode] || cityCode, countryCode, airports: [] };
+        city = { code: cityCode, name: cityInfoMap[cityCode]?.name || cityCode, countryCode, airports: [] };
         country.cities.push(city);
       }
       const ap: DestAirport = { code: aC, name: airportNameMap[aC] || aC, cityCode, countryCode };
@@ -132,7 +101,7 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
       }
     });
     return Array.from(countriesMap.values()).sort((a, b) => a.code.localeCompare(b.code));
-  }, [destScopeFlights, airportCityMap, airportCountryMap, airportNameMap, getCountryName]);
+  }, [destScopeFlights, airportCityMap, airportCountryMap, airportNameMap, getCountryName, cityInfoMap]);
 
   const airlines = useMemo(() => {
     const m = new Map<string, { codes: string[]; name: string }>();

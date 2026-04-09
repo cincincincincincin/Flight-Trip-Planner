@@ -1,3 +1,10 @@
+/**
+ * MODUŁ ANIMACJI TRAS (routeAnimations.ts)
+ * Odpowiada za generowanie i animowanie ścieżek "Great-Circle" (ortodrom) na mapie.
+ * Wykorzystuje rygorystyczne filtrowanie danych wejściowych, aby uniknąć błędnych połączeń
+ * przy wielu aktywnych lotniskach startowych (Multi-start).
+ */
+
 import type { Map as MapLibreMap, GeoJSONSource } from 'maplibre-gl';
 import type { FeatureCollection, Point } from 'geojson';
 import type { AirportFeatureProps, Flight } from '../../types';
@@ -14,14 +21,14 @@ export interface GCPath {
 }
 
 /**
- * Build great-circle paths for a set of NEW destination codes.
- * Uses flightsData to correctly route each destination to its origin airport
- * when multiple source airports are selected.
+ * Buduje ścieżki ortodromy dla zestawu NOWYCH lotnisk docelowych.
+ * Wykorzystuje flightsData do poprawnego trasowania każdego celu do jego lotniska źródłowego,
+ * co jest kluczowe w trybie Multi-start.
  */
 export function buildGCPaths(
   sourceCodes: string[],
   newDestCodes: string[],
-  airportsData: FeatureCollection<Point, AirportFeatureProps>,
+  coordsMap: Record<string, [number, number]>,
   flightsData: Flight[],
 ): GCPath[] {
   if (sourceCodes.length === 0 || newDestCodes.length === 0) return [];
@@ -29,8 +36,8 @@ export function buildGCPaths(
   let sourceToDestsMap: Map<string, Set<string>>;
 
   if (flightsData.length > 0) {
-    // Always verify against flight data when available — prevents stale sourceCodes
-    // (e.g. a single-element list from a previous render) from drawing wrong routes.
+    // Weryfikacja zgodności z danymi lotów – zapobiega rysowaniu tras do lotnisk,
+    // które nie są skomunikowane z aktualnym źródłem w danym oknie czasowym.
     sourceToDestsMap = new Map();
     const destSet = new Set(newDestCodes);
     const srcSet = new Set(sourceCodes);
@@ -42,8 +49,7 @@ export function buildGCPaths(
         sourceToDestsMap.get(src)!.add(dst);
       }
     });
-    // No mappings found — stale data or source airports don't fly to these dests.
-    // Return nothing; the animation effect will retry when deps update.
+    // Jeśli nie znaleziono dopasowań, przerywamy – dane mogą być nieaktualne (stale data).
     if (sourceToDestsMap.size === 0) return [];
   } else if (sourceCodes.length === 1) {
     // No flight data yet but only one source — optimistically assign all dests to it.
@@ -56,19 +62,18 @@ export function buildGCPaths(
 
   const paths: GCPath[] = [];
   sourceToDestsMap.forEach((dests, srcCode) => {
-    const srcFeat = airportsData.features.find(f => f.properties.code === srcCode);
-    if (!srcFeat) return;
-    const srcCoords = srcFeat.geometry.coordinates as [number, number];
+    const srcCoords = coordsMap[srcCode];
+    if (!srcCoords) return;
     const srcIdx = sourceCodes.indexOf(srcCode);
     dests.forEach(destCode => {
-      const destFeat = airportsData.features.find(f => f.properties.code === destCode);
-      if (!destFeat) return;
+      const destCoords = coordsMap[destCode];
+      if (!destCoords) return;
       paths.push({
         srcCoords,
         destCode,
         srcCode,
         srcIdx,
-        gcCoords: generateGreatCircle(srcCoords, destFeat.geometry.coordinates as [number, number], CONFIG.GC_POINTS),
+        gcCoords: generateGreatCircle(srcCoords, destCoords, CONFIG.GC_POINTS),
       });
     });
   });
@@ -77,9 +82,9 @@ export function buildGCPaths(
 }
 
 /**
- * Additively animate new route paths on top of already-completed ones.
- * If an animation is already running, it is cancelled and the in-progress
- * paths are instantly promoted to completed before the new animation starts.
+ * Dodaje nowe trasy do animacji w sposób addytywny (nałożenie na już ukończone).
+ * Jeśli animacja jest w toku, zostaje przerwana, a trasy "w trakcie" są natychmiastowo
+ * promowane do ukończonych przed startem nowej fazy animacji.
  */
 export function addRoutesToAnimation(
   map: MapLibreMap,
@@ -146,7 +151,7 @@ export function addRoutesToAnimation(
 }
 
 /**
- * Cancel any running animation and clear all route data from the map source.
+ * Przerywa trwającą animację i czyści wszystkie warstwy tras z mapy.
  */
 export function clearRouteAnimation(
   map: MapLibreMap,
@@ -169,14 +174,14 @@ export function startPreviewAnimation(
   previewAnimRef: { current: number | null },
   previewAirportCode: string | null,
   selectedAirportCode: string | null,
-  airportsData: FeatureCollection<Point, AirportFeatureProps> | null,
+  coordsMap: Record<string, [number, number]> | null,
 ) {
   if (previewAnimRef.current) {
     cancelAnimationFrame(previewAnimRef.current);
     previewAnimRef.current = null;
   }
 
-  if (!map || !airportsData) return;
+  if (!map || !coordsMap) return;
 
   const source = map.getSource('transfer-preview-route') as GeoJSONSource | undefined;
   if (!source) return;
@@ -186,16 +191,14 @@ export function startPreviewAnimation(
     return;
   }
 
-  const startFeature = airportsData.features.find(f => f.properties.code === selectedAirportCode);
-  const destFeature = airportsData.features.find(f => f.properties.code === previewAirportCode);
+  const startCoords = coordsMap[selectedAirportCode];
+  const destCoords = coordsMap[previewAirportCode];
 
-  if (!startFeature || !destFeature) {
+  if (!startCoords || !destCoords) {
     source.setData({ type: 'FeatureCollection', features: [] });
     return;
   }
 
-  const startCoords = startFeature.geometry.coordinates as [number, number];
-  const destCoords = destFeature.geometry.coordinates as [number, number];
   const gcCoords = generateGreatCircle(startCoords, destCoords, CONFIG.GC_POINTS);
   let progress = 0;
   const speed = CONFIG.ANIMATION_SPEED;

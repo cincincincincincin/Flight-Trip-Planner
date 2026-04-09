@@ -5,8 +5,9 @@ import { useSelectionStore } from '../stores/selectionStore';
 import { useTripStore } from '../stores/tripStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useFilterStore } from '../stores/filterStore';
-import { useAirportsQuery } from '../hooks/queries';
+import { useAirportIndexes, useFlightFilter } from '../hooks/queries';
 import { useFlightLoader } from '../hooks/useFlightLoader';
+import { getTripCurrentArrivalTimeUTC } from '../utils/dateFormatting';
 import type { Flight } from '../types';
 import './FlightsList.css';
 import { useTexts } from '../hooks/useTexts';
@@ -32,7 +33,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
     const { travelDate, minTransferHours, minManualTransferHours, showRefreshButton } = useSettingsStore();
     const { setHighlightedAirports, setHighlightedCities, setDisplayedFlights } = useSelectionStore();
     const { tripState } = useTripStore();
-    const { data: airportsData } = useAirportsQuery();
+    const { airportFeaturesMap, cityMap, countryMap } = useAirportIndexes();
     const { destinationFilter, airlineFilter } = useFilterStore();
 
     // ── Data loading ──────────────────────────────────────────────────────────
@@ -42,37 +43,8 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
     // ── Derived from tripState ────────────────────────────────────────────────
     const tripStartAirport = tripState?.startAirport ?? null;
 
-    const tripCurrentArrivalTimeUTC = useMemo(() => {
-      if (!tripState?.legs?.length) return null;
-      for (let i = tripState.legs.length - 1; i >= 0; i--) {
-        const leg = tripState.legs[i];
-        if ((leg as { type?: string }).type !== 'manual' && leg.flight?.scheduled_arrival_utc) {
-          return leg.flight.scheduled_arrival_utc;
-        }
-      }
-      return null;
-    }, [tripState]);
+    const tripCurrentArrivalTimeUTC = useMemo(() => getTripCurrentArrivalTimeUTC(tripState), [tripState]);
 
-
-    const airportCountryMap = useMemo<Record<string, string>>(() => {
-      if (!airportsData) return {};
-      const map: Record<string, string> = {};
-      airportsData.features.forEach(f => {
-        if (f.properties.code) map[f.properties.code] = f.properties.country_code ?? '';
-      });
-      return map;
-    }, [airportsData]);
-
-    const airportCityMap = useMemo<Record<string, string>>(() => {
-      if (!airportsData) return {};
-      const map: Record<string, string> = {};
-      airportsData.features.forEach(f => {
-        if (f.properties.code && f.properties.city_code) {
-          map[f.properties.code] = f.properties.city_code;
-        }
-      });
-      return map;
-    }, [airportsData]);
 
     // ── Misc refs ─────────────────────────────────────────────────────────────
     const prevHighlightedAirportsRef = useRef<Set<string>>(new Set());
@@ -121,55 +93,19 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       [flightsByDate, travelDate]
     );
 
-    // ── Filter integration ────────────────────────────────────────────────────
-    const isFilterActive = useMemo(
-      () =>
-        destinationFilter.airports.length > 0 ||
-        destinationFilter.cities.length > 0 ||
-        destinationFilter.countries.length > 0 ||
-        airlineFilter.length > 0,
-      [destinationFilter, airlineFilter]
-    );
+    // Wykorzystujemy współdzieloną logikę filtrowania (DRY).
+    const { matchesFilter, isFilterActive } = useFlightFilter();
 
-    const matchesFilter = useCallback(
-      (flight: Flight): boolean => {
-        if (!isFilterActive) return true;
-        const destAirport = flight.destination_airport_code;
-        const destCity = airportCityMap[destAirport];
-        const destCountry = airportCountryMap[destAirport];
-        const airline = flight.airline_code;
-
-        const destFilterActive =
-          destinationFilter.airports.length > 0 ||
-          destinationFilter.cities.length > 0 ||
-          destinationFilter.countries.length > 0;
-
-        let destMatch = true;
-        if (destFilterActive) {
-          destMatch =
-            !!(destAirport && destinationFilter.airports.includes(destAirport)) ||
-            !!(destCity && destinationFilter.cities.includes(destCity)) ||
-            !!(destCountry && destinationFilter.countries.includes(destCountry));
-        }
-
-        let airlineMatch = true;
-        if (airlineFilter.length > 0) {
-          airlineMatch = !!(airline && airlineFilter.includes(airline));
-        }
-
-        return !!(destMatch && airlineMatch);
-      },
-      [destinationFilter, airlineFilter, airportCityMap, airportCountryMap, isFilterActive]
-    );
-
-    /** Filtered view for the selected day only */
+    /** Przefiltrowana lista lotów na wybrany dzień. */
     const displayedFlatFlights = useMemo(() => {
       let flights = todayFlights.filter(matchesFilter);
-      // In non-trip mode, hide flights that have already departed (only for today's date).
+      
+      // Jeśli nie jesteśmy w trybie planowania trasy, ukrywamy loty, które już odleciały.
       if (!tripArrivalTimeUTC) {
         const selectedTodayStr = timezone
           ? new Date(nowMs).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone })
           : new Date(nowMs).toISOString().split('T')[0];
+        
         if (travelDate === selectedTodayStr) {
           flights = flights.filter(f =>
             !f.scheduled_departure_utc || f.scheduled_departure_utc > new Date(nowMs).toISOString()
@@ -179,9 +115,8 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       return flights;
     }, [todayFlights, matchesFilter, tripArrivalTimeUTC, nowMs, travelDate, timezone]);
 
-    // ── Highlighted airports + cities effect (filter-aware) ──────────────────
-    // Only dispatch when the SET CONTENT changes, not on every rawFlights append.
-    // This prevents the route animation from restarting for each 12h window load.
+    // Synchronizacja podświetlenia na mapie.
+    // Wysyłamy dane tylko gdy faktycznie się zmieniły, żeby animacja tras nie skakała.
     useEffect(() => {
       const sourceFlights = isFilterActive ? displayedFlatFlights : todayFlights;
 
@@ -199,7 +134,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       }
 
       const newCities = new Set<string>(
-        sourceFlights.map(f => airportCityMap[f.destination_airport_code]).filter(Boolean) as string[]
+        sourceFlights.map(f => cityMap[f.destination_airport_code]).filter(Boolean) as string[]
       );
       const prevC = prevHighlightedCitiesRef.current;
       if (newCities.size !== prevC.size || Array.from(newCities).some(c => !prevC.has(c))) {
@@ -235,10 +170,11 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       (flight: Flight) => {
         if (!tripStartAirport) return null;
         const destCode = flight.destination_airport_code;
-        const destCityCode = airportCityMap[destCode];
+        const destCityCode = cityMap[destCode];
+        const destCountry = countryMap[destCode];
         if (destCode === tripStartAirport.code) return 'airport';
         if (destCityCode && destCityCode === tripStartAirport.city_code) return 'city';
-        if (airportCountryMap?.[destCode] && airportCountryMap[destCode] === tripStartAirport.country_code)
+        if (destCountry && destCountry === tripStartAirport.country_code)
           return 'country';
         if (tripCurrentArrivalTimeUTC) {
           const arrMs = new Date(tripCurrentArrivalTimeUTC).getTime();
@@ -253,7 +189,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
         }
         return null;
       },
-      [tripStartAirport, airportCountryMap, tripCurrentArrivalTimeUTC, originalAirportCode, minTransferHours, minManualTransferHours]
+      [tripStartAirport, airportFeaturesMap, tripCurrentArrivalTimeUTC, originalAirportCode, minTransferHours, minManualTransferHours]
     );
 
     // ── [DISABLED] handleEndReached — scroll-triggered infinite loading ────────

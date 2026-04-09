@@ -1,9 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { MAP_STYLES } from '../constants/mapStyles';
-import { CONFIG } from '../constants/config';
+import { MAP_INITIAL_STATE } from '../constants/mapDefaults';
 import type { Viewport } from '../types';
 
+/**
+ * Magazyn stanu mapy kontroluje kamerę, warstwy
+ */
 export interface MapState {
   showAirports: boolean;
   mapStyle: string;
@@ -22,10 +24,7 @@ export interface MapState {
 export const useMapStore = create<MapState>()(
   persist(
     (set) => ({
-      showAirports: true,
-      mapStyle: MAP_STYLES.LIGHT,
-      globeMode: false,
-      viewport: { center: CONFIG.DEFAULT_MAP_CENTER, zoom: CONFIG.DEFAULT_MAP_ZOOM, pitch: 0, bearing: 0 },
+      ...MAP_INITIAL_STATE,
       controlsPanelOpen: false,
       flyToZoom: null,
 
@@ -38,7 +37,8 @@ export const useMapStore = create<MapState>()(
     }),
     {
       name: 'ftp-map',
-      // Zapisujemy tylko styl mapy i tryb globu — viewport i stan UI pomijamy
+      // Persystencja: zapamiętujemy styl mapy i tryb 3D.
+      // Świadomie pomijamy viewport, aby przy nowej sesji mapa zawsze startowała z domyślnego widoku
       partialize: (state) => ({
         mapStyle: state.mapStyle,
         globeMode: state.globeMode,

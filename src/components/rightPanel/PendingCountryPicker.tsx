@@ -1,6 +1,4 @@
 import React from 'react';
-import type { FeatureCollection, Point } from 'geojson';
-import type { AirportFeatureProps } from '../../types';
 import type { ExplorationItem } from '../../stores/selectionStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useTexts } from '../../hooks/useTexts';
@@ -8,7 +6,8 @@ import { UI_SYMBOLS } from '../../constants/ui';
 import { CONFIG } from '../../constants/config';
 import type { buildTzGroups } from '../../utils/timezoneUtils';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { getLocalizedProp } from '../../utils/geoUtils';
+import { getLocalizedProp } from '../../utils/i18n';
+import { useAirportsMap } from '../../hooks/queries';
 
 type TzGroups = ReturnType<typeof buildTzGroups>;
 
@@ -17,7 +16,6 @@ interface PendingCountryPickerProps {
   pendingCountryTzGroups: TzGroups;
   pendingSelectedAirports: string[];
   setPendingSelectedAirports: React.Dispatch<React.SetStateAction<string[]>>;
-  airportsData: FeatureCollection<Point, AirportFeatureProps> | undefined;
   explorationItems: ExplorationItem[];
   onFitBounds?: (codes: string[]) => void;
   onClearCountryPicker?: () => void;
@@ -28,11 +26,11 @@ const PendingCountryPicker: React.FC<PendingCountryPickerProps> = ({
   pendingCountryTzGroups,
   pendingSelectedAirports,
   setPendingSelectedAirports,
-  airportsData,
   explorationItems,
   onFitBounds,
   onClearCountryPicker,
 }) => {
+  const airportsMap = useAirportsMap();
   const t = useTexts();
   const language = useSettingsStore(s => s.language);
   const { clearExploration, addExplorationItem } = useSelectionStore();
@@ -57,7 +55,7 @@ const PendingCountryPicker: React.FC<PendingCountryPickerProps> = ({
                 : (prev.length < CONFIG.MAX_AIRPORTS ? [...prev, airport.code] : prev)
             );
           }} />
-        <span>{(() => { const f = airportsData?.features.find(f => f.properties.code === airport.code); return f ? getLocalizedProp(f.properties, 'name', language) : airport.name; })()} ({airport.code})</span>
+        <span>{(() => { const f = airportsMap[airport.code]; return f ? getLocalizedProp(f.properties, 'name', language) : airport.name; })()} ({airport.code})</span>
       </label>
     );
   };
@@ -97,7 +95,7 @@ const PendingCountryPicker: React.FC<PendingCountryPickerProps> = ({
           const slotsLeft = CONFIG.MAX_AIRPORTS - (willFill ? 0 : currentCodes.length);
           const codesToAdd = pendingSelectedAirports.slice(0, slotsLeft);
           codesToAdd.forEach(code => {
-            const feat = airportsData?.features.find(f => f.properties.code === code);
+            const feat = airportsMap[code];
             addExplorationItem({ type: 'airport', code, name: feat ? getLocalizedProp(feat.properties, 'name', language) : code, airportCodes: [code] });
           });
           onFitBounds?.([...(willFill ? [] : currentCodes), ...codesToAdd]);

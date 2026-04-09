@@ -1,11 +1,11 @@
 import { CONFIG } from '../constants/config';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { Airport } from '../types';
-import { useAirportsQuery } from '../hooks/queries';
+import { useAirportsQuery, useAirportIndexes, useCityInfoMap, useCountryInfoMap } from '../hooks/queries';
 import './AirportTransferPicker.css';
 import { UI_SYMBOLS } from '../constants/ui';
 import { useTexts } from '../hooks/useTexts';
-import { getLocalizedProp } from '../utils/geoUtils';
+import { getLocalizedProp } from '../utils/i18n';
 import { useSettingsStore } from '../stores/settingsStore';
 
 interface AirportTransferPickerProps {
@@ -46,29 +46,36 @@ const AirportTransferPicker = ({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
+  const { namesMap } = useAirportIndexes();
+  const cityInfoMap = useCityInfoMap();
+  const countryInfoMap = useCountryInfoMap();
+
   const sortedAirports = useMemo(() => {
     if (!airportsData || !currentAirport) return [];
     const coords = currentAirport.coordinates;
     const lat = coords?.lat ?? 0;
-    const lng = coords?.lon ?? coords?.lng ?? 0;
+    const lon = coords?.lon ?? 0;
     const latRad = lat * Math.PI / 180;
+    
     return airportsData.features
       .filter(f => f.properties.code && f.properties.code !== currentAirport.code)
       .map(f => {
-        const [fLng, fLat] = f.geometry.coordinates;
+        const [fLon, fLat] = f.geometry.coordinates;
         const dLat = (fLat - lat) * CONFIG.KM_PER_DEGREE;
-        const dLng = (fLng - lng) * CONFIG.KM_PER_DEGREE * Math.cos(latRad);
-        const distKm = Math.round(Math.sqrt(dLat * dLat + dLng * dLng));
+        const dLon = (fLon - lon) * CONFIG.KM_PER_DEGREE * Math.cos(latRad);
+        const distKm = Math.round(Math.sqrt(dLat * dLat + dLon * dLon));
+        const props = f.properties;
+        
         return {
-          code: f.properties.code,
-          name: getLocalizedProp(f.properties, 'name', language),
-          city_name: getLocalizedProp(f.properties, 'city_name', language),
-          country_name: getLocalizedProp(f.properties, 'country_name', language),
+          code: props.code,
+          name: namesMap[props.code] || props.code,
+          city_name: props.city_code ? cityInfoMap[props.city_code]?.name : '',
+          country_name: props.country_code ? countryInfoMap[props.country_code]?.name : '',
           distKm,
         };
       })
       .sort((a, b) => a.distKm - b.distKm);
-  }, [airportsData, currentAirport, language]);
+  }, [airportsData, currentAirport, namesMap, cityInfoMap, countryInfoMap]);
 
   const filteredAirports = useMemo(() => {
     const q = searchText.trim().toLowerCase();

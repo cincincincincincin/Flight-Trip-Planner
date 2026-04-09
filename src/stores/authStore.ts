@@ -12,7 +12,6 @@ interface AuthState {
   signUpWithEmail: (email: string, password: string) => Promise<{ error: string | null }>;
   signInWithGoogle: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
-  initializeAuth: () => () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -48,22 +47,31 @@ export const useAuthStore = create<AuthState>((set) => ({
     await supabase.auth.signOut();
     set({ session: null, user: null });
   },
-
-  // kept for backwards compat – no-op, subscription is module-level
-  initializeAuth: () => () => {},
 }));
 
-// Module-level subscription – registered before React mounts, immune to StrictMode.
+// lastUserId blokuje nadmiarowy sync przy odświeżaniu tokenów sesji.
+let lastUserId: string | null = null;
+
+// Globalny listener - poza Reactem, żeby uniknąć double-triggera w StrictMode 
+// i mieć sesję gotową jeszcze przed mountowaniem mapy.
 supabase.auth.onAuthStateChange((event, session) => {
+  const userId = session?.user?.id ?? null;
+  
   useAuthStore.getState().setSession(session);
-  // Clean up the URL hash after implicit OAuth redirect
+  
+  // Czyścimy access_token z URL po powrocie z OAuth (Google).
   if (event === 'SIGNED_IN' && window.location.hash.includes('access_token')) {
     window.history.replaceState({}, '', window.location.pathname);
   }
-  if (event === 'SIGNED_IN') {
+  
+  // Sync preferencji (kolory mapy itp.) odpalamy tylko jak faktycznie zmieni się ID usera.
+  if (event === 'SIGNED_IN' && userId !== lastUserId) {
+    lastUserId = userId;
     loadPreferencesOnLogin();
   }
+  
   if (event === 'SIGNED_OUT') {
+    lastUserId = null;
     clearPreferencesOnLogout();
   }
 });

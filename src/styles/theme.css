@@ -1,29 +1,26 @@
-/* ═══════════════════════════════════════════════════════════════
-   GLOBAL DESIGN SYSTEM
-   Light cartographic palette inspired by demotiles.maplibre.org
-   ═══════════════════════════════════════════════════════════════ */
+/* Core Design System Tokens */
 
 :root {
-  /* ── Surfaces ─────────────────────────────────────────────── */
-  --bg-void:     #E2EAF2;
-  --bg-base:     #EDF2F8;
-  --bg-raised:   #FFFFFF;
-  --bg-elevated: #FFFFFF;
-  --bg-hover:    rgba(0, 0, 0, 0.045);
-  --bg-active:   rgba(27, 110, 247, 0.07);
-  --bg-glass:    rgba(237, 242, 248, 0.90);
-  --bg-glass-hi: rgba(255, 255, 255, 0.96);
-  --bg-modal-overlay: rgba(0, 0, 0, 0.38);
+  /* Surfaces & Backgrounds */
+  --bg-void:     #E2EAF2; /* Tło pod mapą (App.tsx) */
+  --bg-base:     #EDF2F8; /* Tło kontenerów */
+  --bg-raised:   #FFFFFF; /* Karty lotów, panele (FlightCard.css) */
+  --bg-elevated: #FFFFFF; /* Modale i popovery */
+  --bg-hover:    rgba(0, 0, 0, 0.045); /* Hover na listach */
+  --bg-active:   rgba(27, 110, 247, 0.07); /* Stan zaznaczenia */
+  --bg-glass:    rgba(237, 242, 248, 0.90); /* Glassmorphism (RightPanel.css, Search.tsx) */
+  --bg-glass-hi: rgba(255, 255, 255, 0.96); /* Dropdowny i detale */
+  --bg-modal-overlay: rgba(0, 0, 0, 0.38); /* Tło pod modalem */
 
-  /* ── Primary accent — MapLibre blue ──────────────────────── */
-  --accent:        #1B6EF7;
+  /* Main Accent (MapLibre Blue) */
+  --accent:        #1B6EF7; 
   --accent-dim:    rgba(27, 110, 247, 0.08);
   --accent-hover:  rgba(27, 110, 247, 0.14);
   --accent-border: rgba(27, 110, 247, 0.28);
-  --accent-glow:   0 0 0 3px rgba(27, 110, 247, 0.14);
+  --accent-glow:   0 0 0 3px rgba(27, 110, 247, 0.14); /* Dostępność i focus */
   --accent-dark:   #1560e0;
 
-  /* ── Demotiles cartographic palette ──────────────────────── */
+  /* Cartographic Palette */
   --c-teal:     #2BA8B4;
   --c-teal-dim: rgba(43, 168, 180, 0.10);
   --c-teal-b:   rgba(43, 168, 180, 0.28);
@@ -48,19 +45,19 @@
   --c-rose-dim: rgba(191, 78, 120, 0.10);
   --c-rose-b:   rgba(191, 78, 120, 0.28);
 
-  /* ── Semantic ─────────────────────────────────────────────── */
-  --green:       #0B9460;
+  /* Semantic Status */
+  --green:       #0B9460; /* Sukces */
   --green-dim:   rgba(11, 148, 96, 0.09);
   --green-b:     rgba(11, 148, 96, 0.26);
   --green-hover: rgba(11, 148, 96, 0.16);
   --green-light: rgba(16, 185, 129, 0.12);
 
-  --red:         #D03545;
+  --red:         #D03545; /* Błędy i usuwanie */
   --red-dim:     rgba(208, 53, 69, 0.09);
   --red-b:       rgba(208, 53, 69, 0.26);
   --red-hover:   rgba(208, 53, 69, 0.16);
 
-  --amber:       #C8880A;
+  --amber:       #C8880A; /* Warningi / pending */
   --amber-dim:   rgba(200, 136, 10, 0.09);
 
   --gold-bg:     rgba(200,158,50,0.12);
@@ -71,32 +68,32 @@
   --warning-text:#856404;
   --warning-border:#ffeaa7;
 
-  /* ── Text ─────────────────────────────────────────────────── */
-  --text-primary:   #0C1A2C;
-  --text-secondary: #384F6A;
-  --text-muted:     #7590AC;
+  /* Typography */
+  --text-primary:   #0C1A2C; /* Body / Headings */
+  --text-secondary: #384F6A; /* Labels / Secondary */
+  --text-muted:     #7590AC; /* Tekst wyciszony */
   --text-accent:    #1B6EF7;
   --text-green:     #0B9460;
   --text-red:       #D03545;
   --text-inverse:   #FFFFFF;
   --text-black:     #000000;
 
-  /* ── Borders ──────────────────────────────────────────────── */
-  --border:        rgba(0, 0, 0, 0.08);
-  --border-light:  rgba(0, 0, 0, 0.13);
+  /* Borders & Dividers */
+  --border:        rgba(0, 0, 0, 0.08); /* Separatory sekcji */
+  --border-light:  rgba(0, 0, 0, 0.13); /* Kontury kart/inputów */
   --border-strong: rgba(0, 0, 0, 0.22);
 
-  /* ── Shadows ──────────────────────────────────────────────── */
+  /* Elevation (Shadows) */
   --shadow-xs:    0 1px 2px rgba(0,0,0,0.06);
   --shadow-sm:    0 1px 5px rgba(0,0,0,0.08);
   --shadow-md:    0 4px 14px rgba(0,0,0,0.10);
   --shadow-lg:    0 8px 28px rgba(0,0,0,0.13);
   --shadow-xl:    0 16px 48px rgba(0,0,0,0.16);
-  --shadow-panel: 4px 0 28px rgba(0,0,0,0.09);
-  --shadow-float: 0 4px 20px rgba(27, 110, 247, 0.16);
+  --shadow-panel: 4px 0 28px rgba(0,0,0,0.09); /* RightPanel.css */
+  --shadow-float: 0 4px 20px rgba(27, 110, 247, 0.16); /* UserMenu.css */
   --shadow-up:    0 -4px 20px rgba(0,0,0,0.10);
 
-  /* ── Radii ────────────────────────────────────────────────── */
+  /* Border Radii */
   --r-xs:   3px;
   --r-sm:   6px;
   --r-md:   10px;
@@ -105,14 +102,14 @@
   --r-2xl:  24px;
   --r-pill: 9999px;
 
-  /* ── Typography ───────────────────────────────────────────── */
+  /* Fonts */
   --font-sans:    system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono:    'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
   --font-display: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
-  /* ── Layout ───────────────────────────────────────────────── */
-  --panel-w:    clamp(280px, 26vw, 420px);
-  --controls-w: clamp(260px, 22vw, 340px);
+  /* Layout Dimensions */
+  --panel-w:    clamp(280px, 26vw, 420px); /* RightPanel.tsx */
+  --controls-w: clamp(260px, 22vw, 340px); /* ControlsPanel.tsx */
 
   color-scheme: light;
 }

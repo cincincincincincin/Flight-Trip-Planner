@@ -1,25 +1,28 @@
 import { create } from 'zustand';
+import { DestinationFilter, EMPTY_DESTINATION_FILTER } from '../constants/filters';
 
-export interface DestinationFilter {
-  airports: string[];    // selected airport codes
-  cities: string[];      // selected city codes
-  countries: string[];   // selected country codes
-}
-
-const emptyDestFilter: DestinationFilter = { airports: [], cities: [], countries: [] };
-
+/**
+ * Magazyn filtrów dla listy lotów
+ * Zarządza wyborem miejsc docelowych oraz linii lotniczych w FlightsFilter.tsx.
+ */
 interface FilterState {
   destinationFilter: DestinationFilter;
-  airlineFilter: string[];   // selected airline codes (empty = no filter)
+  airlineFilter: string[];
   setDestinationFilter: (f: DestinationFilter) => void;
   setAirlineFilter: (codes: string[]) => void;
   clearFilters: () => void;
 }
 
 export const useFilterStore = create<FilterState>(set => ({
-  destinationFilter: emptyDestFilter,
+  destinationFilter: EMPTY_DESTINATION_FILTER,
   airlineFilter: [],
-  setDestinationFilter: f => set({ destinationFilter: f }),
-  setAirlineFilter: codes => set({ airlineFilter: codes }),
-  clearFilters: () => set({ destinationFilter: emptyDestFilter, airlineFilter: [] }),
+
+  setDestinationFilter: (f) => set({ destinationFilter: f }),
+  setAirlineFilter: (codes) => set({ airlineFilter: codes }),
+
+  // Resetuje wszystkie filtry do stanu początkowego
+  clearFilters: () => set({
+    destinationFilter: EMPTY_DESTINATION_FILTER,
+    airlineFilter: []
+  }),
 }));

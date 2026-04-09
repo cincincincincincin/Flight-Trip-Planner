@@ -21,14 +21,16 @@
 
 .map-search-overlay {
   position: absolute;
-  top: clamp(8px, 1.5vh, 14px);
-  left: clamp(8px, 1.5vw, 14px);
+  /* Elastyczne pozycjonowanie na górze / z boku */
+  top: 12px;
+  left: 12px;
   z-index: 200;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: clamp(4px, 0.6vh, 8px);
+  gap: 8px;
   width: clamp(280px, 40vw, 520px);
+  /* Overlay nie blokuje kliknięć w mapę w pustych miejscach */
   pointer-events: none;
 }
 
@@ -39,20 +41,20 @@
 .overlay-controls-row {
   display: flex;
   align-items: center;
-  gap: clamp(5px, 0.8vw, 8px);
+  gap: 8px;
 }
 
 .open-controls-btn,
 .sign-in-btn {
   flex-shrink: 0;
   height: 38px;
-  padding: 0 clamp(10px, 1.5vw, 16px);
+  padding: 0 15px;
   border-radius: var(--r-md);
   border: 1px solid var(--border-light);
   background: var(--bg-glass-hi);
   color: var(--text-secondary);
   font-family: var(--font-sans);
-  font-size: clamp(11px, 1.1vw, 13px);
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -128,6 +130,7 @@
     height: 100dvh;
     z-index: 300;
     transform: translateY(calc(100% - 100px));
+    /* Krzywa beziera a'la iOS dla płynnego wysuwania sheet-a */
     transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
     will-change: transform;
   }

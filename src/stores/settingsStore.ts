@@ -1,63 +1,66 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { FORMAT_LOCALES } from '../constants/format';
+import { CONFIG } from '../constants/config';
 import type { Language } from '../constants/text';
 
+/**
+ * Magazyn ustawień użytkownika i sesji. 
+ * Metoda updateSettings pozwala na wygodną zmianę dowolnego pola.
+ */
 export interface SettingsState {
-  // Trwałe ustawienia (zapisywane w localStorage)
+  // --- Atrybuty persystentne (Synchronizowane z PostgreSQL / LocalStorage) ---
   language: Language;
   currency: string;
   minTransferHours: number;
   minManualTransferHours: number;
   showRefreshButton: boolean;
   showConsoleLogs: boolean;
-  // Stan sesji (nie zapisywany)
-  travelDate: string;
-  timezone: string | null;
-  // Synchronizacja z DB (nie zapisywana)
+
+  // --- Atrybuty sesyjne (Ulotne) ---
+  travelDate: string;   // Data wylotu, synchronizowana ze strefą czasową wybranego airportu
+  timezone: string | null; // Strefa czasowa punktu nawigacyjnego
+
+  // Snapshot z bazy danych, żeby wiedzieć czy mamy jakieś niezapisane zmiany (Dirty Checking).
   savedSnapshot: string | null;
 
-  setLanguage: (v: Language) => void;
-  setCurrency: (v: string) => void;
-  setMinTransferHours: (v: number) => void;
-  setMinManualTransferHours: (v: number) => void;
-  setShowRefreshButton: (v: boolean) => void;
-  setShowConsoleLogs: (v: boolean) => void;
-  setTravelDate: (v: string) => void;
-  setTimezone: (v: string | null) => void;
-  setSavedSnapshot: (v: string | null) => void;
+  /**
+   * Generyczna metoda aktualizacji stanu (Single Entry Point).
+   */
+  updateSettings: (values: Partial<Omit<SettingsState, 'updateSettings'>>) => void;
 }
 
-// Wykrywa język przeglądarki — używany tylko jako wartość domyślna przy pierwszym uruchomieniu
+// Inicjalizacja języka interfejsu na podstawie preferencji przeglądarki
 const detectLanguage = (): Language =>
   navigator.language.toLowerCase().startsWith('pl') ? 'pl' : 'en';
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
+      // Wartości inicjalne pobierane z modułu CONFIG (Single Source of Truth)
       language: detectLanguage(),
-      currency: 'PLN',
-      minTransferHours: 2,
-      minManualTransferHours: 1,
+      currency: CONFIG.DEFAULT_CURRENCY,
+      minTransferHours: CONFIG.DEFAULT_MIN_TRANSFER_HOURS,
+      minManualTransferHours: CONFIG.DEFAULT_MIN_MANUAL_TRANSFER_HOURS,
       showRefreshButton: false,
       showConsoleLogs: false,
       travelDate: new Date().toLocaleDateString(FORMAT_LOCALES.CA),
       timezone: null,
       savedSnapshot: null,
 
-      setLanguage: v => set({ language: v }),
-      setCurrency: v => set({ currency: v }),
-      setMinTransferHours: v => set({ minTransferHours: v }),
-      setMinManualTransferHours: v => set({ minManualTransferHours: v }),
-      setShowRefreshButton: v => set({ showRefreshButton: v }),
-      setShowConsoleLogs: v => set({ showConsoleLogs: v }),
-      setTravelDate: v => set({ travelDate: v }),
-      setTimezone: v => set({ timezone: v }),
-      setSavedSnapshot: v => set({ savedSnapshot: v }),
+      updateSettings: (values) => set((state) => {
+        if (values.travelDate) console.log(`[RACE-DEBUG] {settingsStore} -> updateSettings | New travelDate: ${values.travelDate}`);
+        if (values.timezone)   console.log(`[RACE-DEBUG] {settingsStore} -> updateSettings | New timezone: ${values.timezone}`);
+        return { ...state, ...values };
+      }),
     }),
     {
-      name: 'ftp-settings',
-      // Zapisujemy tylko trwałe ustawienia — pomijamy stan sesji i stan synchronizacji
+      name: 'ftp-settings', // Klucz identyfikacyjny w LocalStorage
+
+      /* 
+       * Wybieramy co ma zostać w pamięci przeglądarki (LocalStorage).
+       * Datę i strefę czasową pomijamy, żeby nie było błędów przy nowej sesji.
+       */
       partialize: (state) => ({
         language: state.language,
         currency: state.currency,
@@ -65,6 +68,7 @@ export const useSettingsStore = create<SettingsState>()(
         minManualTransferHours: state.minManualTransferHours,
         showRefreshButton: state.showRefreshButton,
         showConsoleLogs: state.showConsoleLogs,
+        savedSnapshot: state.savedSnapshot,
       }),
     }
   )

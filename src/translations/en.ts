@@ -1,32 +1,32 @@
-// Angielskie tłumaczenia interfejsu użytkownika
+// Słownik angielski
 export const TEXTS_EN = {
-  appTitle: "Flight Trip Planner",
+  appTitle: "Flight Trip Planner", // App.tsx (Tytuł SEO)
   common: {
-    userFallback: "User",
-    unknown: "Unknown",
+    userFallback: "User", // UserMenu.tsx fallback
+    unknown: "Unknown", // Phase2.tsx fallback
   },
   buttons: {
-    signIn: "Sign In",
-    signOut: "Sign Out",
-    register: "Register",
-    openControls: "Settings",
-    closeControls: "✕ Close settings",
-    search: "Search",
-    cancel: "Cancel",
-    confirm: "Confirm",
-    delete: "Delete",
-    save: "Save",
-    edit: "Edit",
-    clear: "Clear",
-    tryAgain: "Try again",
-    refresh: "Refresh",
-    load: "Load",
-    rename: "Rename",
-    undo: "Undo",
-    redo: "Redo",
+    signIn: "Sign In", // App.tsx, AuthModal.tsx
+    signOut: "Sign Out", // UserMenu.tsx
+    register: "Register", // AuthModal.tsx
+    openControls: "Settings", // App.tsx (Mapa)
+    closeControls: "✕ Close settings", // App.tsx
+    search: "Search", // Search.tsx
+    cancel: "Cancel", // TripNameModal.tsx, ConfirmDeleteModal.tsx
+    confirm: "Confirm", // ConfirmDeleteModal.tsx
+    delete: "Delete", // ConfirmDeleteModal.tsx, SavedTripsPanel.tsx
+    save: "Save", // SaveTripButton.tsx
+    edit: "Edit", // TripItinerary.tsx
+    clear: "Clear", // FlightsFilter.tsx
+    tryAgain: "Try again", // FlightsList.tsx
+    refresh: "Refresh", // FlightsList.tsx
+    load: "Load", // SavedTripsPanel.tsx
+    rename: "Rename", // SavedTripsPanel.tsx
+    undo: "Undo", // TripItinerary.tsx
+    redo: "Redo", // TripItinerary.tsx
     close: "Close"
   },
-  auth: {
+  auth: { // AuthModal.tsx (Supabase)
     updateTripTitle: "Update existing trip",
     saveTripTitle: "Save current trip",
     createAccount: "Create Account",
@@ -38,14 +38,14 @@ export const TEXTS_EN = {
     continueGoogle: "Continue with Google",
     noAccount: "No account?",
     haveAccount: "Have an account?",
-    saveTrip: "Save Trip",
-    updateTrip: "Update Trip",
-    saving: "Saving...",
+    saveTrip: "Save Trip", // TripItinerary.tsx
+    updateTrip: "Update Trip", // TripItinerary.tsx
+    saving: "Saving...", // preferencesSync.ts
     nameYourTrip: "Name your trip",
     autoNamePrefix: "Trip ",
   },
   map: {
-    searchPlaceholder: "Search locations...",
+    searchPlaceholder: "Search locations...", // Search.tsx
   },
   flights: {
     never: 'Never',
@@ -53,17 +53,18 @@ export const TEXTS_EN = {
     minutesAgo: (minutes: number) => `${minutes} min ago`,
     hoursAgo: (hours: number) => `${hours}h ago`,
     loadingFrom: (code: string) => `Loading flights from ${code}...`,
-    noFlightsMatchFilters: "No flights match the current filters",
-    noFlightsForDate: (date: string) => `No flights for ${date}`,
+    noFlightsMatchFilters: "No flights match the current filters", // FlightsList.tsx
+    noFlightsForDate: (date: string) => `No flights for ${date}`, // FlightsList.tsx
     tryAdjustFilters: "Try adjusting or clearing filters",
     tryDifferentDate: "Try selecting a different date",
     lastUpdated: "Last updated: ",
     scheduleDataBy: "Schedule data thanks to:"
   },
-  date: {
-    placeholder: "DD/MM/YYYY"
+  date: { // DateInput.tsx
+    placeholder: "DD/MM/YYYY",
+    selectDate: "Select departure date",
   },
-  search: {
+  search: { // SearchComponent.tsx (3 fazy)
     expandToShowCities: "Expand to show cities",
     countries: "Countries",
     cities: "Cities",
@@ -77,37 +78,37 @@ export const TEXTS_EN = {
     noCities: "No cities",
     noCitiesAvailable: "No cities available",
     scrollMore: "Scroll for more",
-    expandToShowAirports: "Expand to show airports",
+    expandToShowAirports: "Expand to show airports", // Phase3.tsx
     collapse: "Collapse",
-    noAirportsForCity: (city: string) => `No airports available for ${city}`,
-    loadingAirportsForCity: (city: string) => `Loading airports for ${city}...`,
-    clickExpandCities: (country: string) => `Click expand to load cities for ${country}`,
-    loadingCitiesForCountry: (country: string) => `Loading cities for ${country}...`,
+    noAirportsForCity: (city: string) => `No airports available for ${city}`, // Phase3.tsx
+    loadingAirportsForCity: (city: string) => `Loading airports for ${city}...`, // Phase3.tsx
+    clickExpandCities: (country: string) => `Click expand to load cities for ${country}`, // CountryModeSection.tsx
+    loadingCitiesForCountry: (country: string) => `Loading cities for ${country}...`, // CountryModeSection.tsx
     airportCode: "Airport code",
-    noResultsFound: (query: string) => `No results found for "${query}"`,
+    noResultsFound: (query: string) => `No results found for "${query}"`, // Search.tsx
     searchResults: "Search Results",
-
-    scrolling: (count: number) => ` (Scrolling ${count} countries...)`,
-    debugPhase1: (count: number) => `Phase 1: Showing ${count} matching countries (collapsed by default)`,
+    scrolling: (count: number) => ` (Scrolling ${count} countries...)`, // Phase2.tsx
+    debugPhase1: (count: number) => `Phase 1: Showing ${count} matching countries`,
     expand: "Expand"
   },
-  filter: {
+  filter: { // FlightsFilter.tsx
     title: "Filters",
     countries: "Countries",
     cities: "Cities",
     airports: "Airports",
     searchDestinations: "Search destinations..."
   },
-  transferPicker: {
+  transferPicker: { // AirportTransferPicker.tsx
     toSearch: "to search",
     clickToAdd: "Click to add airports to search",
     searchAirports: "Search airports to add...",
     noAirports: "No airports found",
-    addAirports: (count: number) => `Add ${count} airport${count !== 1 ? 's' : ''}`
+    addAirports: (count: number) => `Add ${count} airport${count !== 1 ? 's' : ''}`,
+    title: "Change transfer airport",
+    selectAirport: "Select an airport to use as a connection point",
   },
-  panel: {
+  panel: { // RightPanel.tsx
     selectedCount: (selected: number, max: number) => `${selected}/${max} airports selected`,
-
     originalAirport: "Original airport",
     transferAirports: "Transfer airports",
     switchTimezone: "Click to switch timezone",
@@ -121,13 +122,13 @@ export const TEXTS_EN = {
     loadingFlights: "Loading flights...",
     departingFlights: "Departing Flights",
     selectAirportsMax: (max: number) => `Select airports (max ${max})`,
-    loadFlightsFromCount: (count: number) => `Load flights from ${count} airport(s)`,
+    loadFlightsFromCount: (count: number) => `Load flights from ${count} airport(s)`, // CountryModeSection.tsx
     selectCitiesMax: (max: number) => `Select cities (max ${max} airports total)`,
-    addAirportsFrom: "Add airports from ",
+    addAirportsFrom: "Add airports from ", // PendingCountryPicker.tsx
     addCountAirports: (count: number) => `Add ${count} airport${count !== 1 ? 's' : ''}`,
     airportAbbreviation: "ap"
   },
-  card: {
+  card: { // FlightCard.tsx
     terminal: "Terminal:",
     gate: "Gate:",
     flightTime: "Flight time:",
@@ -138,17 +139,17 @@ export const TEXTS_EN = {
     loadingPrices: "Loading prices...",
     failedPrices: "Failed to load prices",
     noPrices: "No prices available for this flight",
-    ticketDataBy: "Ticket data thanks to:",
+    ticketDataBy: "Ticket data thanks to:", // Footnote
     bookTicket: "Book ticket",
     addTrip: "Add to trip",
     showPrices: "Show prices",
     hidePrices: "Hide prices",
     noFlightsForDate: "No flights for selected date",
-    clickRouteToFilter: "Click route to filter by destination",
+    clickRouteToFilter: "Click route to filter by destination", // MapComponent.tsx
     estimated: "~ estimated",
-    estimatedTooltip: "Estimated arrival — calculated from flight distance and average aircraft speed (~850 km/h)",
-    origin: "Origin",
-    destination: "Destination",
+    estimatedTooltip: "Estimated arrival based on distance/speed (~850 km/h)",
+    origin: "Origin", // Fallback
+    destination: "Destination", // Fallback
     loading: "Loading...",
     oneWay: " one way",
     na: "N/A"
@@ -156,13 +157,13 @@ export const TEXTS_EN = {
   days: {
     mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun"
   },
-  trip: {
+  trip: { // TripItinerary.tsx
     tripEnded: "Trip has already ended",
     editTrip: "Edit this trip",
     timeInCity: (city: string) => `Time in ${city}`,
     transfer: "Transfer: ",
   },
-  savedTrips: {
+  savedTrips: { // SavedTripsPanel.tsx
     title: "Saved trips",
     loading: "Loading...",
     failed: "Failed to load trips",
@@ -176,15 +177,15 @@ export const TEXTS_EN = {
     nameYourTrip: "Name your trip",
     save: "Save"
   },
-  modals: {
+  modals: { // ConfirmDeleteModal.tsx
     thisTrip: "this trip",
     undoWarning: "This action cannot be undone.",
-    namePlaceholder: "Leave empty for auto-generated name",
+    namePlaceholder: "Empty for auto-name",
     deleteTrip: "Delete trip?",
     sureDelete: "Are you sure you want to delete",
-
   },
-  controls: {
+  controls: { // ControlsPanel.tsx
+    layersTitle: "Map Layers",
     darkMatter: "Dark Matter",
     positron: "Positron",
     voyager: "Voyager",
@@ -192,11 +193,12 @@ export const TEXTS_EN = {
     imagery: "ArcGIS Imagery",
     charted: "ArcGIS Charted Territory",
     community: "ArcGIS Community",
+    humanGeo: "ArcGIS Human Geography",
     globe: "Globe",
     showRefresh: "Show Refresh Button",
     showConsole: "Show Console Logs",
     loadRoutes: "Load Routes",
-    customizeStyles: "Customize Styles",
+    customizeStyles: "Customize Styles", // ColorSettings.tsx
     hideStyles: "Hide Styles",
     developer: "Developer",
     hideDeveloper: "Hide Developer",
@@ -223,12 +225,24 @@ export const TEXTS_EN = {
     settingsSaved: "Saved",
     saving: "Saving...",
   },
-  colorSettings: {
+  colorSettings: { // ColorSettings.tsx
+    title: "Map Color Customization",
     picker: {
-      selectWindow: "Select window in browser dialog…",
-      clickToPick: "Click to pick · Esc to cancel"
+      selectWindow: "Select window...",
+      clickToPick: "Click to pick color · Esc to cancel"
     },
     colors: "Colors",
+    reset: "Reset Colors",
+    water: "Water Area",
+    land: "Primary Land",
+    landSecondary: "Secondary Land",
+    labels: "Text Labels",
+    airports: "Airport Markers",
+    routes: "Flight Routes",
+    stars: "Background Stars",
+    unselected: "Inactive Elements",
+    size: "Marker Size",
+    colorHex: "Color HEX",
     generalAirports: "General airports",
     destinationAirports: "Destination airports",
     tripAirports: "Trip airports",
@@ -253,8 +267,6 @@ export const TEXTS_EN = {
     highlightedLabelHoverSize: "Highlighted label hover size",
     startingPoints: "Starting points",
     mapElements: "Map elements",
-    airports: "Airports",
-    routes: "Routes",
     flightCardHighlights: "Flight card highlights",
     sizes: "Sizes",
     zoomRange: "Zoom range",
@@ -277,7 +289,7 @@ export const TEXTS_EN = {
   errors: {
     generic: "Something went wrong.",
     mapNotLoaded: "Map could not be loaded",
-    webglNotSupported: "WebGL is not supported in your browser. Please update or try a different browser.",
+    webglNotSupported: "WebGL is not supported in your browser.",
     noResults: "No results found"
   }
 };

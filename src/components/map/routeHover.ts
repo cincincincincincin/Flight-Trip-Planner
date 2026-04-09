@@ -27,6 +27,8 @@ export interface RouteHoverRefs {
   cityLabelCodeByCityRef: React.MutableRefObject<Record<string, string>>;
   highlightedCityLabelCodesRef: React.MutableRefObject<string[]>;
   flightDetailsMap: React.MutableRefObject<Record<string, Flight[]>>;
+  /** INDEKS GRUPOWY (Faza 2): Map<"ORIGIN-DEST", Flight[]> dla O(1) popupów */
+  flightsByRouteGroupMapRef: React.MutableRefObject<Map<string, Flight[]>>;
   airportNamesMap: React.MutableRefObject<Record<string, string>>;
   airportCoordsMapRef: React.MutableRefObject<Record<string, [number, number]>>;
   currentPopup: React.MutableRefObject<maplibregl.Popup | null>;
@@ -234,10 +236,10 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
         : (selectedAirportCodeRef.current ? [selectedAirportCodeRef.current] : []);
     const srcCode = startCodes[srcIdx] ?? startCodes[0] ?? '';
 
-    // flightDetailsMap is built from displayedFlights (already date/TZ/filter aware).
-    // Only filter here by source airport.
-    const displayFlights = (flightDetailsMap.current[destCode] || [])
-      .filter(f => !srcCode || f.origin_airport_code === srcCode);
+    // INŻYNIERSKA OPTYMALIZACJA (O(1)): Pobieramy grupę lotów bezpośrednio z indeksu.
+    // Zamiast filtrować tysiące rekordów, robimy stały odczyt po kluczu origin-dest.
+    const routeKey = `${srcCode}-${destCode}`;
+    const displayFlights = (refs.flightsByRouteGroupMapRef.current.get(routeKey) || []);
 
     const shownFlights = displayFlights.slice(0, CONFIG.MAX_POPUP_FLIGHTS);
     const extraCount = displayFlights.length - shownFlights.length;

@@ -16,6 +16,11 @@ export interface FilterApplierContext {
   manualTransferAirportCodes: string[];
   isRouteHovered: boolean;
   tripRoutes: TripRoute[];
+  tripState: any;
+  coordsMap: Record<string, [number, number]>;
+  // HOVER STATE (Faza 2: Unified Filtering)
+  excludeCodes?: string[];
+  isHoverFocused?: boolean;
 }
 
 export interface FilterApplierWritableRefs {
@@ -35,9 +40,26 @@ export function applyMapAirportFilters(
   const explorationCodes = ctx.explorationAirportCodes;
   const inTripMode      = tvac && tvac.length > 0;
 
+  // INŻYNIERSKA NAPRAWA: MapLibre nie obsługuje poprawnie ['!in', 'code'] (pusta tablica).
+  // Musimy jawnie sprawdzić obecność elementów lub ustawić filtr na null.
+  const highlightedCodes = [...new Set([
+    ...ha,
+    ...(tvac ?? []),
+    ...sacMulti,
+    ...explorationCodes,
+    ...(sac ? [sac] : []),
+    ...ctx.manualTransferAirportCodes,
+  ])];
+
   if (map.getLayer('airports-circles')) {
-    map.setFilter('airports-circles',
-      inTripMode ? ['==', 'code', ''] : ['!in', 'code', ...ha]);
+    if (inTripMode) {
+      map.setFilter('airports-circles', ['==', 'code', '']);
+    } else if (highlightedCodes.length > 0) {
+      // Wykluczamy wszystko, co ma własną, bardziej priorytetową warstwę (Selected/Trip/Hl)
+      map.setFilter('airports-circles', ['!in', 'code', ...highlightedCodes]);
+    } else {
+      map.setFilter('airports-circles', null);
+    }
   }
   if (map.getLayer('airports-highlighted')) {
     map.setFilter('airports-highlighted', ['in', 'code', ...ha]);
@@ -47,14 +69,6 @@ export function applyMapAirportFilters(
   }
   {
     const hovCode = ctx.hoveredAirportCode;
-    const highlightedCodes = [...new Set([
-      ...ha,
-      ...(tvac ?? []),
-      ...sacMulti,
-      ...explorationCodes,
-      ...(sac ? [sac] : []),
-      ...ctx.manualTransferAirportCodes,
-    ])];
     const cityLabelCodes      = ctx.cityLabelCodes;
     const cityCodeByAirport   = ctx.airportCityKeyMap;
     const cityLabelCodeByCity = ctx.cityLabelCodeByCity;
@@ -116,34 +130,52 @@ export function applyMapAirportFilters(
       }
     }
 
-    // Only update highlighted labels if route hover is not active
+    // TYLKO DLA PODŚWIETLONYCH ETYKIET (jeśli nie ma hovera na trasie)
     if (!ctx.isRouteHovered) {
       if (map.getLayer('airports-labels-highlighted') || map.getLayer('airports-labels-highlighted-city')) {
-        const codes = [...ha];
+        // INŻYNIERSKA OPTYMALIZACJA (O(N)): Używamy Set zamiast wielokrotnych .includes w pętli.
+        // Zapobiega to wydajnościowej degradacji O(N^2) przy dużej liczbie zaznaczonych punktów.
+        const codesSet = new Set<string>(ha);
+        
         if (inTripMode) {
-          (tvac ?? []).forEach(c => { if (!codes.includes(c)) codes.push(c); });
-          sacMulti.forEach(c => { if (!codes.includes(c)) codes.push(c); });
-          ctx.manualTransferAirportCodes.forEach(c => { if (!codes.includes(c)) codes.push(c); });
-        } else if (sacMulti.length > 0) {
-          sacMulti.forEach(c => { if (!codes.includes(c)) codes.push(c); });
-        } else if (sac && !codes.includes(sac)) {
-          codes.push(sac);
+          (tvac ?? []).forEach(c => codesSet.add(c));
+          sacMulti.forEach(c => codesSet.add(c));
+          ctx.manualTransferAirportCodes.forEach(c => codesSet.add(c));
+        } else {
+          if (sacMulti.length > 0) {
+            sacMulti.forEach(c => codesSet.add(c));
+          } else if (sac) {
+            codesSet.add(sac);
+          }
         }
+
+        const codes = [...codesSet];
         writableRefs.highlightedLabelCodesRef.current = codes;
+
         const filterCodes = hovCode ? codes.filter(c => c !== hovCode) : codes;
-        const filter: maplibregl.FilterSpecification = filterCodes.length === 0 ? ['==', 'code', ''] : ['in', 'code', ...filterCodes];
-        const highlightedCityCodes = new Set<string>();
+        const filter: maplibregl.FilterSpecification = filterCodes.length === 0 
+          ? ['==', 'code', ''] 
+          : ['in', 'code', ...filterCodes];
+
+        // Wyznaczanie reprezentatywnych kodów miast dla podświetlonych lotnisk
+        const highlightedCityCodesSet = new Set<string>();
         for (const code of filterCodes) {
           const cityKey = cityCodeByAirport[code];
           const rep = cityLabelCodeByCity[cityKey];
-          if (rep) highlightedCityCodes.add(rep);
+          if (rep) highlightedCityCodesSet.add(rep);
         }
-        writableRefs.highlightedCityLabelCodesRef.current = [...highlightedCityCodes];
-        if (map.getLayer('airports-labels-highlighted')) map.setFilter('airports-labels-highlighted', filter);
+        
+        const highlightedCityCodes = [...highlightedCityCodesSet];
+        writableRefs.highlightedCityLabelCodesRef.current = highlightedCityCodes;
+
+        if (map.getLayer('airports-labels-highlighted')) {
+          map.setFilter('airports-labels-highlighted', filter);
+        }
+        
         if (map.getLayer('airports-labels-highlighted-city')) {
-          const cityFilter: maplibregl.FilterSpecification = highlightedCityCodes.size === 0
+          const cityFilter: maplibregl.FilterSpecification = highlightedCityCodes.length === 0
             ? ['==', 'code', '']
-            : ['in', 'code', ...writableRefs.highlightedCityLabelCodesRef.current];
+            : ['in', 'code', ...highlightedCityCodes];
           map.setFilter('airports-labels-highlighted-city', cityFilter);
         }
       }
@@ -156,14 +188,64 @@ export function applyMapAirportFilters(
     else map.setFilter('airports-selected', ['==', 'code', '']);
   }
 
-  // Update permanent trip routes
+  // --- HOVER LAYERS (Zero-Waste Integration) ---
+  const hovCode = ctx.hoveredAirportCode;
+  const isHoverFocused = ctx.isHoverFocused;
+  const excludeCodes = ctx.excludeCodes || [];
+
+  if (map.getLayer('airports-hover')) {
+    map.setFilter('airports-hover', ['==', 'code', hovCode ?? '']);
+  }
+
+  if (map.getLayer('airports-labels-hover')) {
+    map.setFilter('airports-labels-hover', ['==', 'code', (isHoverFocused && hovCode) ? hovCode : '']);
+  }
+
+  if (map.getLayer('airports-labels-hover-general')) {
+    map.setFilter('airports-labels-hover-general', ['==', 'code', (!isHoverFocused && hovCode) ? hovCode : '']);
+  }
+
+  // --- SOURCE UPDATES (Zero-Waste Route Sync) ---
+  
+  // 1. Permanent trip routes (Itinerary)
   const tripSrc = map.getSource('trip-permanent-routes') as maplibregl.GeoJSONSource | undefined;
   if (tripSrc) {
-    const features = ctx.tripRoutes.map((route, i) => ({
-      type: 'Feature' as const, id: i,
-      geometry: { type: 'LineString' as const, coordinates: generateGreatCircle(route.from, route.to) },
-      properties: {}
-    }));
+    const features = (ctx.tripRoutes || [])
+      .filter(route => route && route.from && route.to)
+      .map((route, i) => ({
+        type: 'Feature' as const, id: i,
+        geometry: { type: 'LineString' as const, coordinates: generateGreatCircle(route.from, route.to) },
+        properties: { isTripRoute: true }
+      }));
     tripSrc.setData({ type: 'FeatureCollection', features });
+  }
+
+  // 2. Manual transfer preview routes
+  const transferSrc = map.getSource('manual-transfer-preview') as maplibregl.GeoJSONSource | undefined;
+  if (transferSrc) {
+    const features: any[] = [];
+    if (ctx.tripState && ctx.manualTransferAirportCodes.length > 0) {
+      const lastLeg = ctx.tripState.legs[ctx.tripState.legs.length - 1];
+      const currentCode = lastLeg ? lastLeg.toAirportCode : ctx.tripState.startAirport.code;
+      const currentCoords = ctx.coordsMap[currentCode];
+
+      if (currentCoords) {
+        ctx.manualTransferAirportCodes.forEach((code, i) => {
+          const targetCoords = ctx.coordsMap[code];
+          if (targetCoords) {
+            features.push({
+              type: 'Feature',
+              id: i,
+              geometry: {
+                type: 'LineString',
+                coordinates: generateGreatCircle(currentCoords as [number, number], targetCoords as [number, number])
+              },
+              properties: { isTransferPreview: true }
+            });
+          }
+        });
+      }
+    }
+    transferSrc.setData({ type: 'FeatureCollection', features });
   }
 }

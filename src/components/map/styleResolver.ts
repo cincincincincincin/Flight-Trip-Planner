@@ -1,79 +1,83 @@
+/**
+ * MODUŁ ROZWIĄZYWANIA STYLÓW (styleResolver.ts)
+ * Zarządza mapowaniem symbolicznych nazw stylów na konkretne URL-e oraz
+ * implementuje logikę transformacji zapytań dla usług ArcGIS.
+ * 
+ * Mechanizm ten pozwala na bezpieczne użycie statycznych plików JSON stylu,
+ * dynamicznie wstrzykując klucze API podczas żądań sieciowych (Zero-Waste).
+ */
+
 import maplibregl from 'maplibre-gl';
 import { MAP_STYLES, isArcGISUrl } from '../../constants/mapStyles';
-import { THEME_COLORS } from '../../constants/theme';
-import { CONFIG } from '../../constants/config';
 
-export const ARCGIS_API_KEY = import.meta.env.VITE_ARCGIS_API_KEY ?? '';
+export const ARCGIS_API_KEY = (import.meta as any).env.VITE_ARCGIS_API_KEY ?? '';
 
-export const ARCGIS_PLUGIN_STYLES = new Set([MAP_STYLES.ARCGIS_IMAGERY, MAP_STYLES.ARCGIS_CHARTED, MAP_STYLES.ARCGIS_COMMUNITY]);
+export const LOCAL_STYLE_IDS = new Set(Object.values(MAP_STYLES));
 
-export function isArcGISPluginStyle(style: string): boolean {
-  return ARCGIS_PLUGIN_STYLES.has(style);
+export function isLocalStyleId(style: string): boolean {
+  return LOCAL_STYLE_IDS.has(style as any);
 }
 
-// Convert MAP_STYLES.ARCGIS_IMAGERY → 'arcgis/imagery' (the format expected by the plugin)
-export function toPluginStyleName(style: string): string {
-  return style.replace(':', '/');
+/**
+ * Zwraca URL do lokalnego, spatchowanego pliku JSON stylu.
+ */
+export function getLocalStyleUrl(styleId: string, globeMode: boolean): string {
+  const suffix = globeMode ? "_globe" : "";
+  return `/data/styles/${styleId}${suffix}.json`;
 }
 
+/**
+ * Transformacja zapytań ArcGIS (Zero-Waste API Key Injection).
+ * Obsługuje wstrzykiwanie klucza API do URL-i kafelków oraz transformację
+ * statycznych definicji stylu, które zawierają placeholder {{ARCGIS_API_KEY}}.
+ */
 export function arcGISTransformRequest(url: string, _resourceType?: string): { url: string } {
-  if (isArcGISUrl(url) && ARCGIS_API_KEY) {
+  if (!url || typeof url !== 'string') return { url: url || '' };
+
+  // 1. Obsługa placeholderów w statycznych definicjach stylu wygenerowanych przez skrypt Python
+  if (url.includes('{{ARCGIS_API_KEY}}')) {
+    return { url: url.replace(/{{ARCGIS_API_KEY}}/g, ARCGIS_API_KEY) };
+  }
+
+  // 2. Obsługa bezpośrednich żądań do usług ArcGIS (Kafelki/WFS)
+  const isArcGIS = url.includes('arcgis.com') || (typeof isArcGISUrl === 'function' && isArcGISUrl(url));
+  if (isArcGIS && ARCGIS_API_KEY && !url.includes('token=')) {
     const separator = url.includes('?') ? '&' : '?';
     return { url: `${url}${separator}token=${ARCGIS_API_KEY}` };
   }
+
   return { url };
 }
 
-export function resolveMapStyle(style: string, globeMode = false): string | maplibregl.StyleSpecification {
-  const projection = globeMode ? { type: 'globe' } : undefined;
-  switch (style) {
-    case MAP_STYLES.ARCGIS_SATELLITE:
-      return {
-        version: 8,
-        name: 'Satellite Map',
-        glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
-        ...(projection && { projection } as any),
-        sources: {
-          satellite: {
-            type: 'raster',
-            tiles: [`https://ibasemaps-api.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}?token=${ARCGIS_API_KEY}`],
-            tileSize: 256,
-            attribution: 'Powered by <a href="https://www.esri.com/" target="_blank" rel="noopener noreferrer">Esri</a> | <a href="https://maplibre.org/" target="_blank" rel="noopener noreferrer">MapLibre</a> | Sources: Esri, TomTom, Garmin, FAO, NOAA, USGS, \u00a9 OpenStreetMap contributors, and the GIS User Community | Source: Esri, Vantor, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community',
-          },
-          world: {
-            type: 'vector',
-            url: 'https://demotiles.maplibre.org/tiles/tiles.json',
-            attribution: '',
-          },
-        },
-        layers: [
-          { id: 'satellite', type: 'raster', source: 'satellite' } as maplibregl.RasterLayerSpecification,
-          {
-            id: 'country-borders',
-            type: 'line',
-            source: 'world',
-            'source-layer': 'countries',
-            paint: { 'line-color': THEME_COLORS.textInverse, 'line-width': 1.2 },
-          } as maplibregl.LineLayerSpecification,
-          {
-            id: 'country-labels',
-            type: 'symbol',
-            source: 'world',
-            'source-layer': 'centroids',
-            layout: {
-              'text-field': ['get', 'NAME'],
-              'text-font': ['Open Sans Regular'],
-              'text-size': ['interpolate', ['linear'], ['zoom'], 0, 14, 5, CONFIG.HOVER_RADIUS_FALLBACK, 8, 22],
-            },
-            paint: { 'text-color': THEME_COLORS.textInverse, 'text-halo-color': THEME_COLORS.textBlack, 'text-halo-width': 1 },
-          } as maplibregl.SymbolLayerSpecification,
-        ],
-      };
-    case MAP_STYLES.ARCGIS_IMAGERY:
-    case MAP_STYLES.ARCGIS_CHARTED:
-    case MAP_STYLES.ARCGIS_COMMUNITY:
-      return { version: 8, sources: {}, layers: [] } as maplibregl.StyleSpecification;
-    default:
-      return style;
+
+
+export const BLANK_STYLE: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {},
+  glyphs: "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+  layers: [
+    {
+      id: 'background',
+      type: 'background',
+      paint: { 'background-color': 'rgba(0,0,0,0)' }
+    }
+  ],
+};
+
+/**
+ * RESOLVER MODULARNY (Zero-Transformation):
+ * Zwraca URL do lokalnego pliku JSON zamiast budować obiekt w pamięci.
+ */
+export function resolveMapStyle(style: string, globeMode: boolean): string | maplibregl.StyleSpecification {
+  // Mapowanie starych nazw na ArcGIS ID
+  if (style === 'Satelita' || style === 'Satelite' || style === 'satellite' || style === 'SATELLITE') {
+    style = MAP_STYLES.ARCGIS_IMAGERY;
   }
+
+  // Jeśli to styl lokalny (ArcGIS lub MapLibre), używamy lokalnej kopii
+  if (isLocalStyleId(style)) {
+    return getLocalStyleUrl(style, globeMode);
+  }
+
+  return style;
 }

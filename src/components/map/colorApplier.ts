@@ -1,17 +1,31 @@
+/**
+ * WARSTWA STYLOWANIA DYNAMICZNEGO (colorApplier.ts)
+ * Odpowiada za bezpośrednią komunikację z silnikiem WebGL MapLibre.
+ * Implementuje logikę kolorowania i skalowania elementów na podstawie stanu aplikacji (Trip, Selection, Highlight).
+ * Wykorzystuje wydajne wyrażenia MapLibre (expressions) wykonywane w całości na GPU.
+ */
+
 import maplibregl from 'maplibre-gl';
 import { useColorStore } from '../../stores/colorStore';
 import { useMapStore } from '../../stores/mapStore';
-import { getHaloColorForTextColor } from './utils';
+import { getHaloColorForTextColor, getTextColorForStyle } from './utils';
 import { THEME_COLORS } from '../../constants/theme';
 import { CONFIG } from '../../constants/config';
 
 export interface ColorApplierContext {
+  /** Kody lotnisk wybranych przez użytkownika (Multi-start) */
   selectedAirportCodes: string[];
+  /** Kody lotnisk widocznych w aktualnie planowanej trasie */
   tripVisibleAirportCodes: string[] | null;
+  /** Kody lotnisk podświetlonych (np. przez filtry lub interakcje) */
   highlightedAirports: string[];
+  /** Kody lotnisk będących częścią ręcznych przesiadek */
   manualTransferAirportCodes: string[];
+  /** Kody lotnisk z podglądu wyszukiwania */
   explorationAirportCodes: string[];
+  /** Kod pojedynczego wybranego lotniska (Legacy support) */
   selectedAirportCode: string | null;
+  /** Kody lotnisk, których etykiety mają być podświetlone */
   highlightedLabelCodes: string[];
 }
 
@@ -55,7 +69,7 @@ export function applyMapColors(map: maplibregl.Map, ctx: ColorApplierContext): v
   const tripCodes      = tvac ?? [];
   const highlightedCodes = [...new Set([...startCodes, ...ha, ...tripCodes])];
 
-  // Static circle/line colors
+  // --- Kolory Statyczne (Circle/Line) ---
   if (map.getLayer('airports-highlighted'))
     map.setPaintProperty('airports-highlighted', 'circle-color', destinationAirport);
   if (map.getLayer('airports-trip'))
@@ -64,10 +78,10 @@ export function applyMapColors(map: maplibregl.Map, ctx: ColorApplierContext): v
     map.setPaintProperty('airports-circles', 'circle-color', generalAirport);
   if (map.getLayer('airports-route-hover'))
     map.setPaintProperty('airports-route-hover', 'circle-color', destinationAirportHover);
-  if (map.getLayer('transfer-preview-route-line'))
-    map.setPaintProperty('transfer-preview-route-line', 'line-color', transferRoute);
+  if (map.getLayer('manual-transfer-preview-line'))
+    map.setPaintProperty('manual-transfer-preview-line', 'line-color', transferRoute);
 
-  // Hover colors
+  // --- Kolory stanu Hover (Interakcja) ---
   const startHoverExpr: AnyExpr = sacMulti.length > 1
     ? ['match', ['get', 'code'],
         ...sacMulti.flatMap((code, i) => [code, sp[i]?.airportHover ?? THEME_COLORS.textBlack]),
@@ -79,6 +93,7 @@ export function applyMapColors(map: maplibregl.Map, ctx: ColorApplierContext): v
     ...ha,
     ...ctx.highlightedLabelCodes,
   ])].filter(c => !startCodes.includes(c) && !tripCodes.includes(c));
+  
   if (map.getLayer('airports-hover'))
     map.setPaintProperty('airports-hover', 'circle-color', [
       'case',
@@ -91,6 +106,7 @@ export function applyMapColors(map: maplibregl.Map, ctx: ColorApplierContext): v
       generalAirportHover,
     ]);
 
+  // --- Pomocnicy interpolacji zoomu ---
   const zMin = Math.min(zoomRangeMin, zoomRangeMax);
   const zMax = Math.max(zoomRangeMin, zoomRangeMax);
   const zoomInterp = (min: number, max: number): AnyExpr => (
@@ -98,6 +114,8 @@ export function applyMapColors(map: maplibregl.Map, ctx: ColorApplierContext): v
       ? max
       : ['interpolate', ['linear'], ['zoom'], zMin, min, zMax, max]
   );
+  
+  /** Dynamiczne wyznaczanie offsetu etykiety na podstawie promienia punktu (Zero-Overlapping) */
   const labelOffsetExpr = (labelMin: number, labelMax: number, dotMin: number, dotMax: number): AnyExpr => {
     const padding = CONFIG.LABEL_OFFSET_PADDING;
     const minOffset = Math.max(0.2, (dotMin + padding) / Math.max(6, labelMin));
@@ -107,18 +125,20 @@ export function applyMapColors(map: maplibregl.Map, ctx: ColorApplierContext): v
       : ['interpolate', ['linear'], ['zoom'], zMin, ['literal', [0, minOffset]], zMax, ['literal', [0, maxOffset]]];
   };
 
-  // Label sizes and colors
+  // --- Rozmiary i kolory etykiet ---
   if (map.getLayer('airports-labels-normal')) {
     map.setLayoutProperty('airports-labels-normal', 'text-size', zoomInterp(generalAirportLabelSizeMin, generalAirportLabelSizeMax));
     map.setLayoutProperty('airports-labels-normal', 'text-offset', labelOffsetExpr(generalAirportLabelSizeMin, generalAirportLabelSizeMax, generalAirportRadiusMin, generalAirportRadiusMax));
-    map.setPaintProperty('airports-labels-normal', 'text-color', generalLabelColor);
-    map.setPaintProperty('airports-labels-normal', 'text-halo-color', getHaloColorForTextColor(generalLabelColor, mapStyle));
+    const finalColor = getTextColorForStyle(generalLabelColor, mapStyle);
+    map.setPaintProperty('airports-labels-normal', 'text-color', finalColor);
+    map.setPaintProperty('airports-labels-normal', 'text-halo-color', getHaloColorForTextColor(finalColor, mapStyle));
   }
   if (map.getLayer('airports-labels-normal-city')) {
     map.setLayoutProperty('airports-labels-normal-city', 'text-size', zoomInterp(generalAirportLabelSizeMin, generalAirportLabelSizeMax));
     map.setLayoutProperty('airports-labels-normal-city', 'text-offset', labelOffsetExpr(generalAirportLabelSizeMin, generalAirportLabelSizeMax, generalAirportRadiusMin, generalAirportRadiusMax));
-    map.setPaintProperty('airports-labels-normal-city', 'text-color', generalLabelColor);
-    map.setPaintProperty('airports-labels-normal-city', 'text-halo-color', getHaloColorForTextColor(generalLabelColor, mapStyle));
+    const finalColor = getTextColorForStyle(generalLabelColor, mapStyle);
+    map.setPaintProperty('airports-labels-normal-city', 'text-color', finalColor);
+    map.setPaintProperty('airports-labels-normal-city', 'text-halo-color', getHaloColorForTextColor(finalColor, mapStyle));
   }
 
   const startLabelExpr: AnyExpr = sacMulti.length > 1
@@ -210,8 +230,9 @@ export function applyMapColors(map: maplibregl.Map, ctx: ColorApplierContext): v
     map.setLayoutProperty('airports-labels-hover-general', 'text-size', zoomInterp(generalLabelHoverSizeMin, generalLabelHoverSizeMax));
     map.setLayoutProperty('airports-labels-hover-general', 'text-offset', labelOffsetExpr(generalLabelHoverSizeMin, generalLabelHoverSizeMax, generalAirportHoverRadiusMin, generalAirportHoverRadiusMax));
     map.setLayoutProperty('airports-labels-hover-general', 'text-font', ["Noto Sans Bold"]);
-    map.setPaintProperty('airports-labels-hover-general', 'text-color', generalLabelHoverColor);
-    map.setPaintProperty('airports-labels-hover-general', 'text-halo-color', getHaloColorForTextColor(generalLabelHoverColor, mapStyle));
+    const finalHoverColor = getTextColorForStyle(generalLabelHoverColor, mapStyle);
+    map.setPaintProperty('airports-labels-hover-general', 'text-color', finalHoverColor);
+    map.setPaintProperty('airports-labels-hover-general', 'text-halo-color', getHaloColorForTextColor(finalHoverColor, mapStyle));
   }
 
   // airports-selected: per-startPoint match expression
@@ -228,13 +249,6 @@ export function applyMapColors(map: maplibregl.Map, ctx: ColorApplierContext): v
   }
 
   // selected-routes and trip routes
-  const ziLegacy = (base: number): AnyExpr => [
-    'interpolate', ['linear'], ['zoom'],
-    1, Math.max(0.1, base * CONFIG.SIZE_INTERPOLATION_MIN_FACTOR),
-    6, base,
-    12, base * CONFIG.SIZE_INTERPOLATION_MAX_FACTOR,
-  ];
-
   if (map.getLayer('selected-routes')) {
     let routeColorExpr: AnyExpr;
     if (sacMulti.length > 1) {
@@ -259,8 +273,8 @@ export function applyMapColors(map: maplibregl.Map, ctx: ColorApplierContext): v
     ]);
     map.setPaintProperty('selected-routes', 'line-width', [
       'interpolate', ['linear'], ['zoom'],
-      1, ['case', ['boolean', ['feature-state', 'hover'], false], routeLineHoverWidthMin, routeLineWidthMin],
-      12, ['case', ['boolean', ['feature-state', 'hover'], false], routeLineHoverWidthMax, routeLineWidthMax],
+      zMin, ['case', ['boolean', ['feature-state', 'hover'], false], routeLineHoverWidthMin, routeLineWidthMin],
+      zMax, ['case', ['boolean', ['feature-state', 'hover'], false], routeLineHoverWidthMax, routeLineWidthMax],
     ]);
   }
 
@@ -273,8 +287,8 @@ export function applyMapColors(map: maplibregl.Map, ctx: ColorApplierContext): v
     ]);
     map.setPaintProperty('trip-permanent-routes-line', 'line-width', [
       'interpolate', ['linear'], ['zoom'],
-      1, ['case', ['boolean', ['feature-state', 'hover'], false], tripRouteHoverWidthMin, tripRouteWidthMin],
-      12, ['case', ['boolean', ['feature-state', 'hover'], false], tripRouteHoverWidthMax, tripRouteWidthMax],
+      zMin, ['case', ['boolean', ['feature-state', 'hover'], false], tripRouteHoverWidthMin, tripRouteWidthMin],
+      zMax, ['case', ['boolean', ['feature-state', 'hover'], false], tripRouteHoverWidthMax, tripRouteWidthMax],
     ]);
   }
 
@@ -299,31 +313,35 @@ export function applyMapColors(map: maplibregl.Map, ctx: ColorApplierContext): v
   if (map.getLayer('airports-hover'))
     map.setPaintProperty('airports-hover', 'circle-radius', [
       'interpolate', ['linear'], ['zoom'],
-      1, ['case', ['in', ['get', 'code'], ['literal', highlightedCodes]], highlightedAirportHoverRadiusMin, generalAirportHoverRadiusMin],
-      12, ['case', ['in', ['get', 'code'], ['literal', highlightedCodes]], highlightedAirportHoverRadiusMax, generalAirportHoverRadiusMax],
+      zMin, ['case', ['in', ['get', 'code'], ['literal', highlightedCodes]], highlightedAirportHoverRadiusMin, generalAirportHoverRadiusMin],
+      zMax, ['case', ['in', ['get', 'code'], ['literal', highlightedCodes]], highlightedAirportHoverRadiusMax, generalAirportHoverRadiusMax],
     ]);
   if (map.getLayer('airports-route-hover'))
     map.setPaintProperty('airports-route-hover', 'circle-radius', [
       'interpolate', ['linear'], ['zoom'],
-      1, highlightedAirportHoverRadiusMin,
-      12, highlightedAirportHoverRadiusMax,
+      zMin, highlightedAirportHoverRadiusMin,
+      zMax, highlightedAirportHoverRadiusMax,
     ]);
   if (map.getLayer('airports-labels-hover'))
     map.setLayoutProperty('airports-labels-hover', 'text-size', [
       'interpolate', ['linear'], ['zoom'],
-      1, highlightedLabelHoverSizeMin,
-      12, highlightedLabelHoverSizeMax,
+      zMin, highlightedLabelHoverSizeMin,
+      zMax, highlightedLabelHoverSizeMax,
     ]);
-  if (map.getLayer('transfer-preview-route-line'))
-    map.setPaintProperty('transfer-preview-route-line', 'line-width', zoomInterp(routeLineWidthMin, routeLineWidthMax));
   if (map.getLayer('manual-transfer-preview-line'))
     map.setPaintProperty('manual-transfer-preview-line', 'line-width', zoomInterp(routeLineWidthMin, routeLineWidthMax));
   if (map.getLayer('cities-circles')) {
     map.setPaintProperty('cities-circles', 'circle-color', generalCity);
-    map.setPaintProperty('cities-circles', 'circle-radius', ziLegacy(generalCityRadius));
+    map.setPaintProperty('cities-circles', 'circle-radius', zoomInterp(
+      generalCityRadius * CONFIG.SIZE_INTERPOLATION_MIN_FACTOR,
+      generalCityRadius
+    ));
   }
   if (map.getLayer('cities-highlighted')) {
     map.setPaintProperty('cities-highlighted', 'circle-color', highlightedCity);
-    map.setPaintProperty('cities-highlighted', 'circle-radius', ziLegacy(highlightedCityRadius));
+    map.setPaintProperty('cities-highlighted', 'circle-radius', zoomInterp(
+      highlightedCityRadius * CONFIG.SIZE_INTERPOLATION_MIN_FACTOR,
+      highlightedCityRadius
+    ));
   }
 }

@@ -175,6 +175,25 @@
   cursor: not-allowed;
 }
 
+.saved-trips-panel__btn--delete {
+  background: var(--red-dim) !important;
+  color: var(--red) !important;
+  border: 1px solid var(--red-b) !important;
+  font-size: 16px !important;
+  padding: 4px 10px !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.saved-trips-panel__btn--delete:hover:not(:disabled) {
+  background: var(--red) !important;
+  color: var(--text-inverse) !important;
+  border-color: var(--red) !important;
+  box-shadow: 0 0 8px var(--red-b);
+}
+
 /* ── Mobile ──────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .saved-trips-panel {

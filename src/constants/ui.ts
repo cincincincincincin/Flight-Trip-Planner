@@ -3,6 +3,7 @@ export const UI_SYMBOLS = {
   EXPAND_RIGHT: "▶",
   DROPDOWN: "▾",
   EXPAND_INDICATOR: "▸",
+  DELETE: "🗑",
   CLOSE: "×",
   CHECK: "✓",
   ESTIMATED: "~",

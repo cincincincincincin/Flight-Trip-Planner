@@ -10,7 +10,7 @@ interface UseRouteAnimationParams {
   map: RefObject<maplibregl.Map | null>;
   mapLoaded: boolean;
   highlightedAirports: string[];
-  airportsData: FeatureCollection<Point, AirportFeatureProps> | undefined;
+  coordsMap: Record<string, [number, number]> | undefined;
   selectedAirportCode: string | null;
   selectedAirportCodes: string[];
   displayedFlights: Flight[];
@@ -25,7 +25,7 @@ export function useRouteAnimation({
   map,
   mapLoaded,
   highlightedAirports,
-  airportsData,
+  coordsMap,
   selectedAirportCode,
   selectedAirportCodes,
   displayedFlights,
@@ -36,7 +36,7 @@ export function useRouteAnimation({
   renderedHighlightedRef,
 }: UseRouteAnimationParams): void {
   useEffect(() => {
-    if (!map.current || !mapLoaded || !airportsData) return;
+    if (!map.current || !mapLoaded || !coordsMap) return;
 
     if (highlightedAirports.length === 0) {
       clearRouteAnimation(map.current, animationRef, completedPathsRef, currentAnimatingRef);
@@ -89,7 +89,7 @@ export function useRouteAnimation({
     const sourceCodes = [...sourceSet];
     if (sourceCodes.length === 0) return;
 
-    const allWantedPaths = buildGCPaths(sourceCodes, highlightedAirports, airportsData, displayedFlightsRef.current);
+    const allWantedPaths = buildGCPaths(sourceCodes, highlightedAirports, coordsMap, displayedFlightsRef.current);
     const renderedPairs = new Set(
       [...completedPathsRef.current, ...currentAnimatingRef.current].map(p => `${p.srcCode}:${p.destCode}`)
     );
@@ -114,5 +114,5 @@ export function useRouteAnimation({
 
     newPaths.forEach(p => renderedHighlightedRef.current.add(p.destCode));
     addRoutesToAnimation(map.current, animationRef, completedPathsRef, currentAnimatingRef, newPaths);
-  }, [highlightedAirports, mapLoaded, airportsData, selectedAirportCode, selectedAirportCodes, displayedFlights]);
+  }, [highlightedAirports, mapLoaded, coordsMap, selectedAirportCode, selectedAirportCodes, displayedFlights]);
 }

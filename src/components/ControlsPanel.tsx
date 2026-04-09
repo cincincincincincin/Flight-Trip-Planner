@@ -10,7 +10,7 @@ import { useTexts } from '../hooks/useTexts';
 import { UI_SYMBOLS } from '../constants/ui';
 import { MAP_STYLES, isArcGISUrl } from '../constants/mapStyles';
 import { CURRENCIES } from '../constants/config';
-import { buildPrefsSnapshot } from '../utils/i18n';
+import { buildPrefsSnapshot } from '../utils/prefsUtils';
 import { savePreferences } from '../api/preferences';
 import type { Language } from '../constants/text';
 
@@ -27,13 +27,9 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
   const setGlobeMode = useMapStore(s => s.setGlobeMode);
 
   const {
-    currency, setCurrency,
-    minTransferHours, setMinTransferHours,
-    minManualTransferHours, setMinManualTransferHours,
-    showRefreshButton, setShowRefreshButton,
-    showConsoleLogs, setShowConsoleLogs,
-    language, setLanguage,
-    savedSnapshot, setSavedSnapshot,
+    currency, minTransferHours, minManualTransferHours,
+    showRefreshButton, showConsoleLogs, language,
+    savedSnapshot, updateSettings,
   } = useSettingsStore();
   const { session } = useAuthStore();
   const isLoggedIn = !!session;
@@ -57,7 +53,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
     try {
       const snap = buildPrefsSnapshot(settingsState, mapState, colorState as unknown as Record<string, unknown>);
       await savePreferences(snap);
-      setSavedSnapshot(JSON.stringify(snap));
+      updateSettings({ savedSnapshot: JSON.stringify(snap) });
       setJustSaved(true);
       setTimeout(() => setJustSaved(false), 2000);
     } catch {
@@ -91,7 +87,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
               <button
                 key={lang}
                 className={`language-option ${language === lang ? 'active' : ''}`}
-                onClick={() => setLanguage(lang)}
+                onClick={() => updateSettings({ language: lang })}
               >
                 {lang.toUpperCase()}
               </button>
@@ -106,7 +102,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
               <button
                 key={code}
                 className={`currency-option ${currency === code ? 'active' : ''}`}
-                onClick={() => setCurrency(code)}
+                onClick={() => updateSettings({ currency: code })}
                 title={label}
               >
                 {code}
@@ -120,14 +116,14 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
           <div className="currency-toggle">
             <button
               className="currency-option"
-              onClick={() => setMinTransferHours(Math.max(0.5, parseFloat((minTransferHours - 0.5).toFixed(1))))}
+              onClick={() => updateSettings({ minTransferHours: Math.max(0.5, parseFloat((minTransferHours - 0.5).toFixed(1))) })}
             >−</button>
             <span className="currency-option active" style={{ cursor: 'default', minWidth: '42px', textAlign: 'center' }}>
               {minTransferHours}h
             </span>
             <button
               className="currency-option"
-              onClick={() => setMinTransferHours(Math.min(24, parseFloat((minTransferHours + 0.5).toFixed(1))))}
+              onClick={() => updateSettings({ minTransferHours: Math.min(24, parseFloat((minTransferHours + 0.5).toFixed(1))) })}
             >+</button>
           </div>
         </div>
@@ -137,14 +133,14 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
           <div className="currency-toggle">
             <button
               className="currency-option"
-              onClick={() => setMinManualTransferHours(Math.max(0.5, parseFloat((minManualTransferHours - 0.5).toFixed(1))))}
+              onClick={() => updateSettings({ minManualTransferHours: Math.max(0.5, parseFloat((minManualTransferHours - 0.5).toFixed(1))) })}
             >−</button>
             <span className="currency-option active" style={{ cursor: 'default', minWidth: '42px', textAlign: 'center' }}>
               {minManualTransferHours}h
             </span>
             <button
               className="currency-option"
-              onClick={() => setMinManualTransferHours(Math.min(24, parseFloat((minManualTransferHours + 0.5).toFixed(1))))}
+              onClick={() => updateSettings({ minManualTransferHours: Math.min(24, parseFloat((minManualTransferHours + 0.5).toFixed(1))) })}
             >+</button>
           </div>
         </div>
@@ -156,10 +152,10 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
             {/* <option value={MAP_STYLES.DARK_MATTER}>{t.controls.darkMatter}</option> */}
             {/* <option value={MAP_STYLES.POSITRON}>{t.controls.positron}</option> */}
             {/* <option value={MAP_STYLES.VOYAGER}>{t.controls.voyager}</option> */}
-            <option value={MAP_STYLES.ARCGIS_SATELLITE}>{t.controls.satellite}</option>
             <option value={MAP_STYLES.ARCGIS_IMAGERY}>{t.controls.imagery}</option>
             <option value={MAP_STYLES.ARCGIS_CHARTED}>{t.controls.charted}</option>
             <option value={MAP_STYLES.ARCGIS_COMMUNITY}>{t.controls.community}</option>
+            <option value={MAP_STYLES.ARCGIS_HUMAN_GEOGRAPHY}>{t.controls.humanGeo}</option>
           </select>
           <div className="globe-toggle-row">
             <span className="globe-toggle-label">{t.controls.globe}</span>
@@ -200,7 +196,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
                 <input
                   type="checkbox"
                   checked={showRefreshButton}
-                  onChange={e => setShowRefreshButton(e.target.checked)}
+                  onChange={e => updateSettings({ showRefreshButton: e.target.checked })}
                 />
                 <span>{t.controls.showRefresh}</span>
               </label>
@@ -211,7 +207,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
                 <input
                   type="checkbox"
                   checked={showConsoleLogs}
-                  onChange={e => setShowConsoleLogs(e.target.checked)}
+                  onChange={e => updateSettings({ showConsoleLogs: e.target.checked })}
                 />
                 <span>{t.controls.showConsole}</span>
               </label>

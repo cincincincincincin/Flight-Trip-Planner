@@ -4,9 +4,9 @@ import FlightCard from './FlightCard';
 import SaveTripButton from './auth/SaveTripButton';
 import type { Flight } from '../types';
 import { useTripStore } from '../stores/tripStore';
-import { useAirportsQuery, useAirportInfosQuery } from '../hooks/queries';
+import { useAirportsQuery, useAirportInfosQuery, useAirportsMap, useAirportIndexes } from '../hooks/queries';
 import { useSettingsStore } from '../stores/settingsStore';
-import { getLocalizedProp } from '../utils/geoUtils';
+import { getLocalizedProp } from '../utils/i18n';
 import './TripItinerary.css';
 import { useTexts } from '../hooks/useTexts';
 import { CONFIG } from '../constants/config';
@@ -30,32 +30,8 @@ interface TripItineraryProps {
 const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTrip, onClose, showSaveButton }) => {
   const t = useTexts();
   const { tripState, undo, redo, pastTrips, futureTrips, isLoadedTrip, editMode } = useTripStore();
-  const { data: airportsData } = useAirportsQuery();
+  const { namesMap, coordsMap } = useAirportIndexes();
   const { language } = useSettingsStore();
-
-  const airportCityNameMap = useMemo<Record<string, string>>(() => {
-    if (!airportsData) return {};
-    const map: Record<string, string> = {};
-    airportsData.features.forEach(f => {
-      if (f.properties.code) {
-        const cityName = getLocalizedProp(f.properties, 'city_name', language);
-        const name = getLocalizedProp(f.properties, 'name', language);
-        map[f.properties.code] = cityName || name || f.properties.code;
-      }
-    });
-    return map;
-  }, [airportsData, language]);
-
-  const airportCoordsMap = useMemo<Record<string, [number, number]>>(() => {
-    if (!airportsData) return {};
-    const map: Record<string, [number, number]> = {};
-    airportsData.features.forEach(f => {
-      if (f.properties.code && f.geometry?.coordinates) {
-        map[f.properties.code] = f.geometry.coordinates as [number, number];
-      }
-    });
-    return map;
-  }, [airportsData]);
 
   const allLegCodes = useMemo(() => {
     const legs = tripState?.legs ?? [];
@@ -81,8 +57,8 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
   }, [allLegCodes, airportInfosResults]);
 
   const estimateArrivalUTC = (depUtc: string, fromCode: string, toCode: string): string | null => {
-    const from = airportCoordsMap[fromCode];
-    const to = airportCoordsMap[toCode];
+    const from = coordsMap[fromCode];
+    const to = coordsMap[toCode];
     if (!from || !to) return null;
     const distKm = haversineKm(from[0], from[1], to[0], to[1]);
     const blockHours = distKm / CONFIG.AVERAGE_AIRCRAFT_SPEED_KMH + CONFIG.ADDITIONAL_BLOCK_HOURS;
@@ -234,7 +210,7 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
               const prevLeg = legs[i - 1];
               if ((prevLeg as { type?: string }).type !== 'manual' && prevLeg.flight?.scheduled_arrival_utc && f?.scheduled_departure_utc) {
                 timeAvailableMs = getDurationMs(prevLeg.flight.scheduled_arrival_utc, f.scheduled_departure_utc);
-                timeAvailableCity = airportCityNameMap[leg.fromAirportCode] ?? leg.fromAirportCode;
+                timeAvailableCity = namesMap[leg.fromAirportCode] ?? leg.fromAirportCode;
               }
             }
 

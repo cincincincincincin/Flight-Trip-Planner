@@ -19,7 +19,7 @@ interface SavedTripsPanelProps {
 const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded }) => {
   const t = useTexts();
   const qc = useQueryClient();
-  const { setTripState, setTripRoutes, setLoadedTrip } = useTripStore();
+  const { updateTrip: updateTripStore } = useTripStore();
 
   const [renamingTrip, setRenamingTrip] = useState<SavedTrip | null>(null);
   const [deletingTrip, setDeletingTrip] = useState<SavedTrip | null>(null);
@@ -58,25 +58,31 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
       if (cc) countries.add(cc);
     });
     // Date range
-    let firstDep: string | null = null;
-    let lastArr: string | null = null;
-    for (const leg of trip_state.legs) {
-      if ((leg as { type?: string }).type === 'manual' || !leg.flight) continue;
-      if (!firstDep && leg.flight.scheduled_departure_utc) firstDep = leg.flight.scheduled_departure_utc;
-      if (leg.flight.scheduled_arrival_utc) lastArr = leg.flight.scheduled_arrival_utc;
+    let dateRange = '';
+    if (trip_state.legs.length > 0) {
+      const firstLeg = trip_state.legs[0];
+      const lastLeg = trip_state.legs[trip_state.legs.length - 1];
+      if (firstLeg.flight?.scheduled_departure_utc && lastLeg.flight?.scheduled_arrival_utc) {
+        const start = new Date(firstLeg.flight.scheduled_departure_utc).toLocaleDateString(FORMAT_LOCALES.GB, FORMAT_OPTIONS.DATE_SHORT);
+        const end = new Date(lastLeg.flight.scheduled_arrival_utc).toLocaleDateString(FORMAT_LOCALES.GB, FORMAT_OPTIONS.DATE_SHORT);
+        dateRange = `${start} - ${end}`;
+      }
     }
-    const fmt = (s: string) => new Date(s).toLocaleDateString(FORMAT_LOCALES.GB, { day: 'numeric', month: 'short' });
-    const dateRange = firstDep && lastArr ? `${fmt(firstDep)} – ${fmt(lastArr)}` : null;
-    return { countriesCount: countries.size, dateRange };
+
+    return {
+      countriesCount: countries.size,
+      dateRange
+    };
   };
 
   const { data: trips, isLoading, isError } = useQuery({
     queryKey: ['user-trips'],
     queryFn: fetchTrips,
+    staleTime: 60000,
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => deleteTrip(id),
+    mutationFn: deleteTrip,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['user-trips'] });
       setDeletingTrip(null);
@@ -93,9 +99,7 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
   });
 
   const handleLoad = (trip: SavedTrip) => {
-    setTripState(trip.trip_state);
-    
-    // Calculate routes on the fly since they are no longer stored in the DB
+    // Obliczamy trasy w locie (nie są przechowywane bezpośrednio w bazie)
     const calculatedRoutes: any[] = [];
     if (trip.trip_state.startAirport?.code && trip.trip_state.legs) {
       let currentAirportCode = trip.trip_state.startAirport.code;
@@ -108,9 +112,18 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
         currentAirportCode = leg.toAirportCode;
       });
     }
-    
-    setTripRoutes(calculatedRoutes);
-    setLoadedTrip(trip.id, JSON.stringify(trip.trip_state));
+
+    updateTripStore({
+      tripState: trip.trip_state,
+      tripRoutes: calculatedRoutes,
+      savedTripId: trip.id,
+      savedTripStateJSON: JSON.stringify(trip.trip_state),
+      isLoadedTrip: true,
+      editMode: false,
+      pastTrips: [],
+      futureTrips: [],
+    });
+
     onTripLoaded?.(trip);
     onClose();
   };
@@ -150,22 +163,31 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
                 <div className="saved-trips-panel__info">
                   <strong>{trip.name ?? t.savedTrips.tripId(trip.id)}</strong>
                   <small>
-                    {countriesCount} {countriesCount === 1 ? t.savedTrips.country : t.savedTrips.countries}
-                    {dateRange && <> &bull; {dateRange}</>}
+                    {countriesCount} {countriesCount === 1 ? t.savedTrips.country : t.savedTrips.countries}{dateRange ? ` • ${dateRange}` : ''}
                   </small>
                 </div>
                 <div className="saved-trips-panel__actions">
-                  <button onClick={() => handleLoad(trip)}>{t.buttons.load}</button>
-                  <button onClick={() => setRenamingTrip(trip)} disabled={renameMutation.isPending}>{t.buttons.rename}</button>
-                  <button
-                    className="danger"
+                  <button 
+                    className="saved-trips-panel__btn saved-trips-panel__btn--load"
+                    onClick={() => handleLoad(trip)}
+                  >
+                    {t.buttons.load}
+                  </button>
+                  <button 
+                    className="saved-trips-panel__btn saved-trips-panel__btn--rename"
+                    onClick={() => setRenamingTrip(trip)}
+                  >
+                    {t.buttons.rename}
+                  </button>
+                  <button 
+                    className="saved-trips-panel__btn saved-trips-panel__btn--delete"
                     onClick={() => setDeletingTrip(trip)}
-                    disabled={deleteMutation.isPending}
-                  >{t.buttons.delete}</button>
+                  >
+                    {UI_SYMBOLS.DELETE}
+                  </button>
                 </div>
               </li>
-            );
-            })}
+            )})}
           </ul>
         </div>
       </div>
@@ -173,10 +195,9 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
       {renamingTrip && (
         <TripNameModal
           initialName={renamingTrip.name ?? ''}
-          title={`Rename "${renamingTrip.name ?? t.savedTrips.tripId(renamingTrip.id)}"`}
-          confirmLabel={t.buttons.rename}
           onConfirm={handleRenameConfirm}
           onCancel={() => setRenamingTrip(null)}
+          title={t.savedTrips.rename}
         />
       )}
 

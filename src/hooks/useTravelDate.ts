@@ -12,7 +12,7 @@ interface UseTravelDateParams {
   resolvedTimezone: string | null | undefined;
   countryDisplayTZ: string | null;
   travelDate: string;
-  setTravelDate: (date: string) => void;
+  updateSettings: (v: Partial<{ travelDate: string; timezone: string | null }>) => void;
 }
 
 /**
@@ -29,7 +29,7 @@ export function useTravelDate({
   resolvedTimezone,
   countryDisplayTZ,
   travelDate,
-  setTravelDate,
+  updateSettings,
 }: UseTravelDateParams): { effectiveTravelDate: string } {
   const prevSelectedItemKeyRef = useRef<string | null>(null);
   const prevTimezoneRef = useRef<string | null>(null);
@@ -55,9 +55,9 @@ export function useTravelDate({
     if (key !== prevSelectedItemKeyRef.current) {
       prevSelectedItemKeyRef.current = key;
       if (effectiveArrivalTimeUTC) {
-        setTravelDate(new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }));
+        updateSettings({ travelDate: new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }) });
       } else {
-        setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }));
+        updateSettings({ travelDate: new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }) });
       }
       prevTimezoneRef.current = timezone;
       prevExplorationItemsCountRef.current = explorationItems.length;
@@ -70,19 +70,22 @@ export function useTravelDate({
     if (itemsWereRemoved && timezoneChanged && prevTimezoneRef.current) {
       const oldTzToday = new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: prevTimezoneRef.current });
       if (travelDate === oldTzToday) {
-        setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }));
+        console.log(`[RACE-DEBUG] {useTravelDate} -> Items removed & TZ changed | Syncing date to ${timezone}`);
+        const dateArg = effectiveArrivalTimeUTC || new Date();
+        updateSettings({ travelDate: new Date(dateArg).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }) });
       }
     } else if (!itemsWereRemoved && timezoneChanged) {
+      console.log(`[RACE-DEBUG] {useTravelDate} -> TZ changed | Syncing date to ${timezone}`);
       if (effectiveArrivalTimeUTC) {
-        setTravelDate(new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }));
+        updateSettings({ travelDate: new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }) });
       } else {
-        setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }));
+        updateSettings({ travelDate: new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }) });
       }
     }
 
     prevTimezoneRef.current = timezone;
     prevExplorationItemsCountRef.current = explorationItems.length;
-  }, [selectedItem, timezone, explorationItems.length, setTravelDate, effectiveArrivalTimeUTC, selectedTimezoneOverride, travelDate]);
+  }, [selectedItem, timezone, explorationItems.length, updateSettings, effectiveArrivalTimeUTC, selectedTimezoneOverride, travelDate]);
 
   // ── Sync travelDate when resolvedTimezone auto-switches (e.g. Melbourne added) ──
   useEffect(() => {
@@ -93,9 +96,9 @@ export function useTravelDate({
     if (prevTZ === undefined || resolvedTimezone === prevTZ || !resolvedTimezone) return;
     const todayInPrevTZ = prevTZ ? new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: prevTZ }) : null;
     if (!todayInPrevTZ || travelDateForTZRef.current === todayInPrevTZ) {
-      setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: resolvedTimezone }));
+      updateSettings({ travelDate: new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: resolvedTimezone }) });
     }
-  }, [resolvedTimezone, selectedTimezoneOverride, selectedItem?.type, setTravelDate]);
+  }, [resolvedTimezone, selectedTimezoneOverride, selectedItem?.type, updateSettings]);
 
   // ── Set travelDate when country display TZ changes ─────────────────────────
   useEffect(() => {
@@ -103,9 +106,9 @@ export function useTravelDate({
     if (countryDisplayTZ === prevCountryDisplayTZRef.current) return;
     prevCountryDisplayTZRef.current = countryDisplayTZ;
     if (countryDisplayTZ) {
-      setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: countryDisplayTZ }));
+      updateSettings({ travelDate: new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: countryDisplayTZ }) });
     }
-  }, [selectedItem?.type, countryDisplayTZ, setTravelDate]);
+  }, [selectedItem?.type, countryDisplayTZ, updateSettings]);
 
   // Reset the country-display-TZ ref when the selected country changes
   useEffect(() => {

@@ -1,173 +1,133 @@
 import { useMemo } from 'react';
-import type { FeatureCollection } from 'geojson';
-import type { Point } from 'geojson';
+import type { Feature, Point } from 'geojson';
 import type { AirportFeatureProps } from '../../types';
 import type { ExplorationItem } from '../../stores/selectionStore';
 import type { ExplorationDisplayItem } from './ExplorationList';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { getLocalizedProp } from '../../utils/geoUtils';
+import { getGeoName } from '../../utils/geoUtils';
 
-type CityInfoMap = Record<string, { name: string; country_code: string; airportCount: number }>;
-type CountryInfoMap = Record<string, { name: string; airportCount: number }>;
-
+/**
+ * Silnik Konsolidacji Hierarchicznej (Visual Consolidation Engine).
+ * Przekształca surowe kody lotnisk w inteligentne grupy Miasto/Kraj.
+ */
 export function useExplorationGroups(
   explorationItems: ExplorationItem[],
-  airportsData: FeatureCollection<Point, AirportFeatureProps> | undefined,
-  cityInfoMap: CityInfoMap,
-  countryInfoMap: CountryInfoMap,
+  airportsMap: Record<string, Feature<Point, AirportFeatureProps>>,
+  cityInfoMap: Record<string, { name: string; airportCount: number }>,
+  countryInfoMap: Record<string, { name: string; airportCount: number }>,
   countryNameCache: Record<string, string>,
   expandedCityGroups: Set<string>,
 ): ExplorationDisplayItem[] {
   const language = useSettingsStore(s => s.language);
 
   return useMemo((): ExplorationDisplayItem[] => {
-    if (!airportsData || explorationItems.length === 0) return [];
+    if (Object.keys(airportsMap).length === 0 || explorationItems.length === 0) return [];
 
-    // Country-type items: already have name + all codes stored directly
-    if (explorationItems.some(i => i.type === 'country')) {
-      return explorationItems.map(item => {
-        if (item.type === 'country') {
-          const byCity = new Map<string, Array<{ id: string; code: string; name: string }>>();
-          for (const code of item.airportCodes) {
-            const feat = airportsData.features.find(f => f.properties.code === code);
-            const cityCode = feat?.properties.city_code || '';
-            if (!byCity.has(cityCode)) byCity.set(cityCode, []);
-            byCity.get(cityCode)!.push({ id: item.id, code, name: feat ? getLocalizedProp(feat.properties, 'name', language) : code });
-          }
-          const childCities = Array.from(byCity.entries()).map(([cityCode, aps]) => ({
-            cityCode,
-            cityName: cityInfoMap[cityCode]?.name || cityCode,
-            airports: aps,
-          }));
-          return {
-            kind: 'country-group' as const,
-            code: item.code,
-            name: item.name,
-            airportCodes: item.airportCodes,
-            isExpanded: expandedCityGroups.has(item.code),
-            childCities,
-          };
-        }
-        // fallback for mixed lists (shouldn't happen in practice)
-        return {
-          kind: 'airport' as const,
-          itemId: item.id,
-          code: item.code,
-          name: item.name,
-          airportCodes: item.airportCodes,
-        };
-      });
-    }
+    // O(1) Lookups - korzystamy z przekazanego Rekordu
 
-    // Airport mode: group airports by city
-    const allAirportItems: Array<{ id: string; code: string; name: string; cityCode: string; countryCode: string }> = [];
+    // 1. Zbieramy unikalny zestaw lotnisk z całego magazynu eksploracji
+    const allAirportItems: Array<{ id: string; code: string; props: AirportFeatureProps }> = [];
+    const seenCodes = new Set<string>();
+
     for (const item of explorationItems) {
       for (const code of item.airportCodes) {
-        const feat = airportsData.features.find(f => f.properties.code === code);
-        allAirportItems.push({
-          id: item.id,
-          code,
-          name: feat ? getLocalizedProp(feat.properties, 'name', language) : code,
-          cityCode: feat?.properties.city_code || '',
-          countryCode: feat?.properties.country_code || '',
+        if (!seenCodes.has(code)) {
+          const feat = airportsMap[code];
+          if (feat) {
+            allAirportItems.push({ id: item.id, code, props: feat.properties });
+            seenCodes.add(code);
+          }
+        }
+      }
+    }
+
+    // 2. Grupowanie rozproszonych lotnisk w Miasta i Kraje
+    const airportsByCity = new Map<string, typeof allAirportItems>();
+    const airportsByCountry = new Map<string, typeof allAirportItems>();
+
+    for (const ap of allAirportItems) {
+      const city = ap.props.city_code || '';
+      const country = ap.props.country_code || '';
+
+      if (!airportsByCity.has(city)) airportsByCity.set(city, []);
+      airportsByCity.get(city)!.push(ap);
+
+      if (!airportsByCountry.has(country)) airportsByCountry.set(country, []);
+      airportsByCountry.get(country)!.push(ap);
+    }
+
+    // 3. Logika "Promocji" (Consolidation) - Wykrywanie kompletnych struktur
+    const processedCities = new Set<string>();
+    const processedCountries = new Set<string>();
+    const result: ExplorationDisplayItem[] = [];
+
+    // KRAJE (Highest priority)
+    for (const [cc, aps] of airportsByCountry.entries()) {
+      if (!cc) continue;
+      const totalInCountry = countryInfoMap[cc]?.airportCount || 0;
+      
+      // Jeżeli mamy "komplet" lotnisk z danego kraju, zwijamy go w grupę kraju
+      if (totalInCountry > 0 && aps.length === totalInCountry) {
+        processedCountries.add(cc);
+        const childCities = Array.from(new Set(aps.map(a => a.props.city_code || ''))).map(cityCode => {
+          const cityAps = aps.filter(a => a.props.city_code === cityCode);
+          return {
+            cityCode,
+            cityName: cityInfoMap[cityCode]?.name || cityCode,
+            airports: cityAps.map(a => ({ id: a.id, code: a.code, name: getGeoName(a.props, 'airport', language) }))
+          };
+        });
+
+        childCities.forEach(c => processedCities.add(c.cityCode));
+
+        result.push({
+          kind: 'country-group',
+          code: cc,
+          name: countryInfoMap[cc]?.name || countryNameCache[cc] || cc,
+          airportCodes: aps.map(a => a.code),
+          isExpanded: expandedCityGroups.has(cc),
+          childCities,
         });
       }
     }
 
-    // Group by city
-    const byCity = new Map<string, typeof allAirportItems>();
-    for (const ap of allAirportItems) {
-      if (!byCity.has(ap.cityCode)) byCity.set(ap.cityCode, []);
-      byCity.get(ap.cityCode)!.push(ap);
-    }
+    // MIASTA (Secondary priority)
+    for (const [cityCode, aps] of airportsByCity.entries()) {
+      if (!cityCode || processedCities.has(cityCode)) continue;
+      const totalInCity = cityInfoMap[cityCode]?.airportCount || 0;
 
-    // Determine which cities are complete
-    const completeCityCodes = new Set<string>();
-    for (const [cityCode, aps] of byCity.entries()) {
-      if (!cityCode) continue;
-      const total = cityInfoMap[cityCode]?.airportCount ?? 0;
-      if (total > 0 && aps.length === total) completeCityCodes.add(cityCode);
-    }
-
-    // Determine which countries are complete (all cities complete)
-    const byCountry = new Map<string, Set<string>>();
-    for (const [cityCode] of byCity.entries()) {
-      if (!cityCode) continue;
-      const cc = cityInfoMap[cityCode]?.country_code || '';
-      if (!byCountry.has(cc)) byCountry.set(cc, new Set());
-      byCountry.get(cc)!.add(cityCode);
-    }
-    const completeCountryCodes = new Set<string>();
-    for (const [cc] of byCountry.entries()) {
-      if (!cc) continue;
-      const totalCountryAirports = countryInfoMap[cc]?.airportCount ?? 0;
-      const coveredAirports = allAirportItems.filter(ap => ap.countryCode === cc).length;
-      if (totalCountryAirports > 0 && coveredAirports === totalCountryAirports) {
-        completeCountryCodes.add(cc);
-      }
-    }
-
-    // Build display items: countries > cities > airports
-    const result: ExplorationDisplayItem[] = [];
-    const processedCountries = new Set<string>();
-    const processedCities = new Set<string>();
-
-    // Country groups first
-    for (const cc of completeCountryCodes) {
-      processedCountries.add(cc);
-      const citiesForCountry = Array.from(byCity.entries())
-        .filter(([cityCode]) => cityInfoMap[cityCode]?.country_code === cc);
-
-      const childCities = citiesForCountry.map(([cityCode, aps]) => ({
-        cityCode,
-        cityName: cityInfoMap[cityCode]?.name || cityCode,
-        airports: aps.map(ap => ({ id: ap.id, code: ap.code, name: ap.name })),
-      }));
-
-      citiesForCountry.forEach(([cityCode]) => processedCities.add(cityCode));
-      result.push({
-        kind: 'country-group',
-        code: cc,
-        name: (() => { const n = countryInfoMap[cc]?.name; return (n && n !== cc) ? n : (countryNameCache[cc] || cc); })(),
-        airportCodes: allAirportItems.filter(ap => ap.countryCode === cc).map(ap => ap.code),
-        isExpanded: expandedCityGroups.has(cc),
-        childCities,
-      });
-    }
-
-    // City groups
-    for (const [cityCode, aps] of byCity.entries()) {
-      if (processedCities.has(cityCode)) continue;
-      if (completeCityCodes.has(cityCode)) {
+      // Jeżeli mamy komplet miast, zwijamy je w grupę miasta
+      if (totalInCity > 0 && aps.length === totalInCity) {
         processedCities.add(cityCode);
         result.push({
           kind: 'city-group',
           code: cityCode,
           name: cityInfoMap[cityCode]?.name || cityCode,
-          airportCodes: aps.map(ap => ap.code),
+          airportCodes: aps.map(a => a.code),
           isExpanded: expandedCityGroups.has(cityCode),
           childCities: [{
             cityCode,
             cityName: cityInfoMap[cityCode]?.name || cityCode,
-            airports: aps.map(ap => ({ id: ap.id, code: ap.code, name: ap.name })),
+            airports: aps.map(a => ({ id: a.id, code: a.code, name: getGeoName(a.props, 'airport', language) }))
           }],
         });
       } else {
-        // Individual airports (incomplete city)
+        // POJEDYNCZE LOTNISKA (Fallback)
+        // Jeśli miasto jest niekompletne, wyświetlamy kody lotnisk jako osobne kafle
         for (const ap of aps) {
           result.push({
             kind: 'airport',
             itemId: ap.id,
             code: ap.code,
-            name: ap.name,
+            name: getGeoName(ap.props, 'airport', language),
             airportCodes: [ap.code],
-            cityCode: ap.cityCode,
-            countryCode: ap.countryCode,
+            cityCode: ap.props.city_code,
+            countryCode: ap.props.country_code,
           });
         }
       }
     }
 
     return result;
-  }, [explorationItems, airportsData, cityInfoMap, countryInfoMap, countryNameCache, expandedCityGroups, language]);
+  }, [explorationItems, airportsMap, cityInfoMap, countryInfoMap, countryNameCache, expandedCityGroups, language]);
 }

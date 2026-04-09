@@ -12,7 +12,18 @@ import { useSelectionStore } from '../stores/selectionStore';
 import { useTripStore } from '../stores/tripStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useFilterStore } from '../stores/filterStore';
-import { useAirportInfoQuery, useAirportInfosQuery, useAirportsQuery, useAirportsByCountryQuery } from '../hooks/queries';
+import { 
+  useAirportInfoQuery, 
+  useAirportInfosQuery, 
+  useAirportsByCountryQuery, 
+  useAirportsMap,
+  useCityAirports,
+  useCountryData,
+  useCityAirportsMap,
+  useCityInfoMap,
+  useCountryInfoMap,
+  useAirportCoordsMap
+} from '../hooks/queries';
 import { useTravelDate } from '../hooks/useTravelDate';
 import './RightPanel.css';
 import { useTexts } from '../hooks/useTexts';
@@ -22,7 +33,8 @@ import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
 import { CONFIG } from '../constants/config';
 import { haversineKm } from '../utils/math';
 import { BROWSER_TIMEZONE, buildTzGroups } from '../utils/timezoneUtils';
-import { getLocalizedProp } from '../utils/geoUtils';
+import { getLocalizedProp } from '../utils/i18n';
+import { getTripCurrentArrivalTimeUTC } from '../utils/dateFormatting';
 
 interface RightPanelProps {
   onClose: () => void;
@@ -36,34 +48,37 @@ interface RightPanelProps {
   onSwitchToCountryView?: (code: string, name: string) => void;
 }
 
-const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip, onPreviewAirport, onClearPreview, pendingCountryPicker, onClearCountryPicker, onFitBounds, onCountryAirportsConfirmed, onSwitchToCountryView }, ref) => {
+/**
+ * INTERFEJS REFERENCJI PANELU BOCZNEGO
+ * Pozwala nadrzędnym komponentom na zdalne sterowanie widokiem lotów i filtrami.
+ */
+export interface RightPanelRef {
+  scrollToFlight: (destCode: string) => void;
+  clearTransferAirports: () => void;
+}
+
+const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddToTrip, onPreviewAirport, onClearPreview, pendingCountryPicker, onClearCountryPicker, onFitBounds, onCountryAirportsConfirmed, onSwitchToCountryView }, ref) => {
   const t = useTexts();
   const { selectedItem, flightsData, setSelectedAirportCodes, explorationItems, removeExplorationItem, addExplorationItem } = useSelectionStore();
-  const { tripState, setManualTransferAirportCodes } = useTripStore();
-  const { travelDate, setTravelDate, setTimezone, minTransferHours, minManualTransferHours, language } = useSettingsStore();
+  const { tripState, updateTrip: updateTripStore } = useTripStore();
+  const { travelDate, minTransferHours, minManualTransferHours, language, updateSettings } = useSettingsStore();
   const { clearFilters } = useFilterStore();
-  // const { viewMode } = useMapStore();
-  const { data: airportsData } = useAirportsQuery();
+  
+  const airportCoordsMap = useAirportCoordsMap();
+  const airportsMap = useAirportsMap();
 
-  // ── Filter state ────────────────────────────────────────────────────────────
-
-  // ── City mode state ─────────────────────────────────────────────────────────
-  const [cityAirports, setCityAirports] = useState<Airport[]>([]);
-  const [loadingCityAirports] = useState(false);
-
-  // ── Country mode state ──────────────────────────────────────────────────────
-  const [countryCities, setCountryCities] = useState<City[]>([]);
+  // Stan trybu kraju
   const [loadingCountry] = useState(false);
   const [selectedFlatAirports, setSelectedFlatAirports] = useState<CountryAirport[]>([]);
   const [selectedCities, setSelectedCities] = useState<City[]>([]);
   const [loadingConfirm] = useState(false);
 
-  // ── Country TZ mode state ───────────────────────────────────────────────────
+  // Strefy czasowe w trybie kraju
   const [countryActiveTZ, setCountryActiveTZ] = useState<string | null>(null);
   const [pendingSelectedAirports, setPendingSelectedAirports] = useState<string[]>([]);
   const [countryNameCache, setCountryNameCache] = useState<Record<string, string>>({});
 
-  // ── Trip mode: manual transfer airports ────────────────────────────────────
+  // Trip mode: lotniska przesiadkowe (manualne)
   const [transferAirports, setTransferAirports] = useState<string[]>([]);
 
   // Reset transfer airports when we move to a new airport in trip mode
@@ -78,77 +93,23 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
 
   // Sync transfer airports to store (for map preview lines)
   useEffect(() => {
-    setManualTransferAirportCodes(transferAirports);
-  }, [transferAirports, setManualTransferAirportCodes]);
+    updateTripStore({ manualTransferAirportCodes: transferAirports });
+  }, [transferAirports, updateTripStore]);
 
-  // ── Exploration grouping state ─────────────────────────────────────────────
+  // Grupowanie w trybie eksploracji
   const [expandedCityGroups, setExpandedCityGroups] = useState<Set<string>>(new Set());
   const [expandedInnerCities, setExpandedInnerCities] = useState<Set<string>>(new Set());
 
-  // ── Airport grouping maps ──────────────────────────────────────────────────
+  /**
+   * ARCHITEKTURA "WARSTWY DANYCH":
+   * Zrezygnowaliśmy z "luster stanu" (state mirroring) - czyli synchronizacji lokalnego
+   * stanu cityAirports z wynikiem hooka. Zamiast tego, komponent pije dane bezpośrednio
+   * z `queriedCityAirports`. Eliminuje to błędy "stale state" i upraszcza cykl życia komponentu.
+   */
+  const cityCode = selectedItem?.type === 'city' ? selectedItem.data.code : null;
+  const queriedCityAirports = useCityAirports(cityCode);
 
-  const cityInfoMap = useMemo<Record<string, { name: string; country_code: string; airportCount: number }>>(() => {
-    if (!airportsData) return {};
-    const map: Record<string, { name: string; country_code: string; airportCount: number }> = {};
-    airportsData.features.forEach(f => {
-      const city = f.properties.city_code;
-      if (city) {
-        if (!map[city]) {
-          const cityName = getLocalizedProp(f.properties, 'city_name', language) || city;
-          map[city] = { name: cityName, country_code: f.properties.country_code || '', airportCount: 0 };
-        }
-        map[city].airportCount++;
-      }
-    });
-    return map;
-  }, [airportsData]);
-
-  const countryDisplayNames = useMemo(() => {
-    const localeMap: Record<Language, string> = { en: 'en-US', pl: 'pl-PL' };
-    try { return new Intl.DisplayNames([localeMap[language]], { type: 'region' }); } catch { return null; }
-  }, [language]);
-
-  const countryInfoMap = useMemo<Record<string, { name: string; airportCount: number }>>(() => {
-    if (!airportsData) return {};
-    const map: Record<string, { name: string; airportCount: number }> = {};
-    airportsData.features.forEach(f => {
-      const cc = f.properties.country_code;
-      if (cc) {
-        if (!map[cc]) {
-          let name = countryDisplayNames?.of(cc);
-          if (!name || name === cc) {
-            name = getLocalizedProp(f.properties, 'country_name', language) || cc;
-          }
-          map[cc] = { name, airportCount: 0 };
-        }
-        map[cc].airportCount++;
-      }
-    });
-    return map;
-  }, [airportsData, countryDisplayNames]);
-
-  // ── Trip state derived ─────────────────────────────────────────────────────
-  const airportCoordsMap = useMemo<Record<string, [number, number]>>(() => {
-    if (!airportsData) return {};
-    const map: Record<string, [number, number]> = {};
-    airportsData.features.forEach(f => {
-      if (f.properties.code && f.geometry?.coordinates) {
-        map[f.properties.code] = f.geometry.coordinates as [number, number];
-      }
-    });
-    return map;
-  }, [airportsData]);
-
-  const tripCurrentArrivalTimeUTC = useMemo(() => {
-    if (!tripState?.legs?.length) return null;
-    for (let i = tripState.legs.length - 1; i >= 0; i--) {
-      const leg = tripState.legs[i];
-      if ((leg as { type?: string }).type !== 'manual' && leg.flight?.scheduled_arrival_utc) {
-        return leg.flight.scheduled_arrival_utc;
-      }
-    }
-    return null;
-  }, [tripState]);
+  const tripCurrentArrivalTimeUTC = useMemo(() => getTripCurrentArrivalTimeUTC(tripState), [tripState]);
 
   const tripEstimatedArrivalUTC = useMemo(() => {
     if (tripCurrentArrivalTimeUTC || !tripState?.legs?.length) return null;
@@ -188,18 +149,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   const [selectedTimezoneAirportCode, setSelectedTimezoneAirportCode] = useState<string | null>(null);
 
 
-  // ── Airport info for timezone ──────────────────────────────────────────────
-  const primaryAirportCode = useMemo(() => {
-    if (explorationItems.length > 0) return explorationItems[explorationItems.length - 1].airportCodes[0] ?? null;
-    if (selectedItem?.type === 'airport') return selectedItem.data.code;
-    if (selectedItem?.type === 'city' && cityAirports.length > 0) return cityAirports[0].code;
-    if (selectedItem?.type === 'country' && selectedFlatAirports.length > 0) return selectedFlatAirports[0].code;
-    return null;
-  }, [explorationItems, selectedItem, cityAirports, selectedFlatAirports]);
-
-  const { data: airportInfo } = useAirportInfoQuery(primaryAirportCode);
-
-  // ── Country airports – single query per country (includes time_zone) ────────
+  // Lotniska w kraju (pojedynczy query z TZ)
   const countryCode = selectedItem?.type === 'country' ? selectedItem.data.code : null;
   const { data: countryAirportsData } = useAirportsByCountryQuery(countryCode);
   const countryFlatAirports = countryAirportsData ?? [];
@@ -210,28 +160,50 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   const countryTzGroups = useMemo(() => buildTzGroups(countryFlatAirports), [countryFlatAirports]);
   const pendingCountryTzGroups = useMemo(() => buildTzGroups(pendingCountryFlatAirports), [pendingCountryFlatAirports]);
 
-  // ── Airport codes to pass to FlightsList ──────────────────────────────────
+  // Inteligentne wyznaczanie głównego lotniska dla strefy czasowej
+  const primaryAirportCode = useMemo(() => {
+    // 1. Ostatni element z listy eksploracji (najnowszy kontekst)
+    if (explorationItems.length > 0) return explorationItems[explorationItems.length - 1].airportCodes[0];
+    
+    // 2. Aktualnie wybrany element bezpośredni
+    if (selectedItem?.type === 'airport') return selectedItem.data.code;
+    
+    // 3. Lotnisko z wybranego miasta lub kraju (fallback)
+    if (selectedItem?.type === 'city') return queriedCityAirports[0]?.code;
+    if (selectedItem?.type === 'country') return selectedFlatAirports[0]?.code || countryFlatAirports[0]?.code;
+    
+    return null;
+  }, [explorationItems, selectedItem, queriedCityAirports, selectedFlatAirports, countryFlatAirports]);
+
+  const { data: airportInfo } = useAirportInfoQuery(primaryAirportCode);
+
+  // Agregacja kodów lotnisk dla listy ofert/lotów
   const flightAirportCodes = useMemo(() => {
-    // Trip mode: original airport + transfer airports
+    // Planowanie podróży: lotnisko docelowe + ewentualne przesiadki
     if (tripState && selectedItem?.type === 'airport') {
       return [selectedItem.data.code, ...transferAirports];
     }
+    
+    // Eksploracja: suma wszystkich lotnisk ze wszystkich kafli
     if (explorationItems.length > 0) {
-      return [...new Set(explorationItems.flatMap(i => i.airportCodes))];
+      return Array.from(new Set(explorationItems.flatMap(i => i.airportCodes)));
     }
+    
+    // Podgląd bezpośredni (Airport/City)
     if (selectedItem?.type === 'airport') return [selectedItem.data.code];
-    if (selectedItem?.type === 'city') return cityAirports.map(a => a.code);
+    if (selectedItem?.type === 'city') return queriedCityAirports.map(a => a.code);
+    
     return [];
-  }, [selectedItem, cityAirports, explorationItems, tripState, transferAirports]);
+  }, [selectedItem, queriedCityAirports, explorationItems, tripState, transferAirports]);
 
-  // ── Multi-airport timezone resolution ─────────────────────────────────────
+  // Rozwiązywanie stref czasowych dla wielu lotnisk
   const airportInfosResults = useAirportInfosQuery(flightAirportCodes);
 
   const airportTimezoneMapRef = useRef<Record<string, string>>({});
   const airportTimezoneMap = useMemo<Record<string, string>>(() => {
     const nextMap: Record<string, string> = {};
     let changed = false;
-    flightAirportCodes.forEach((code, i) => {
+    flightAirportCodes.forEach((code, i: number) => {
       const tz = airportInfosResults[i]?.data?.time_zone;
       if (tz) {
         nextMap[code] = tz;
@@ -270,7 +242,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     return (firstCode && airportTimezoneMap[firstCode]) ?? null;
   }, [effectiveArrivalTimeUTC, lastRealLeg, flightAirportCodes, airportTimezoneMap]);
 
-  // ── "Display TZ" for country mode: active TZ → earliest group → browser ────
+  // Wyliczanie strefy czasowej dla wyświetlania
   const countryDisplayTZ = useMemo(() => {
     if (selectedItem?.type !== 'country') return null;
     return countryActiveTZ ?? countryTzGroups.find(g => g.tz !== CONFIG.UNKNOWN_TIMEZONE)?.tz ?? BROWSER_TIMEZONE;
@@ -287,10 +259,12 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   }, [flightAirportCodes, setSelectedAirportCodes]);
 
   useEffect(() => {
-    setTimezone(timezone);
-  }, [timezone, setTimezone]);
+    if (timezone) {
+      updateSettings({ timezone });
+    }
+  }, [timezone, updateSettings]);
 
-  // ── Reset filter + timezone override when selectedItem changes ───────────
+  // Reset filtrów przy zmianie wyboru
   useEffect(() => {
     clearFilters();
     setFilterOpen(false);
@@ -323,96 +297,37 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     }
   }, [explorationItems.length, tripState, selectedItem, clearFilters, onClose, pendingCountryPicker, onSwitchToCountryView]);
 
-  // ── Load city airports from GeoJSON when city selected ────────────────────
-  useEffect(() => {
-    if (selectedItem?.type !== 'city') {
-      setCityAirports([]);
-      return;
-    }
-    const cityCode = selectedItem.data.code;
-    const airports: Airport[] = (airportsData?.features ?? [])
-      .filter(f => f.properties.city_code === cityCode)
-      .map(f => ({
-        type: 'airport' as const,
-        code: f.properties.code,
-        name: getLocalizedProp(f.properties, 'name', language),
-        city_code: f.properties.city_code,
-        city_name: getLocalizedProp(f.properties, 'city_name', language),
-        country_code: f.properties.country_code,
-        country_name: getLocalizedProp(f.properties, 'country_name', language),
-        time_zone: f.properties.time_zone ?? undefined,
-      }));
-    setCityAirports(airports.slice(0, CONFIG.MAX_AIRPORTS));
-  }, [selectedItem, airportsData]);
+  // Pobieranie danych dla krajów - miasta i płaska lista lotnisk.
+  const countryData = useCountryData(countryCode);
 
-  // ── Load country cities from GeoJSON when country selected ───────────────
   useEffect(() => {
     if (selectedItem?.type !== 'country') {
-      setCountryCities([]);
       setSelectedFlatAirports([]);
       setSelectedCities([]);
       return;
     }
-    const countryCode = selectedItem.data.code;
-    const cityMap: Record<string, import('../types').City> = {};
-    for (const f of (airportsData?.features ?? [])) {
-      if (f.properties.country_code !== countryCode) continue;
-      const cityCode = f.properties.city_code;
-      if (!cityCode) continue;
-      if (!cityMap[cityCode]) {
-        cityMap[cityCode] = {
-          type: 'city',
-          code: cityCode,
-          name: getLocalizedProp(f.properties, 'city_name', language) || cityCode,
-          country_code: countryCode,
-          airports: [],
-        };
-      }
-      cityMap[cityCode].airports!.push({
-        type: 'airport',
-        code: f.properties.code,
-        name: getLocalizedProp(f.properties, 'name', language),
-        city_code: f.properties.city_code,
-        city_name: getLocalizedProp(f.properties, 'city_name', language),
-        country_code: f.properties.country_code,
-        country_name: getLocalizedProp(f.properties, 'country_name', language),
-      });
-    }
-    setCountryCities(Object.values(cityMap).sort((a, b) => a.name.localeCompare(b.name)));
-  }, [selectedItem, airportsData]);
+  }, [selectedItem]);
 
-  // ── Build airportCountMap for country mode ────────────────────────────────
-  const cityAirportCountMap = useMemo<Record<string, number>>(() => {
-    if (!airportsData) return {};
-    const map: Record<string, number> = {};
-    airportsData.features.forEach(f => {
-      const cityCode = f.properties.city_code;
-      if (cityCode) {
-        map[cityCode] = (map[cityCode] || 0) + 1;
-      }
-    });
-    return map;
-  }, [airportsData]);
-
+  // Wyliczamy sumę lotnisk dla wybranych miast (bezpośrednio z cityInfoMap).
+  const cityInfoMap = useCityInfoMap();
   const selectedCityAirportTotal = useMemo(() =>
-    selectedCities.reduce((total, city) => total + (cityAirportCountMap[city.code] || 0), 0),
-  [selectedCities, cityAirportCountMap]);
+    selectedCities.reduce((total, city) => total + (cityInfoMap[city.code]?.airportCount || 0), 0),
+  [selectedCities, cityInfoMap]);
 
-  // ── Country mode: confirm cities selection ────────────────────────────────
+  // Potwierdzanie wyboru miast w trybie kraju
+  const cityAirportsMap = useCityAirportsMap();
   const handleConfirmCities = useCallback(() => {
-    if (!airportsData) return;
     const codes: string[] = [];
     selectedCities.forEach(city => {
-      airportsData.features
-        .filter(f => f.properties.city_code === city.code)
-        .forEach(f => codes.push(f.properties.code));
+      const cityAps = cityAirportsMap[city.code] ?? [];
+      codes.push(...cityAps);
     });
     if (selectedItem?.type !== 'country') return;
     onCountryAirportsConfirmed(codes.slice(0, CONFIG.MAX_AIRPORTS), selectedItem.data.code, selectedItem.data.name);
-  }, [selectedCities, airportsData, onCountryAirportsConfirmed, selectedItem]);
+  }, [selectedCities, cityAirportsMap, onCountryAirportsConfirmed, selectedItem]);
 
 
-  // ── Country flat airports: toggle with TZ tracking ────────────────────────
+  // Przełączanie lotnisk z uwzględnieniem stref czasowych
   const handleCountryAirportToggle = useCallback((airport: CountryAirport) => {
     // Find the group representative TZ for an airport (used instead of raw IANA name to match group keys)
     const getGroupTz = (code: string) => countryTzGroups.find(g => g.airports.some(a => a.code === code))?.tz ?? null;
@@ -440,31 +355,31 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     });
   }, [countryActiveTZ, countryTzGroups]);
 
-  // ── Country flat airports: confirm selection ───────────────────────────────
+  // Potwierdzanie wyboru konkretnych lotnisk
   const handleConfirmFlatAirports = useCallback(() => {
     if (selectedItem?.type !== 'country') return;
     const codes = selectedFlatAirports.map(a => a.code);
     onCountryAirportsConfirmed(codes, selectedItem.data.code, selectedItem.data.name);
   }, [selectedFlatAirports, onCountryAirportsConfirmed, selectedItem]);
 
-  // ── Wrap onAddToTrip to also reset filter ─────────────────────────────────
+  // Dodawanie do trasy (reset filtrów)
   const handleAddToTripWithReset = useCallback((flight: Flight) => {
     clearFilters();
     setFilterOpen(false);
     onAddToTrip(flight);
   }, [clearFilters, onAddToTrip]);
 
-  // ── Clear local state on close ─────────────────────────────────────────────
+  // Zamykanie panelu i czyszczenie stanu
   const handleClose = useCallback(() => {
     clearFilters();
     onClose();
   }, [clearFilters, onClose]);
 
-  // ── Travel date management ─────────────────────────────────────────────────
+  // Zarządzanie datą podróży
   const { effectiveTravelDate } = useTravelDate({
     selectedItem, timezone, explorationItems, effectiveArrivalTimeUTC,
     selectedTimezoneOverride, resolvedTimezone, countryDisplayTZ,
-    travelDate, setTravelDate,
+    travelDate, updateSettings,
   });
 
   const initialFromDatetime = useMemo(() => {
@@ -490,9 +405,9 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
   }, [airportInfo, selectedItem, flightAirportCodes.length, effectiveArrivalTimeUTC, timezone]);
 
   const handleManualDateChange = useCallback((newDate: string) => {
-    setTravelDate(newDate);
+    updateSettings({ travelDate: newDate });
     flightsListRef.current?.jumpToDate(newDate);
-  }, [setTravelDate]);
+  }, [updateSettings]);
 
   const minDate = useMemo(() => {
     if (!effectiveArrivalTimeUTC) return undefined;
@@ -544,7 +459,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
         // We detect this by checking whether the stored date was "yesterday" in this TZ.
         const yesterday = new Date(Date.now() - 86400000).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
         if (travelDateRef.current === yesterday) {
-          setTravelDate(newToday);
+          updateSettings({ travelDate: newToday });
         }
       }
     };
@@ -556,9 +471,9 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
       intervalId = setInterval(updateTime, 60000);
     }, msToNextMinute);
     return () => { clearTimeout(timeoutId); clearInterval(intervalId); };
-  }, [timezone, setTravelDate]);
+  }, [timezone, updateSettings]);
 
-  // ── Two-timezone arrival time (when TZ switched in trip mode) ─────────────
+  // Obsługa dwóch stref czasowych (przesiadki)
   const arrivalTwoTZ = useMemo(() => {
     if (!effectiveArrivalTimeUTC || !selectedTimezoneOverride || !selectedTimezoneAirportCode) return null;
     const originalArrCode = lastRealLeg?.toAirportCode ?? null;
@@ -594,7 +509,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
     return { selectedCode: selectedTimezoneAirportCode, selectedTime, originalCode: originalArrCode, originalTime, diffH: diff, invDiffStr, dayLabel, dayDiff };
   }, [effectiveArrivalTimeUTC, selectedTimezoneOverride, selectedTimezoneAirportCode, lastRealLeg, airportTimezoneMap]);
 
-  // ── Per-airport alt-timezone offset display ────────────────────────────────
+  // Wyświetlanie alternatywnych stref czasowych
   const getAltTimeDisplay = useCallback((airportCode: string): string | null => {
     if (!timezone) return null;
     const tz = airportTimezoneMap[airportCode];
@@ -645,19 +560,19 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
       // If user manually changed the date, preserve it.
       const arrivalDateInCurrentTZ = new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone ?? 'UTC' });
       if (travelDate === arrivalDateInCurrentTZ) {
-        setTravelDate(new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: tz }));
+        updateSettings({ travelDate: new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: tz }) });
       }
     } else {
       // Non-trip mode: if viewing TODAY in current TZ, jump to TODAY in new TZ
       // If viewing a manually-selected date, keep it
       const todayInCurrentTZ = new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone ?? 'UTC' });
       if (travelDate === todayInCurrentTZ) {
-        setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: tz }));
+        updateSettings({ travelDate: new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: tz }) });
       }
     }
-  }, [airportTimezoneMap, selectedTimezoneOverride, setTravelDate, effectiveArrivalTimeUTC, timezone, travelDate]);
+  }, [airportTimezoneMap, selectedTimezoneOverride, updateSettings, effectiveArrivalTimeUTC, timezone, travelDate]);
 
-  // ── Reset timezone override if the airport it was set for is removed ──────
+  // Resetowanie nadpisania strefy przy usunięciu lotniska
   useEffect(() => {
     if (!selectedTimezoneOverride) return;
     const allCodes = [
@@ -673,18 +588,19 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
       if (resolvedTimezone) {
         const todayInOverrideTZ = new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: selectedTimezoneOverride });
         if (travelDate === todayInOverrideTZ) {
-          setTravelDate(new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: resolvedTimezone }));
+          updateSettings({ travelDate: new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: resolvedTimezone }) });
         }
       }
     }
-  }, [explorationItems, transferAirports, selectedTimezoneOverride, airportTimezoneMap, resolvedTimezone, travelDate, setTravelDate]);
+  }, [explorationItems, transferAirports, selectedTimezoneOverride, airportTimezoneMap, resolvedTimezone, travelDate, updateSettings]);
 
-  // ── Exploration groups (airport mode) ─────────────────────────────────────
+  // Grupy w trybie eksploracji (lotniska)
+  const countryInfoMap = useCountryInfoMap();
   const explorationDisplayItems = useExplorationGroups(
-    explorationItems, airportsData, cityInfoMap, countryInfoMap, countryNameCache, expandedCityGroups,
+    explorationItems, airportsMap, cityInfoMap, countryInfoMap, countryNameCache, expandedCityGroups,
   );
 
-  // ── Helper: remove all exploration items for a set of airport codes ────────
+  // Zarządzanie usuwaniem pozycji z listy eksploracji
   const addMissingAirport = useCallback((ap: { code: string; name: string }) => {
     addExplorationItem({ type: 'airport', code: ap.code, name: ap.name, airportCodes: [ap.code] } /*, 'airports'*/);
   }, [addExplorationItem]);
@@ -737,7 +653,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
       <div className="panel-header">
         <div className="header-content">
           <h3>{t.panel.departureDate}</h3>
-          {(selectedItem.type === 'airport' || (selectedItem.type === 'city' && cityAirports.length > 0) || selectedItem.type === 'country') && (
+          {(selectedItem.type === 'airport' || (selectedItem.type === 'city' && queriedCityAirports.length > 0) || selectedItem.type === 'country') && (
             <div className="header-info">
               <DateInput value={travelDate} onChange={handleManualDateChange}
                 timezone={(selectedItem.type === 'country' ? (countryDisplayTZ ?? undefined) : timezone) ?? undefined}
@@ -796,7 +712,6 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
             pendingCountryTzGroups={pendingCountryTzGroups}
             pendingSelectedAirports={pendingSelectedAirports}
             setPendingSelectedAirports={setPendingSelectedAirports}
-            airportsData={airportsData}
             explorationItems={explorationItems}
             onFitBounds={onFitBounds}
             onClearCountryPicker={onClearCountryPicker}
@@ -812,7 +727,6 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                   selectedAirport={selectedItem.data}
                   transferAirports={transferAirports}
                   setTransferAirports={setTransferAirports}
-                  airportsData={airportsData}
                   getAltTimeDisplay={getAltTimeDisplay}
                   onSwitchTimezone={handleSwitchTimezone}
                   selectedTimezoneAirportCode={selectedTimezoneAirportCode}
@@ -853,8 +767,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
               {explorationItems.length > 0 ? explorationListEl : (
                 <div className="simplified-details">{getSimplifiedDetails()}</div>
               )}
-              {loadingCityAirports && <div className="mode-loading">{t.panel.loadingAirports}</div>}
-              {!loadingCityAirports && cityAirports.length === 0 && explorationItems.length === 0 && (
+              {queriedCityAirports.length === 0 && explorationItems.length === 0 && (
                 <div className="mode-no-airports">{t.panel.noFlightableAirports}</div>
               )}
             </div>
@@ -875,7 +788,7 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
           </>
         )}
 
-        {/* ── Country mode ──────────────────────────────────────── */}
+        {/* ── Tryb kraju ────────────────────────────────────────── */}
         {selectedItem.type === 'country' && (
           <>
             <div className="item-info">
@@ -887,9 +800,9 @@ const RightPanel = forwardRef<unknown, RightPanelProps>(({ onClose, onAddToTrip,
                 selectedFlatAirports={selectedFlatAirports}
                 onAirportToggle={handleCountryAirportToggle}
                 onConfirm={handleConfirmFlatAirports}
-                airportsData={airportsData}
                 getCountryTzRelativeOffset={getCountryTzRelativeOffset}
               />
+
             </div>
             {!loadingCountry && selectedFlatAirports.length === 0 && selectedCities.length === 0 && (
               <div className="placeholder-message">

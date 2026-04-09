@@ -1,30 +1,4 @@
-// --- Geo entities ---
-export interface Airport {
-  code: string;
-  name: string;
-  city_name?: string;
-  city_code?: string;
-  country_name?: string;
-  country_code?: string;
-  coordinates?: { lat: number; lon?: number; lng?: number };
-  type: 'airport';
-}
-
-export interface City {
-  code: string;
-  name: string;
-  country_name?: string;
-  country_code?: string;
-  airports?: Airport[];
-  type: 'city';
-}
-
-export interface Country {
-  code: string;
-  name: string;
-  type: 'country';
-  cities?: City[];
-}
+// Dane z API (backend)
 
 export interface Flight {
   flight_number: string;
@@ -40,6 +14,7 @@ export interface Flight {
   departure_gate?: string;
 }
 
+// Rozkład lotów (NDJSON)
 export interface Schedule {
   success: boolean;
   data: Flight[];
@@ -48,6 +23,7 @@ export interface Schedule {
   range_end_datetime?: string;
 }
 
+// Oferta cenowa (Aviasales)
 export interface FlightOffer {
   origin_city_code: string;
   destination_city_code: string;
@@ -61,18 +37,16 @@ export interface FlightOffer {
   link?: string;
 }
 
-export interface AirportInfo {
-  time_zone: string;
-  current_local_date: string;
-  current_local_datetime: string;
-}
+// Dane geograficzne (pliki .geojson / .json)
 
-export interface CountryAirport {
+export interface GeoBaseProps {
   code: string;
   name: string;
-  time_zone?: string | null;
+  n?: string; // normalized name for Zero-Transformation search
+  type: 'airport' | 'city' | 'country';
 }
 
+// Właściwości z airports.geojson
 export interface AirportFeatureProps {
   code: string;
   name_en: string;
@@ -86,12 +60,14 @@ export interface AirportFeatureProps {
   time_zone?: string | null;
 }
 
+// Właściwości z cities.json
 export interface CityFeatureProps {
   code: string;
   name: string;
   country_code?: string;
 }
 
+// Właściwości trasy na mapie
 export interface RouteFeatureProps {
   id: string | number;
   airline_iata?: string;
@@ -100,18 +76,69 @@ export interface RouteFeatureProps {
   codeshare?: boolean;
 }
 
+// Główne modele aplikacji
+
+export interface Airport extends Omit<GeoBaseProps, 'type'> {
+  type: 'airport';
+  city_code?: string;
+  city_name?: string;
+  country_code?: string;
+  country_name?: string;
+  coordinates?: { lat: number; lon: number };
+  time_zone?: string | null;
+}
+
+export interface City extends Omit<GeoBaseProps, 'type'> {
+  type: 'city';
+  country_code?: string;
+  country_name?: string;
+  airports?: Airport[];
+}
+
+export interface Country extends Omit<GeoBaseProps, 'type'> {
+  type: 'country';
+  cities?: City[];
+}
+
+// Rozszerzenie lotniska dla trybu wyboru kraju
+export interface CountryAirport extends Airport {
+  isSelected?: boolean;
+}
+
+// Stan UI i modele pomocnicze
+
+export interface AirportInfo {
+  time_zone: string;
+  current_local_date: string;
+  current_local_datetime: string;
+}
+
+// Wybrany element na mapie
 export type SelectedItem =
   | { type: 'airport'; data: Airport; isHighlighted?: boolean; overrideFromDatetime?: string; fromMap?: boolean }
   | { type: 'city'; data: City; fromMap?: boolean }
   | { type: 'country'; data: Country; fromMap?: boolean }
-  | { type: 'route'; data: RouteFeatureProps };
-
+  | { type: 'route'; data: RouteFeatureProps; fromMap?: boolean };
 
 export interface TripLeg {
   fromAirportCode: string;
   toAirportCode: string;
   flight: Flight;
-  type?: string;  // 'manual' for manual transfers
+  type?: 'manual' | 'direct';
+}
+
+export interface TripRoute {
+  from: [number, number];
+  to: [number, number];
+}
+
+export interface TripState {
+  startAirport: {
+    code: string;
+    city_code?: string;
+    country_code?: string
+  };
+  legs: TripLeg[];
 }
 
 export interface TripSnapshot {
@@ -123,22 +150,14 @@ export interface TripSnapshot {
   flightsData: Flight[];
 }
 
-export interface TripState {
-  startAirport: { code: string; city_code?: string; country_code?: string };
-  legs: TripLeg[];
-}
-
-export interface TripRoute {
-  from: [number, number];
-  to: [number, number];
-}
-
 export interface Viewport {
   center: [number, number];
   zoom: number;
   pitch: number;
   bearing: number;
 }
+
+// Wyniki wyszukiwania i paginacja
 
 export interface SearchPhaseInfo {
   has_phase2: boolean;
@@ -165,5 +184,3 @@ export interface CityWithPagination {
     next_offset?: number;
   };
 }
-
-export type FlightOfferResponse = FlightOffer;
