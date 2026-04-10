@@ -122,10 +122,10 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
       map.current?.setFeatureState({ source: 'selected-routes', id: routeId }, { hover: false });
       hoveredRouteId.current = null;
     }
-    map.current?.setFilter('airports-route-hover', ['==', 'code', '']);
+    const hSrc = map.current?.getSource('airports-hover-single') as maplibregl.GeoJSONSource | undefined;
+    if (hSrc) hSrc.setData({ type: 'FeatureCollection', features: [] });
+
     if (!keepLabels) {
-      map.current?.setFilter('airports-labels-hover', ['==', 'code', '']);
-      map.current?.setFilter('airports-labels-hover-general', ['==', 'code', '']);
       // Restore highlighted label filter when clearing route hover
       applyAirportFilters();
     }
@@ -224,9 +224,14 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
     }
 
     // Now show hover label and dot — highlighted label for destCode is already hidden above
-    m.setFilter('airports-labels-hover', ['==', 'code', destCode]);
-    m.setFilter('airports-labels-hover-general', ['==', 'code', '']);
-    m.setFilter('airports-route-hover', ['==', 'code', destCode]);
+    // Now show hover label and dot via Single-Feature source
+    const hSrc = m.getSource('airports-hover-single') as maplibregl.GeoJSONSource | undefined;
+    if (hSrc && refs.airportsDataRef.current) {
+      const feat = refs.airportsDataRef.current.features.find((f: any) => f.properties.code === destCode);
+      if (feat) {
+        hSrc.setData({ type: 'FeatureCollection', features: [JSON.parse(JSON.stringify(feat))] });
+      }
+    }
 
     const srcIdx = (feature.properties as { srcIdx?: number })?.srcIdx ?? 0;
     const startCodes = selectedAirportCodesRef.current.length > 0

@@ -67,7 +67,7 @@ supabase.auth.onAuthStateChange((event, session) => {
   // Sync preferencji (kolory mapy itp.) odpalamy tylko jak faktycznie zmieni się ID usera.
   if (event === 'SIGNED_IN' && userId !== lastUserId) {
     lastUserId = userId;
-    loadPreferencesOnLogin();
+    loadPreferencesOnLogin(session?.user ?? null);
   }
   
   if (event === 'SIGNED_OUT') {

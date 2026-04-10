@@ -1,4 +1,5 @@
 import { fetchPreferences } from '../api/preferences';
+import type { User } from '@supabase/supabase-js';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useMapStore } from '../stores/mapStore';
 import { useColorStore } from '../stores/colorStore';
@@ -16,7 +17,7 @@ const updateLocalSnapshot = () => {
 
 let isSyncing = false;
 
-export const loadPreferencesOnLogin = async (): Promise<void> => {
+export const loadPreferencesOnLogin = async (user: User | null): Promise<void> => {
   const s = useSettingsStore.getState();
   
   // Jeśli już trwa synchronizacja lub mamy już załadowany stan z DB, pomijamy
@@ -24,7 +25,27 @@ export const loadPreferencesOnLogin = async (): Promise<void> => {
 
   try {
     isSyncing = true;
+    
+    // [FIRST-SIGN-IN HEURISTIC]: 
+    // If user is brand new (created_at == last_sign_in_at), we skip the fetch 
+    // as it will absolutely return 404. This saves one network request.
+    if (user && user.last_sign_in_at) {
+      const created = new Date(user.created_at).getTime();
+      const lastSign = new Date(user.last_sign_in_at).getTime();
+      if (Math.abs(lastSign - created) < 5000) { // 5s threshold for registration
+        updateLocalSnapshot();
+        return;
+      }
+    }
+
     const prefs = await fetchPreferences();
+
+    if (!prefs) {
+      // 404 / null means no preferences yet (first login after registration)
+      // We don't save yet, just mark current local state as "savable" (savedSnapshot = "")
+      useSettingsStore.getState().updateSettings({ savedSnapshot: "" });
+      return;
+    }
 
     // Wgrywamy ustawienia ogólne jednym strzałem (Zero-Waste)
     s.updateSettings({
@@ -58,16 +79,6 @@ export const loadPreferencesOnLogin = async (): Promise<void> => {
     // Po wgraniu wszystkiego robimy snapshot, żeby wiedzieć kiedy użytkownik coś zmieni
     updateLocalSnapshot();
 
-  } catch (err: unknown) {
-    const isNotFound = (err as { response?: { status?: number } })?.response?.status === 404;
-
-    if (isNotFound) {
-      // 404 oznacza, że użytkownik nie ma jeszcze żadnych zapisanych preferencji (pierwsze logowanie)
-      // Robimy snapshot stanu domyślnego
-      updateLocalSnapshot();
-    } else {
-      console.warn('[preferences] Failed to load preferences:', err);
-    }
   } finally {
     isSyncing = false;
   }

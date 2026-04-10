@@ -58,6 +58,7 @@ export function addAirportsLayer(
   map: MapLibreMap,
   data: FeatureCollection<Point, AirportFeatureProps>,
   currentMapStyle: string,
+  startAirportCodes: string[] = [],
   lang = 'en',
   sessionId?: number
 ) {
@@ -96,6 +97,17 @@ export function addAirportsLayer(
     source.setData(data);
   }
 
+  // ELEMENT HOVER (Single-Feature Overlay)
+  // To dedykowane źródło zawiera tylko 1 feature (aktualnie pod kursorem)
+  if (!map.getSource('airports-hover-single')) {
+    map.addSource('airports-hover-single', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+      tolerance: 0,
+      buffer: 0
+    });
+  }
+
   // Idempotentna inicjalizacja warstw - zapobiega duplikatom przy przełączaniu stylów
   const layers = [
     {
@@ -103,10 +115,19 @@ export function addAirportsLayer(
       type: 'circle',
       source: 'airports',
       paint: {
-        'circle-radius': CONFIG.MAP_AIRPORT_LAYER.RADIUS_TINY,
-        'circle-color': THEME_COLORS.cRose,
+        'circle-radius': [
+          'interpolate', ['linear'], ['zoom'],
+          4, CONFIG.MAP_AIRPORT_LAYER.RADIUS_TINY,
+          10, CONFIG.MAP_AIRPORT_LAYER.RADIUS_MEDIUM
+        ],
+        'circle-color': [
+          'case',
+          ['in', 'code', ['literal', startAirportCodes]], THEME_COLORS.cGold,
+          ['coalesce', ['get', 'is_major'], false], THEME_COLORS.cPrimary,
+          THEME_COLORS.cPrimary60
+        ] as maplibregl.ExpressionSpecification,
         'circle-stroke-width': 1,
-        'circle-stroke-color': strokeColor
+        'circle-stroke-color': strokeColor,
       }
     },
     {
@@ -134,22 +155,6 @@ export function addAirportsLayer(
       }
     },
     {
-      id: 'airports-hover',
-      type: 'circle',
-      source: 'airports',
-      filter: ['==', 'code', ''],
-      paint: {
-        'circle-radius': CONFIG.MAP_AIRPORT_LAYER.RADIUS_MEDIUM,
-        'circle-color': THEME_COLORS.red,
-        'circle-stroke-width': 2,
-        'circle-stroke-color': strokeColor,
-        'circle-radius-transition': { duration: 0 },
-        'circle-color-transition': { duration: 0 },
-        'circle-stroke-width-transition': { duration: 0 },
-        'circle-opacity-transition': { duration: 0 },
-      }
-    },
-    {
       id: 'airports-selected',
       type: 'circle',
       source: 'airports',
@@ -162,25 +167,64 @@ export function addAirportsLayer(
       }
     },
     {
-      id: 'airports-route-hover',
+      id: 'airports-hover-single-circle',
       type: 'circle',
-      source: 'airports',
-      filter: ['==', 'code', ''],
+      source: 'airports-hover-single',
+      paint: {
+        'circle-radius': CONFIG.MAP_AIRPORT_LAYER.RADIUS_MEDIUM,
+        'circle-color': THEME_COLORS.red,
+        'circle-stroke-width': 2,
+        'circle-stroke-color': strokeColor,
+        'circle-radius-transition': { duration: 0 },
+        'circle-color-transition': { duration: 0 },
+      }
+    },
+    {
+      id: 'airports-hover-single-route',
+      type: 'circle',
+      source: 'airports-hover-single',
       paint: {
         'circle-radius': CONFIG.MAP_AIRPORT_LAYER.RADIUS_LARGE,
         'circle-color': THEME_COLORS.cGold,
         'circle-stroke-width': 2,
-        'circle-stroke-color': strokeColor
+        'circle-stroke-color': strokeColor,
+        'circle-radius-transition': { duration: 0 },
+      }
+    },
+    {
+      id: 'airports-hover-single-label',
+      type: 'symbol',
+      source: 'airports-hover-single',
+      layout: {
+        'text-field': airportLabelField(lang),
+        'text-size': CONFIG.MAP_AIRPORT_LAYER.TEXT_LARGE,
+        'text-font': getSafeFontsFromStyle(map, true),
+        'text-offset': [0, 1.5],
+        'text-anchor': 'top',
+        'text-max-width': 8,
+        'text-allow-overlap': true,
+        'text-ignore-placement': true,
+        'symbol-sort-key': 10, // Zawsze na samym wierzchu
+      },
+      paint: {
+        'text-color': THEME_COLORS.textBlack,
+        'text-halo-color': labelPaint.haloColor,
+        'text-halo-width': 1.5,
       }
     },
     {
       id: 'airports-labels-normal',
       type: 'symbol',
       source: 'airports',
-      minzoom: 5,
       layout: {
         'text-field': airportLabelField(lang),
-        'text-size': CONFIG.MAP_AIRPORT_LAYER.TEXT_SMALL,
+        'text-size': [
+          'interpolate', ['linear'], ['zoom'],
+          4, 0, 
+          5, CONFIG.MAP_AIRPORT_LAYER.TEXT_TINY,
+          8, CONFIG.MAP_AIRPORT_LAYER.TEXT_SMALL,
+          12, CONFIG.MAP_AIRPORT_LAYER.TEXT_MEDIUM
+        ],
         'text-offset': [0, 1.5],
         'text-anchor': 'top',
         'text-max-width': 8,
@@ -190,18 +234,26 @@ export function addAirportsLayer(
       paint: {
         'text-color': labelPaint.textColor,
         'text-halo-color': labelPaint.haloColor,
-        'text-halo-width': labelPaint.haloWidth
+        'text-halo-width': labelPaint.haloWidth,
+        'text-opacity': [
+          'interpolate', ['linear'], ['zoom'],
+          4.5, 0,
+          5.5, 1
+        ]
       }
     },
     {
       id: 'airports-labels-normal-city',
       type: 'symbol',
       source: 'airports',
-      maxzoom: 5,
-      filter: ['in', 'code', ''],
       layout: {
         'text-field': airportCityLabelField(lang),
-        'text-size': CONFIG.MAP_AIRPORT_LAYER.TEXT_MEDIUM,
+        'text-size': [
+          'interpolate', ['linear'], ['zoom'],
+          2, CONFIG.MAP_AIRPORT_LAYER.TEXT_TINY,
+          4, CONFIG.MAP_AIRPORT_LAYER.TEXT_SMALL,
+          6, CONFIG.MAP_AIRPORT_LAYER.TEXT_MEDIUM
+        ],
         'text-font': getSafeFontsFromStyle(map, false),
         'text-offset': [0, 1.5],
         'text-anchor': 'top',
@@ -211,14 +263,18 @@ export function addAirportsLayer(
       paint: {
         'text-color': labelPaint.textColor,
         'text-halo-color': labelPaint.haloColor,
-        'text-halo-width': labelPaint.haloWidth
+        'text-halo-width': labelPaint.haloWidth,
+        'text-opacity': [
+          'interpolate', ['linear'], ['zoom'],
+          4.5, 1,
+          5.5, 0
+        ]
       }
     },
     {
       id: 'airports-labels-highlighted-city',
       type: 'symbol',
       source: 'airports',
-      maxzoom: 5,
       filter: ['in', 'code', ''],
       layout: {
         'text-field': airportCityLabelField(lang),
@@ -232,14 +288,18 @@ export function addAirportsLayer(
       paint: {
         'text-color': labelPaint.textColor,
         'text-halo-color': labelPaint.haloColor,
-        'text-halo-width': labelPaint.haloWidth
+        'text-halo-width': labelPaint.haloWidth,
+        'text-opacity': [
+          'interpolate', ['linear'], ['zoom'],
+          4.5, 1,
+          5.5, 0
+        ]
       }
     },
     {
       id: 'airports-labels-highlighted',
       type: 'symbol',
       source: 'airports',
-      minzoom: 5,
       filter: ['in', 'code', ''],
       layout: {
         'text-field': airportLabelField(lang),
@@ -253,55 +313,12 @@ export function addAirportsLayer(
       paint: {
         'text-color': labelPaint.textColor,
         'text-halo-color': labelPaint.haloColor,
-        'text-halo-width': labelPaint.haloWidth
-      }
-    },
-    {
-      id: 'airports-labels-hover-general',
-      type: 'symbol',
-      source: 'airports',
-      filter: ['==', 'code', ''],
-      layout: {
-        'text-field': airportLabelField(lang),
-        'text-size': CONFIG.MAP_AIRPORT_LAYER.TEXT_LARGE,
-        'text-font': getSafeFontsFromStyle(map, true),
-        'text-offset': [0, 1.5],
-        'text-anchor': 'top',
-        'text-max-width': 8,
-        'text-allow-overlap': true,
-        'text-ignore-placement': true,
-        'symbol-sort-key': 3,
-      },
-      paint: {
-        'text-color': THEME_COLORS.textBlack,
-        'text-halo-color': labelPaint.haloColor,
-        'text-halo-width': 1.5,
-        'text-opacity-transition': { duration: 0 },
-        'text-color-transition': { duration: 0 },
-      }
-    },
-    {
-      id: 'airports-labels-hover',
-      type: 'symbol',
-      source: 'airports',
-      filter: ['==', 'code', ''],
-      layout: {
-        'text-field': airportLabelField(lang),
-        'text-size': CONFIG.MAP_AIRPORT_LAYER.TEXT_LARGE,
-        'text-font': getSafeFontsFromStyle(map, true),
-        'text-offset': [0, 1.5],
-        'text-anchor': 'top',
-        'text-max-width': 8,
-        'text-allow-overlap': true,
-        'text-ignore-placement': true,
-        'symbol-sort-key': 3,
-      },
-      paint: {
-        'text-color': THEME_COLORS.cGold,
-        'text-halo-color': labelPaint.haloColor,
-        'text-halo-width': 1.5,
-        'text-opacity-transition': { duration: 0 },
-        'text-color-transition': { duration: 0 },
+        'text-halo-width': labelPaint.haloWidth,
+        'text-opacity': [
+          'interpolate', ['linear'], ['zoom'],
+          4.5, 0,
+          5.5, 1
+        ]
       }
     }
   ];
@@ -371,8 +388,9 @@ export function removeAirportsLayer(map: MapLibreMap) {
     'airports-trip',
     'airports-highlighted',
     'airports-selected',
-    'airports-hover',
-    'airports-route-hover'
+    'airports-hover-single-circle',
+    'airports-hover-single-route',
+    'airports-hover-single-label'
   ];
 
   airportLayers.forEach(layerId => {
@@ -385,7 +403,8 @@ export function removeAirportsLayer(map: MapLibreMap) {
 
   try {
     if (map.getSource('airports')) map.removeSource('airports');
+    if (map.getSource('airports-hover-single')) map.removeSource('airports-hover-single');
   } catch (e) {
-    console.warn('removeAirportsLayer: could not remove source "airports"', e);
+    console.warn('removeAirportsLayer: could not remove sources', e);
   }
 }

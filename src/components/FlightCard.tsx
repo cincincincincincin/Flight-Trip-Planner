@@ -5,8 +5,8 @@ import { useAirportsQuery, useAirportInfoQuery, useFlightOffersQuery, useAirport
 import './FlightCard.css';
 import { useTexts } from '../hooks/useTexts';
 import { CONFIG } from '../constants/config';
-import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
 import { UI_SYMBOLS } from '../constants/ui';
+import dayjs from '../lib/dayjs';
 import { haversineKm } from '../utils/math';
 import { formatTime, formatDate, getDuration, computeTzDiff, formatTzDiff } from '../utils/dateFormatting';
 
@@ -26,7 +26,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
   const { currency, travelDate, language } = useSettingsStore();
   const isDeparted = useMemo(() => {
     if (!flight.scheduled_departure_utc) return false;
-    return new Date(flight.scheduled_departure_utc).getTime() < Date.now();
+    return dayjs(flight.scheduled_departure_utc).isBefore(dayjs());
   }, [flight.scheduled_departure_utc]);
 
   const showPrices = isExpanded && !isDeparted; // controlled by parent, but blocked if departed
@@ -178,8 +178,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
     const dest = (flight.destination_airport_code || '').toLowerCase();
     const [year, month, day] = ((flight.scheduled_departure_utc?.slice(0, 10) ?? travelDate) || '').split('-');
     const date = year
-      ? new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
-          .toLocaleDateString(FORMAT_LOCALES.US, FORMAT_OPTIONS.DATE_LONG_YEAR)
+      ? dayjs(`${year}-${month}-${day}`).format('MMMM D, YYYY')
       : '';
     const query = `${airlineName} ${origin} ${dest} ${date}${t.card.oneWay}`;
     return `https://www.google.com/search?q=${encodeURIComponent(query)}`;

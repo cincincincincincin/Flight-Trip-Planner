@@ -79,17 +79,22 @@ export const isBlackOrWhiteColor = (colorHex: string): boolean => {
   return isBlack || isWhite;
 };
 
+/** Detekcja czy styl mapy jest ciemny (Dark lub Imagery) */
+export const isDarkStyle = (styleId: string | undefined): boolean => {
+  if (!styleId) return false;
+  const id = styleId.toLowerCase();
+  return id.includes('imagery') || id.includes('satellite') || id.includes('dark') || id.includes('human');
+};
+
 /** 
  * Wyznacza optymalny kolor tekstu na podstawie stylu mapy.
  * Na mapach satelitarnych (Imagery) wymusza wysoki kontrast dla czytelności etykiet.
  */
 export const getTextColorForStyle = (textColor: string, styleUrl: string | undefined): string => {
-  const isImagery = styleUrl?.toLowerCase().includes('imagery') || styleUrl?.toLowerCase().includes('satellite');
-  if (!isImagery) return textColor;
+  const isDark = isDarkStyle(styleUrl);
+  if (!isDark) return textColor;
 
-  // On Imagery/Satellite, if the color is not white, we might want to force it to white
-  // but if the user chose a bright color (like yellow), keep it.
-  // If it's dark, force to white.
+  // On Dark/Imagery, if the color is too dark, force it to white
   if (!textColor.startsWith('#') || textColor.length < 7) return THEME_COLORS.textInverse;
   
   const r = parseInt(textColor.slice(1, 3), 16);
@@ -97,13 +102,11 @@ export const getTextColorForStyle = (textColor: string, styleUrl: string | undef
   const b = parseInt(textColor.slice(5, 7), 16);
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
 
-  return luminance < 0.6 ? THEME_COLORS.textInverse : textColor;
+  return luminance < 0.4 ? THEME_COLORS.textInverse : textColor;
 };
 
 /** 
  * Automatyczny dobór koloru obwódki (halo) dla tekstu.
- * Wykorzystuje luminancję (jasność postrzeganą) do stworzenia maksymalnego kontrastu.
- * Wzór: 0.299R + 0.587G + 0.114B (Standard ITU-R BT.601)
  */
 export const getHaloColorForTextColor = (textColor: string, styleUrl: string | undefined): string => {
   if (!textColor.startsWith('#') || textColor.length < 7) return THEME_COLORS.textInverse;
@@ -111,15 +114,11 @@ export const getHaloColorForTextColor = (textColor: string, styleUrl: string | u
   const r = parseInt(textColor.slice(1, 3), 16);
   const g = parseInt(textColor.slice(3, 5), 16);
   const b = parseInt(textColor.slice(5, 7), 16);
-  
-  // Calculate perceived brightness (luminance)
   const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   
-  // Always return opposite: if text is bright, use dark halo; if text is dark, use bright halo
-  const isImagery = styleUrl?.toLowerCase().includes('imagery') || styleUrl?.toLowerCase().includes('satellite');
+  const isDark = isDarkStyle(styleUrl);
   
-  if (isImagery && luminance > 0.3) {
-    // On satellite, even mid-luminance colors need a dark halo for readability
+  if (isDark && luminance > 0.3) {
     return THEME_COLORS.textBlack;
   }
   
@@ -168,17 +167,13 @@ export const getLabelPaint = (styleId: string | undefined): LabelPaint => {
   
   const id = styleId.toLowerCase();
   
-  if (id.includes('imagery') || id.includes('satellite') || id.includes('dark')) {
+  if (id.includes('imagery') || id.includes('satellite')) {
     return imageryScheme;
   }
   
-  if (id.includes('charted') || id.includes('community') || id.includes('light') || id.includes('positron') || id.includes('voyager')) {
-    return lightScheme;
-  }
-
-  if (id.includes('human')) {
+  if (id.includes('dark') || id.includes('human')) {
     return darkScheme;
   }
-
+  
   return lightScheme;
 };

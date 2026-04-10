@@ -43,6 +43,7 @@ import type { GCPath } from './map/routeAnimations';
 import { applyMapAirportFilters } from './map/filterApplier';
 import { setupRouteHoverListeners } from './map/routeHover';
 import type { RouteHoverRefs } from './map/routeHover';
+import { spatialIndex } from '../utils/spatialIndex';
 
 export interface MapComponentRef {
   flyTo: (options: FlyToOptions) => void;
@@ -82,7 +83,6 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
 
   // --- REFS FOR HOOKS ---
   const projectedAirportsRef = useRef<Array<{ code: string; x: number; y: number }>>([]);
-  const spatialGridRef = useRef<Record<string, string[]>>({}); // SIATKA (Faza 1): Key: "row,col", Value: [codes]
   const hoveredAirportCodeRef = useRef<string | null>(null);
   const lastDetectedCodeRef = useRef<string | null>(null);
   const hoveredRouteId = useRef<string | number | null>(null);
@@ -156,7 +156,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
   }, [flightsByRouteMap, flightsByRouteGroupMap]);
 
   const hoverRefs: MapHoverRefs = {
-    map, projectedAirportsRef, spatialGridRef, hoveredAirportCodeRef, lastDetectedCodeRef,
+    map, projectedAirportsRef, hoveredAirportCodeRef, lastDetectedCodeRef,
     hoverSampleCountRef, mouseStopTimerRef, hoverClearTimerRef, hoverLockUntilRef,
     isRouteHoveredRef, hoveredRouteId, airportCityKeyRef, cityLabelCodeByCityRef,
     cityLabelCodesRef: cityLabelCodesInternalRef, highlightedLabelCodesRef,
@@ -287,28 +287,8 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
 
     projectedAirportsRef.current = projected;
 
-    // INŻYNIERSKA OPTYMALIZACJA (Faza 1): Budowa siatki przestrzennej (Spatial Grid)
-    // Pozwala na wyszukiwanie lotnisk w czasie O(1) podczas ruchu myszy.
-    // Używamy requestIdleCallback, aby nie blokować głównego wątku podczas zoomu/pan.
-    const GRID_SIZE = 60;
-    const processGrid = () => {
-      const grid: Record<string, string[]> = {};
-      projected.forEach(ap => {
-        const col = Math.floor(ap.x / GRID_SIZE);
-        const row = Math.floor(ap.y / GRID_SIZE);
-        const key = `${row},${col}`;
-        if (!grid[key]) grid[key] = [];
-        grid[key].push(ap.code);
-      });
-      spatialGridRef.current = grid;
-      projectedAirportsRef.current = projected;
-    };
-
-    if ('requestIdleCallback' in window) {
-      window.requestIdleCallback(() => processGrid(), { timeout: 100 });
-    } else {
-      processGrid();
-    }
+    spatialIndex.update(projected);
+    projectedAirportsRef.current = projected;
 
     // const end = performance.now();
     // if (showConsoleLogs) console.debug(`[MapComponent] Projected ${projectedAirportsRef.current.length} airports in ${(end - start).toFixed(2)}ms`);
@@ -359,6 +339,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
         m, 
         geoData, 
         mapStyle, 
+        tripState?.startAirport?.code ? [tripState.startAirport.code] : [],
         language,
         (m as any)._sessionId
       );

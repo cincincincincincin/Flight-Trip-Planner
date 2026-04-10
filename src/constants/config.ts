@@ -225,7 +225,7 @@ export const CONFIG = {
   /** Airport circle sizes (radius px) at different zoom breakpoints */
   MAP_AIRPORT_LAYER: {
     RADIUS_TINY: 4, RADIUS_SMALL: 6, RADIUS_MEDIUM: 8, RADIUS_LARGE: 10,
-    TEXT_SMALL: 10, TEXT_MEDIUM: 11, TEXT_LARGE: 12
+    TEXT_TINY: 9, TEXT_SMALL: 10, TEXT_MEDIUM: 11, TEXT_LARGE: 12
   },
   /** City circle sizes (radius px) at different zoom breakpoints */
   MAP_CITY_LAYER: {
@@ -309,8 +309,8 @@ export const CONFIG = {
 
 /** Dostępne waluty do wyboru przez użytkownika */
 export const CURRENCIES = [
-  { code: 'PLN', label: 'PLN – Polish Złoty' },
-  { code: 'USD', label: 'USD – US Dollar' },
-  { code: 'EUR', label: 'EUR – Euro' },
-  { code: 'GBP', label: 'GBP – British Pound' },
+  { code: 'PLN', label: 'PLN - Polish Złoty' },
+  { code: 'USD', label: 'USD - US Dollar' },
+  { code: 'EUR', label: 'EUR - Euro' },
+  { code: 'GBP', label: 'GBP - British Pound' },
 ] as const;

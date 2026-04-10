@@ -9,7 +9,7 @@ import ConfirmDeleteModal from '../ConfirmDeleteModal';
 import './SavedTripsPanel.css';
 import { useTexts } from '../../hooks/useTexts';
 import { UI_SYMBOLS } from '../../constants/ui';
-import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../../constants/format';
+import dayjs from '../../lib/dayjs';
 
 interface SavedTripsPanelProps {
   onClose: () => void;
@@ -63,8 +63,8 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
       const firstLeg = trip_state.legs[0];
       const lastLeg = trip_state.legs[trip_state.legs.length - 1];
       if (firstLeg.flight?.scheduled_departure_utc && lastLeg.flight?.scheduled_arrival_utc) {
-        const start = new Date(firstLeg.flight.scheduled_departure_utc).toLocaleDateString(FORMAT_LOCALES.GB, FORMAT_OPTIONS.DATE_SHORT);
-        const end = new Date(lastLeg.flight.scheduled_arrival_utc).toLocaleDateString(FORMAT_LOCALES.GB, FORMAT_OPTIONS.DATE_SHORT);
+        const start = dayjs(firstLeg.flight.scheduled_departure_utc).format('DD/MM/YYYY');
+        const end = dayjs(lastLeg.flight.scheduled_arrival_utc).format('DD/MM/YYYY');
         dateRange = `${start} - ${end}`;
       }
     }

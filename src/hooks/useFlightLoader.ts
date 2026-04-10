@@ -1,16 +1,26 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { getSchedules } from '../api/schedules';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { supabase } from '../lib/supabaseClient';
 import type { Flight } from '../types';
-import { FORMAT_LOCALES } from '../constants/format';
 import { CONFIG } from '../constants/config';
+import { getIsoDate, getIsoDatetime, getTodayInTz } from '../utils/dateFormatting';
+import dayjs from '../lib/dayjs';
 
 // 24 hours — the fixed UTC window size for any single-day view (rolling in today mode)
 const WINDOW_MS = 24 * 60 * 60_000;
 const MIN_MS = 60_000;
 const ALIGN_MS = 60_000; // Alignment to 1 minute for exact rolling window start
 
+// Helpers
+const toLocalMinute = (ms: number, tz: string) => dayjs(ms).tz(tz).format('YYYY-MM-DDTHH:mm');
+const utcMidnightOf = (dateStr: string, tz: string) => dayjs.tz(dateStr, tz).startOf('day').valueOf();
+
+/**
+ * [STRATEGIA ŁADOWANIA LOTÓW]: NDJSON Streaming & RAF Batching
+ * To serce wydajności aplikacji. Zamiast czekać na pełną odpowiedź JSON, system przetwarza
+ * strumień danych wiersz po wierszu, co pozwala na natychmiastowe wyświetlanie pierwszych wyników.
+ */
 interface RawScheduleResponse {
   success: boolean;
   data: Flight[];
@@ -71,16 +81,20 @@ export function useFlightLoader({
   // this transient state and avoid spurious non-today-mode fetches.
   const prevTimezoneRef = useRef<string>(timezone ?? '');
   const dateOrderRef = useRef<string[]>([]);
+  
+  /** [STRATEGIA O(1)]: Szybki lookup kluczy lotów dla całej aplikacji. */
+  const loadedFlightKeysRef = useRef<Set<string>>(new Set());
+  /** [MUTEX LOADER LOCK]: Zapobiega nakładaniu się procesów odświeżania. */
+  const loaderMutexRef = useRef(false);
 
   const anyLoading = Object.values(perAirportLoading).some(Boolean);
 
   // ── Flight grouping keyed by departure date in the display timezone ─────────
   const flightsByDate = useMemo<Record<string, Flight[]>>(() => {
     const byDate: Record<string, Flight[]> = {};
-    rawFlights.forEach(flight => {
+    rawFlights.forEach((flight: Flight) => {
       const dateStr = (flight.scheduled_departure_utc && timezone)
-        ? new Date(flight.scheduled_departure_utc)
-            .toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone })
+        ? getIsoDate(new Date(flight.scheduled_departure_utc), timezone)
         : (flight.scheduled_departure_local?.split('T')[0] ?? '');
       if (!dateStr) return;
       (byDate[dateStr] ??= []).push(flight);
@@ -91,27 +105,14 @@ export function useFlightLoader({
   const dateOrder = useMemo(() => Object.keys(flightsByDate).sort(), [flightsByDate]);
   useEffect(() => { dateOrderRef.current = dateOrder; }, [dateOrder]);
 
-  // ── UTC midnight of dateStr in tz (noon-probe, handles UTC±12+) ────────────
+  // ── UTC midnight of dateStr in tz ────────────
   const utcMidnightOf = useCallback((dateStr: string, tz: string): number => {
-    const noonUTC = new Date(`${dateStr}T12:00:00Z`);
-    const local = noonUTC.toLocaleString(FORMAT_LOCALES.SE, { timeZone: tz });
-    const [localDate, localTime] = local.split(' ');
-    const [h, m, s] = localTime.split(':').map(Number);
-    let ms = noonUTC.getTime() - h * CONFIG.HOUR_IN_MS - m * MIN_MS - s * 1000;
-    if (localDate > dateStr) ms -= 86_400_000;
-    else if (localDate < dateStr) ms += 86_400_000;
-    return ms;
+    return dayjs.tz(dateStr, tz).startOf('day').valueOf();
   }, []);
 
   // ── UTC ms → local datetime string at minute precision ─────────────────────
   const toLocalMinute = useCallback((utcMs: number, tz: string): string => {
-    const s = new Date(utcMs).toLocaleString(FORMAT_LOCALES.SE, {
-      timeZone: tz,
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-    });
-    // Rygorystycznie wycinamy sekundy: zostaje tylko YYYY-MM-DDTHH:MM
-    return s.replace(' ', 'T').substring(0, 16);
+    return getIsoDatetime(new Date(utcMs), tz);
   }, []);
 
   // ── Fetch one airport for a bounded UTC range ───────────────────────────────
@@ -126,17 +127,32 @@ export function useFlightLoader({
     if (currentlyFetchingTo !== undefined && currentlyFetchingTo >= toMs) return;
     perAirportFetchingRef.current.set(code, toMs);
 
-    setPerAirportLoading(prev => ({ ...prev, [code]: true }));
+    const showLogs = useSettingsStore.getState().showConsoleLogs;
+    setPerAirportLoading((prev: Record<string, boolean>) => ({ ...prev, [code]: true }));
     setError(null);
 
     try {
       const fromLocal = toLocalMinute(fromMs, airportTZ);
       const toLocal = toLocalMinute(toMs - 1, airportTZ); 
       
-      console.log(`[RACE-DEBUG] {useFlightLoader} -> fetchAirportRange START | Airport: ${code}, From: ${fromLocal}, To: ${toLocal}`);
+      if (showLogs) {
+        console.log(`%c[ACTION-LOAD] %cfetchAirportRange START | Airport: ${code}, From: ${fromLocal}, To: ${toLocal}`, 'color: #8b5cf6; font-weight: bold', 'color: inherit');
+      }
+
+      /**
+       * [AUTHORIZATION POLICY]: Obsługa sesji i tokenów JWT.
+       * Aplikacja jest "Guest-Ready": jeśli session.access_token jest obecny, dołącza go
+       * do nagłówka; w przeciwnym razie zapytanie jest wysyłane anonimowo.
+       */
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = {};
+      // [CORS-FIX]: No Auth header for public flight schedules fetch
 
       const url = `${CONFIG.API_BASE_URL}/schedules/${code}?from_local_datetime=${fromLocal}&to_local_datetime=${toLocal}&limit=${CONFIG.FLIGHT_LIMIT}`;
-      const response = await fetch(url, { signal: abortControllerRef.current?.signal });
+      const response = await fetch(url, { 
+        headers,
+        signal: abortControllerRef.current?.signal 
+      });
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
@@ -163,7 +179,7 @@ export function useFlightLoader({
             const batch = JSON.parse(line) as RawScheduleResponse & { error?: string };
             
             if (batch.success === false) {
-              console.warn(`[RACE-DEBUG] {useFlightLoader} -> fetchAirportRange BATCH ERROR | Airport: ${code}, Err: ${batch.error}`);
+              if (showLogs) console.warn(`%c[ACTION-LOAD] %cfetchAirportRange BATCH ERROR | Airport: ${code}, Err: ${batch.error}`, 'color: #ef4444; font-weight: bold', 'color: inherit');
               setError(batch.error ?? 'Failed to load flights batch');
               continue;
             }
@@ -174,30 +190,48 @@ export function useFlightLoader({
               
               if (flightBatchTimerRef.current === null) {
                 flightBatchTimerRef.current = requestAnimationFrame(() => {
+                  const updateStart = performance.now();
                   const items = flightUpdateBufferRef.current;
                   flightUpdateBufferRef.current = [];
                   flightBatchTimerRef.current = null;
                   
                   if (items.length === 0) return;
                   
-                  console.log(`[RACE-DEBUG] {useFlightLoader} -> RAF BATCH UPDATE | Items: ${items.length}, Airport: ${code}`);
-                  
-                  setRawFlights(prev => {
+                  setRawFlights((prev: Flight[]) => {
                     const getFlightKey = (f: Flight) => `${f.flight_number}-${f.scheduled_departure_utc}`;
-                    const existingKeys = new Set(prev.map(getFlightKey));
-                    const fresh = items.filter(f => !existingKeys.has(getFlightKey(f)));
+                    
+                    /**
+                     * [ODŚWIEŻANIE STANU O(Batch)]: Wydajne przetwarzanie duplikatów.
+                     * Wykorzystujemy Hash-Set w referencji (O(1) lookup), co gwarantuje 
+                     * brak "mikro-przycięć" interfejsu przy ładowaniu tysięcy lotów.
+                     */
+                    const fresh = items.filter((f: Flight) => {
+                      const key = getFlightKey(f);
+                      if (loadedFlightKeysRef.current.has(key)) return false;
+                      loadedFlightKeysRef.current.add(key);
+                      return true;
+                    });
+
                     if (!fresh.length) return prev;
-                    return [...prev, ...fresh].sort((a, b) =>
+                    
+                    const newTotal = [...prev, ...fresh].sort((a, b) =>
                       (a.scheduled_departure_utc ?? a.scheduled_departure_local ?? '')
                         .localeCompare(b.scheduled_departure_utc ?? b.scheduled_departure_local ?? '')
                     );
+
+                    if (showLogs) {
+                      const updateEnd = performance.now();
+                      console.log(`%c[ACTION-LOAD] %cRAF BATCH | New Items: ${fresh.length}, Total: ${newTotal.length}, Time: ${(updateEnd - updateStart).toFixed(2)}ms`, 'color: #8b5cf6; font-weight: bold', 'color: inherit');
+                    }
+
+                    return newTotal;
                   });
                   appendFlights(items);
                 });
               }
 
               if (batch.last_fetched_at) {
-                setLastFetched(prev =>
+                setLastFetched((prev: string | null) =>
                   !prev || batch.last_fetched_at! > prev ? batch.last_fetched_at! : prev
                 );
               }
@@ -227,16 +261,16 @@ export function useFlightLoader({
       });
     } catch (err: any) {
       if (err.name === 'AbortError') {
-        console.warn(`[RACE-DEBUG] {useFlightLoader} -> fetchAirportRange ABORTED | Airport: ${code}`);
+        if (showLogs) console.warn(`%c[ACTION-LOAD] %cfetchAirportRange ABORTED | Airport: ${code}`, 'color: #f59e0b; font-weight: bold', 'color: inherit');
       } else {
-        console.error(`[RACE-DEBUG] {useFlightLoader} -> fetchAirportRange FAIL | Airport: ${code}, Err:`, err);
+        if (showLogs) console.error(`%c[ACTION-LOAD] %cfetchAirportRange FAIL | Airport: ${code}, Err:`, 'color: #ef4444; font-weight: bold', 'color: inherit', err);
         setError(err.message ?? 'Failed to load flights');
       }
     } finally {
       if (perAirportFetchingRef.current.get(code) === toMs) {
         perAirportFetchingRef.current.delete(code);
       }
-      setPerAirportLoading(prev => ({ ...prev, [code]: false }));
+      setPerAirportLoading((prev: Record<string, boolean>) => ({ ...prev, [code]: false }));
     }
   }, [toLocalMinute, appendFlights]);
 
@@ -266,7 +300,7 @@ export function useFlightLoader({
     const codesKey  = JSON.stringify([...airportCodes].sort());
     const now    = Date.now();
     const nowMin = now - (now % MIN_MS);
-    const todayInTZ  = new Date(nowMin).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
+    const todayInTZ  = getTodayInTz(timezone);
 
     // Guard: when timezone changes, travelDate may still be "today in old TZ" for 1 render
     // (before useTravelDate fires). Detect this transient state and force today mode.
@@ -274,15 +308,15 @@ export function useFlightLoader({
     prevTimezoneRef.current = timezone;
     const tzJustChanged  = timezone !== prevTimezone && !!prevTimezone;
     const todayInPrevTZ  = (tzJustChanged && prevTimezone)
-      ? new Date(nowMin).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: prevTimezone })
+      ? getTodayInTz(prevTimezone)
       : null;
     const arrivalDay = tripArrivalTimeUTC
-      ? new Date(tripArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone })
+      ? getIsoDate(new Date(tripArrivalTimeUTC), timezone)
       : null;
     const arrivalDayInPrevTZ = (tzJustChanged && prevTimezone && tripArrivalTimeUTC)
-      ? new Date(tripArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: prevTimezone })
+      ? getIsoDate(new Date(tripArrivalTimeUTC), prevTimezone)
       : null;
-    const todayInBrowser = new Date(nowMin).toLocaleDateString(FORMAT_LOCALES.CA);
+    const todayInBrowser = getTodayInTz();
 
     // Guard: isTodayMode is true if we are on the current day for the mode (today in now mode, or arrival day in trip mode).
     // The tzJustChanged checks handle the 1-render lag during a timezone switch to prevent redundant re-fetching.
@@ -304,28 +338,32 @@ export function useFlightLoader({
     const isAdditionOnly   = isNewSet && prevCodes.length > 0 && prevCodes.every(c => airportCodes.includes(c));
     const dateOrAirportsChanged = prevCacheKey !== cacheKey;
 
-    console.log(`[RACE-DEBUG] {useFlightLoader} -> EFFECT TRIGGER | CacheKey: ${cacheKey}, changed: ${dateOrAirportsChanged}, additionOnly: ${isAdditionOnly}`);
+    const showLogs = useSettingsStore.getState().showConsoleLogs;
+    if (showLogs) console.log(`%c[ACTION-LOAD] %cEFFECT TRIGGER | CacheKey: ${cacheKey}, changed: ${dateOrAirportsChanged}, additionOnly: ${isAdditionOnly}`, 'color: #8b5cf6; font-weight: bold', 'color: inherit');
+    
     if (dateOrAirportsChanged) cacheKeyRef.current = cacheKey;
 
     if (isNewSet && !isAdditionOnly) {
       // Airport removed or first load → full reset
-      console.log(`[RACE-DEBUG] {useFlightLoader} -> RESET (New Airport Set) | Codes: ${codesKey}`);
+      if (showLogs) console.log(`%c[ACTION-LOAD] %cRESET (New Airport Set) | Codes: ${codesKey}`, 'color: #8b5cf6; font-weight: bold', 'color: inherit');
       if (abortControllerRef.current) abortControllerRef.current.abort();
       abortControllerRef.current = new AbortController();
 
       setRawFlights([]);
+      loadedFlightKeysRef.current = new Set();
       perAirportLoadedRef.current = new Map();
       perAirportFetchingRef.current = new Map();
-      setPerAirportLoading({});
+      setPerAirportLoading((prev: Record<string, boolean>) => ({}));
       setError(null);
       dateOrderRef.current = [];
     } else if (dateOrAirportsChanged && !isAdditionOnly) {
       // travelDate changed (airports same) → clear loaded ranges to re-fetch for new date.
       if (!tzJustChanged) {
-        console.log(`[RACE-DEBUG] {useFlightLoader} -> CLEAR (Date Changed) | New Date: ${travelDate}`);
+        if (showLogs) console.log(`%c[ACTION-LOAD] %cCLEAR (Date Changed) | New Date: ${travelDate}`, 'color: #8b5cf6; font-weight: bold', 'color: inherit');
         if (abortControllerRef.current) abortControllerRef.current.abort();
         abortControllerRef.current = new AbortController();
 
+        loadedFlightKeysRef.current = new Set();
         perAirportLoadedRef.current = new Map();
         perAirportFetchingRef.current = new Map();
       }
@@ -340,21 +378,14 @@ export function useFlightLoader({
     let toMs: number;
 
     if (tripArrivalTimeUTC && isTodayMode) {
-      // Trip mode on arrival day: fetch window from the arrival moment to :59 of the prev hour tomorrow
+      // Trip mode on arrival day: fetch window from the arrival moment to 24h later
       fromMs = Math.floor(new Date(tripArrivalTimeUTC).getTime() / MIN_MS) * MIN_MS;
-      
-      const arrObj = new Date(fromMs);
-      const minutes = arrObj.getMinutes();
-      toMs = fromMs + WINDOW_MS - (minutes + 1) * MIN_MS;
+      toMs   = fromMs + WINDOW_MS;
     } else if (isTodayMode) {
-      // Normal mode today: rolling window from now, exact start
-      // End window at :59 of the previous hour on the next day (e.g. 03:04 -> 02:59)
-      fromMs = Math.floor(now / ALIGN_MS) * ALIGN_MS;
-      
-      const nowObj = new Date(fromMs);
-      const minutes = nowObj.getMinutes();
-      // fromMs + 24h - (minutes + 1) minutes = :59 of the prev hour tomorrow
-      toMs = fromMs + WINDOW_MS - (minutes + 1) * MIN_MS;
+      // Normal mode today: rolling 24-hour window from NOW to cover all timezones 
+      // where it's still "today". Offset by -20 min to catch very recent status changes.
+      fromMs = nowMin - (20 * MIN_MS); 
+      toMs   = fromMs + WINDOW_MS;
     } else {
       // Manual date (or later day in Trip mode): compute window covering travelDate in all TZs
       const tzs = new Set<string>([timezone]);
@@ -377,31 +408,42 @@ export function useFlightLoader({
 
   // ── Refresh ─────────────────────────────────────────────────────────────────
   const handleRefresh = useCallback(async () => {
-    setRawFlights([]);
-    perAirportLoadedRef.current = new Map();
-    setPerAirportLoading({});
-    setError(null);
-    dateOrderRef.current = [];
-    if (!timezone || airportCodes.length === 0) return;
+    if (loaderMutexRef.current) return;
+    loaderMutexRef.current = true;
+    
+    try {
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+      abortControllerRef.current = new AbortController();
 
-    const now    = Date.now();
-    const nowMin = now - (now % MIN_MS);
-    let fromMs: number, toMs: number;
+      setRawFlights([]);
+      loadedFlightKeysRef.current = new Set();
+      perAirportLoadedRef.current = new Map();
+      setPerAirportLoading({});
+      setError(null);
+      dateOrderRef.current = [];
+      if (!timezone || airportCodes.length === 0) return;
 
-    if (tripArrivalTimeUTC) {
-      fromMs = Math.floor(new Date(tripArrivalTimeUTC).getTime() / MIN_MS) * MIN_MS;
-      toMs   = fromMs + WINDOW_MS;
-    } else {
-      fromMs = nowMin;
-      const nowObj = new Date(fromMs);
-      const minutes = nowObj.getMinutes();
-      toMs = fromMs + WINDOW_MS - (minutes + 1) * MIN_MS;
+      const now    = Date.now();
+      const nowMin = now - (now % MIN_MS);
+      let fromMs: number, toMs: number;
+
+      if (tripArrivalTimeUTC) {
+        fromMs = Math.floor(new Date(tripArrivalTimeUTC).getTime() / MIN_MS) * MIN_MS;
+        toMs   = fromMs + WINDOW_MS;
+      } else {
+        fromMs = nowMin;
+        const nowObj = new Date(fromMs);
+        const minutes = nowObj.getMinutes();
+        toMs = fromMs + WINDOW_MS - (minutes + 1) * MIN_MS;
+      }
+
+      await Promise.all(airportCodes.map(code => {
+        const airportTZ = airportTimezones?.[code] ?? timezone;
+        return fetchAirportRange(code, fromMs, toMs, airportTZ);
+      }));
+    } finally {
+      loaderMutexRef.current = false;
     }
-
-    await Promise.all(airportCodes.map(code => {
-      const airportTZ = airportTimezones?.[code] ?? timezone;
-      return fetchAirportRange(code, fromMs, toMs, airportTZ);
-    }));
   }, [airportCodes, timezone, airportTimezones, tripArrivalTimeUTC, fetchAirportRange]);
 
   return { rawFlights, error, lastFetched, perAirportLoading, anyLoading, flightsByDate, dateOrderRef, handleRefresh };

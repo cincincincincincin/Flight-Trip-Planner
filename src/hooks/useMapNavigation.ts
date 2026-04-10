@@ -2,7 +2,8 @@ import { useCallback, useRef, useEffect } from 'react';
 import { CONFIG } from '../constants/config';
 import { calculateZoomByAirportCount } from '../components/map/zoomUtils';
 import { useSelectionStore } from '../stores/selectionStore';
-import { useAirportsMap, useCountryCentersQuery } from './queries';
+import { filterOutliers } from '../utils/math';
+import { useCountryCentersQuery, useAirportsMap } from './queries';
 import type { MapComponentRef } from '../components/MapComponent';
 
 /**
@@ -44,8 +45,10 @@ export function useMapNavigation(mapRef: React.RefObject<MapComponentRef | null>
       return; 
     }
     
-    const lons = points.map(p => p[0]);
-    const lats = points.map(p => p[1]);
+    // Zapobiegaj "rozciąganiu" mapy przez lotniska na drugim końcu świata
+    const filteredPoints = filterOutliers(points);
+    const lons = filteredPoints.map(p => p[0]);
+    const lats = filteredPoints.map(p => p[1]);
     
     mapRef.current?.fitBounds(
       [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], 

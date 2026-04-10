@@ -55,7 +55,6 @@ export function applyMapAirportFilters(
     if (inTripMode) {
       map.setFilter('airports-circles', ['==', 'code', '']);
     } else if (highlightedCodes.length > 0) {
-      // Wykluczamy wszystko, co ma własną, bardziej priorytetową warstwę (Selected/Trip/Hl)
       map.setFilter('airports-circles', ['!in', 'code', ...highlightedCodes]);
     } else {
       map.setFilter('airports-circles', null);
@@ -77,18 +76,22 @@ export function applyMapAirportFilters(
       if (inTripMode) {
         map.setFilter('airports-labels-normal', ['==', 'code', '']);
       } else {
-        const baseFilter: maplibregl.LegacyFilterSpecification | null = highlightedCodes.length > 0
+        const baseFilter: any[] = highlightedCodes.length > 0
           ? ['!in', 'code', ...highlightedCodes]
-          : null;
-        const hoverFilter: maplibregl.LegacyFilterSpecification | null = hovCode
-          ? ['!=', 'code', hovCode]
-          : null;
-        if (baseFilter && hoverFilter) {
-          map.setFilter('airports-labels-normal', ['all', baseFilter, hoverFilter] as maplibregl.FilterSpecification);
-        } else if (baseFilter) {
-          map.setFilter('airports-labels-normal', baseFilter);
-        } else if (hoverFilter) {
-          map.setFilter('airports-labels-normal', hoverFilter);
+          : [];
+        const excludeFilter: any[] = ctx.excludeCodes && ctx.excludeCodes.length > 0
+          ? ['!in', 'code', ...ctx.excludeCodes]
+          : [];
+
+        const allFilters = [
+          baseFilter.length > 0 ? baseFilter : null,
+          excludeFilter.length > 0 ? excludeFilter : null
+        ].filter(Boolean);
+
+        if (allFilters.length > 1) {
+          map.setFilter('airports-labels-normal', ['all', ...allFilters] as maplibregl.FilterSpecification);
+        } else if (allFilters.length === 1) {
+          map.setFilter('airports-labels-normal', allFilters[0] as maplibregl.FilterSpecification);
         } else {
           map.setFilter('airports-labels-normal', null);
         }
@@ -106,24 +109,26 @@ export function applyMapAirportFilters(
       if (inTripMode) {
         map.setFilter('airports-labels-normal-city', ['==', 'code', '']);
       } else {
-        const baseCityFilter: maplibregl.LegacyFilterSpecification | null =
-          cityLabelCodes.length > 0 ? ['in', 'code', ...cityLabelCodes] : null;
-        const hoverCityFilter: maplibregl.LegacyFilterSpecification | null = hovCode
-          ? ['!=', 'code', cityLabelCodeByCity[cityCodeByAirport[hovCode]] ?? hovCode]
-          : null;
-        const highlightedCityFilter: maplibregl.LegacyFilterSpecification | null =
+        const baseCityFilter: any[] =
+          cityLabelCodes.length > 0 ? ['in', 'code', ...cityLabelCodes] : [];
+        const highlightCityFilter: any[] =
           highlightedCityCodesFromHighlighted.size > 0
             ? ['!in', 'code', ...[...highlightedCityCodesFromHighlighted]]
-            : null;
-        const allFilters = [baseCityFilter, hoverCityFilter, highlightedCityFilter].filter(Boolean) as maplibregl.FilterSpecification[];
+            : [];
+        const excludeCityFilter: any[] = (ctx.excludeCodes || []).length > 0
+            ? ['!in', 'code', ...ctx.excludeCodes!]
+            : [];
+
+        const allFilters = [
+          baseCityFilter.length > 0 ? baseCityFilter : null,
+          highlightCityFilter.length > 0 ? highlightCityFilter : null,
+          excludeCityFilter.length > 0 ? excludeCityFilter : null
+        ].filter(Boolean) as maplibregl.FilterSpecification[];
+
         if (allFilters.length > 1) {
           map.setFilter('airports-labels-normal-city', ['all', ...allFilters] as maplibregl.FilterSpecification);
         } else if (allFilters.length === 1) {
           map.setFilter('airports-labels-normal-city', allFilters[0] as maplibregl.FilterSpecification);
-        } else if (baseCityFilter) {
-          map.setFilter('airports-labels-normal-city', baseCityFilter);
-        } else if (hoverCityFilter) {
-          map.setFilter('airports-labels-normal-city', hoverCityFilter);
         } else {
           map.setFilter('airports-labels-normal-city', null);
         }
@@ -169,41 +174,44 @@ export function applyMapAirportFilters(
         writableRefs.highlightedCityLabelCodesRef.current = highlightedCityCodes;
 
         if (map.getLayer('airports-labels-highlighted')) {
-          map.setFilter('airports-labels-highlighted', filter);
+          const excludeFilter: any[] = (ctx.excludeCodes || []).length > 0
+            ? ['!in', 'code', ...ctx.excludeCodes!]
+            : [];
+          
+          if (excludeFilter.length > 0) {
+            map.setFilter('airports-labels-highlighted', ['all', filter, excludeFilter] as any);
+          } else {
+            map.setFilter('airports-labels-highlighted', filter);
+          }
         }
         
         if (map.getLayer('airports-labels-highlighted-city')) {
           const cityFilter: maplibregl.FilterSpecification = highlightedCityCodes.length === 0
             ? ['==', 'code', '']
             : ['in', 'code', ...highlightedCityCodes];
-          map.setFilter('airports-labels-highlighted-city', cityFilter);
+          
+          const excludeFilter: any[] = (ctx.excludeCodes || []).length > 0
+            ? ['!in', 'code', ...ctx.excludeCodes!]
+            : [];
+
+          if (excludeFilter.length > 0) {
+            map.setFilter('airports-labels-highlighted-city', ['all', cityFilter, excludeFilter] as any);
+          } else {
+            map.setFilter('airports-labels-highlighted-city', cityFilter);
+          }
         }
       }
     }
   }
 
-  if (map.getLayer('airports-selected')) {
-    if (sacMulti.length > 0) map.setFilter('airports-selected', ['in', 'code', ...sacMulti]);
-    else if (sac) map.setFilter('airports-selected', ['==', 'code', sac]);
-    else map.setFilter('airports-selected', ['==', 'code', '']);
-  }
+    if (map.getLayer('airports-selected')) {
+      if (sacMulti.length > 0) map.setFilter('airports-selected', ['in', 'code', ...sacMulti]);
+      else if (sac) map.setFilter('airports-selected', ['==', 'code', sac]);
+      else map.setFilter('airports-selected', ['==', 'code', '']);
+    }
 
-  // --- HOVER LAYERS (Zero-Waste Integration) ---
-  const hovCode = ctx.hoveredAirportCode;
-  const isHoverFocused = ctx.isHoverFocused;
-  const excludeCodes = ctx.excludeCodes || [];
-
-  if (map.getLayer('airports-hover')) {
-    map.setFilter('airports-hover', ['==', 'code', hovCode ?? '']);
-  }
-
-  if (map.getLayer('airports-labels-hover')) {
-    map.setFilter('airports-labels-hover', ['==', 'code', (isHoverFocused && hovCode) ? hovCode : '']);
-  }
-
-  if (map.getLayer('airports-labels-hover-general')) {
-    map.setFilter('airports-labels-hover-general', ['==', 'code', (!isHoverFocused && hovCode) ? hovCode : '']);
-  }
+// Wyłączamy stare filtry hover - teraz są obsługiwane przez airports-hover-single
+  // (Warstwy te zostały usunięte w airportsLayer.ts, więc m.getLayer zwróci false)
 
   // --- SOURCE UPDATES (Zero-Waste Route Sync) ---
   

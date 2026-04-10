@@ -7,12 +7,12 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useFilterStore } from '../stores/filterStore';
 import { useAirportIndexes, useFlightFilter } from '../hooks/queries';
 import { useFlightLoader } from '../hooks/useFlightLoader';
-import { getTripCurrentArrivalTimeUTC } from '../utils/dateFormatting';
+import { getTripCurrentArrivalTimeUTC, getIsoDate, getTodayInTz } from '../utils/dateFormatting';
 import type { Flight } from '../types';
 import './FlightsList.css';
 import { useTexts } from '../hooks/useTexts';
-import { FORMAT_LOCALES } from '../constants/format';
 import { CONFIG } from '../constants/config';
+import dayjs from '../lib/dayjs';
 
 
 interface FlightsListProps {
@@ -100,48 +100,62 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
     const displayedFlatFlights = useMemo(() => {
       let flights = todayFlights.filter(matchesFilter);
       
-      // Jeśli nie jesteśmy w trybie planowania trasy, ukrywamy loty, które już odleciały.
+      // Jeśli nie jesteśmy w trybie planowania trasy, ukrywamy loty, które odleciały dawno.
       if (!tripArrivalTimeUTC) {
-        const selectedTodayStr = timezone
-          ? new Date(nowMs).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone })
-          : new Date(nowMs).toISOString().split('T')[0];
+        const selectedTodayStr = timezone ? getTodayInTz(timezone) : getTodayInTz();
         
         if (travelDate === selectedTodayStr) {
+          // Wyświetlamy loty odleciane max 20 minut temu (grace period)
+          const graceMs = nowMs - (20 * 60_000);
           flights = flights.filter(f =>
-            !f.scheduled_departure_utc || f.scheduled_departure_utc > new Date(nowMs).toISOString()
+            !f.scheduled_departure_utc || new Date(f.scheduled_departure_utc).getTime() > graceMs
           );
         }
       }
       return flights;
     }, [todayFlights, matchesFilter, tripArrivalTimeUTC, nowMs, travelDate, timezone]);
 
-    // Synchronizacja podświetlenia na mapie.
-    // Wysyłamy dane tylko gdy faktycznie się zmieniły, żeby animacja tras nie skakała.
+    // ── Synchronizacja podświetlenia na mapie (Phase 2: Ultra-Lean) ───────────
+    // Wysyłamy dane tylko gdy faktycznie się zmieniły, żeby uniknąć thrashingu WebGL.
     useEffect(() => {
+      // Wybieramy źródło danych w zależności od stanu filtra (O(1) switch)
       const sourceFlights = isFilterActive ? displayedFlatFlights : todayFlights;
 
-      // Keep the store in sync with exactly what the list currently shows.
-      // MapComponent uses displayedFlights for route drawing and popup content.
+      // Aktualizacja globalnego stanu widocznych lotów (używane przez MapComponent)
       setDisplayedFlights(sourceFlights);
 
-      const newAirports = new Set<string>(
-        sourceFlights.map(f => f.destination_airport_code).filter(Boolean) as string[]
-      );
+      // Budujemy zestawy unikalnych kodów (O(N))
+      const newAirports = new Set<string>();
+      const newCities = new Set<string>();
+      
+      sourceFlights.forEach(f => {
+        const code = f.destination_airport_code;
+        if (code) {
+          newAirports.add(code);
+          const cCode = cityMap[code];
+          if (cCode) newCities.add(cCode);
+        }
+      });
+
+      // Sprawdzanie różnic (Dirty Checking) przed aktualizacją store'a
       const prevA = prevHighlightedAirportsRef.current;
-      if (newAirports.size !== prevA.size || Array.from(newAirports).some(c => !prevA.has(c))) {
+      const airportsChanged = newAirports.size !== prevA.size || 
+                             Array.from(newAirports).some(c => !prevA.has(c));
+                             
+      if (airportsChanged) {
         prevHighlightedAirportsRef.current = newAirports;
         setHighlightedAirports(Array.from(newAirports));
       }
 
-      const newCities = new Set<string>(
-        sourceFlights.map(f => cityMap[f.destination_airport_code]).filter(Boolean) as string[]
-      );
       const prevC = prevHighlightedCitiesRef.current;
-      if (newCities.size !== prevC.size || Array.from(newCities).some(c => !prevC.has(c))) {
+      const citiesChanged = newCities.size !== prevC.size || 
+                           Array.from(newCities).some(c => !prevC.has(c));
+                           
+      if (citiesChanged) {
         prevHighlightedCitiesRef.current = newCities;
         setHighlightedCities(Array.from(newCities));
       }
-    }, [displayedFlatFlights, todayFlights, isFilterActive, setHighlightedAirports, setHighlightedCities, setDisplayedFlights]);
+    }, [displayedFlatFlights, todayFlights, isFilterActive, setHighlightedAirports, setHighlightedCities, setDisplayedFlights, cityMap]);
 
     // ── Imperative handle ─────────────────────────────────────────────────────
     useImperativeHandle(ref, () => ({
@@ -207,18 +221,14 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
     // ── Formatters ────────────────────────────────────────────────────────────
     const formatLastFetched = (timestamp: string | null) => {
       if (!timestamp) return t.flights.never;
-      const date = new Date(timestamp);
-      const diffMins = Math.floor((Date.now() - date.getTime()) / 60000);
+      const d = dayjs(timestamp);
+      const diffMins = dayjs().diff(d, 'minute');
+
       if (diffMins < 1) return t.flights.justNow;
       if (diffMins < 60) return t.flights.minutesAgo(diffMins);
-      const diffHours = Math.floor(diffMins / 60);
-      if (diffHours < 24) return t.flights.hoursAgo(diffHours);
-      return date.toLocaleDateString(FORMAT_LOCALES.GB, {
-        day: '2-digit',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+      if (diffMins < 1440) return t.flights.hoursAgo(Math.floor(diffMins / 60));
+      
+      return d.format('DD MMM, HH:mm');
     };
 
 // ── Footer component ──────────────────────────────────────────────────────

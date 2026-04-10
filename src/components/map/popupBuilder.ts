@@ -1,8 +1,8 @@
+import dayjs from '../../lib/dayjs';
 import type { Flight } from '../../types';
 import { formatTime, popupFormatDuration, getUTCOffH, formatTzLabel, popupHaversineKm, getOffsetForTz } from './popupHelpers';
 import { THEME_COLORS } from '../../constants/theme';
 import { UI_SYMBOLS } from '../../constants/ui';
-import { FORMAT_LOCALES } from '../../constants/format';
 
 export interface BuildFlightRowOpts {
   airportCoordsMap: Record<string, [number, number]>;
@@ -43,20 +43,16 @@ export function buildFlightRow(f: Flight, opts: BuildFlightRowOpts): string {
     const srcC = airportCoordsMap[f.origin_airport_code || ''];
     const dstC = airportCoordsMap[f.destination_airport_code || ''];
     if (srcC && dstC) {
-      const depDate = new Date(f.scheduled_departure_utc);
       const distKm = popupHaversineKm(srcC[0], srcC[1], dstC[0], dstC[1]);
       const blockMs = (distKm / 850 + 0.5) * 3600000;
-      const estArrUtc = new Date(depDate.getTime() + blockMs);
+      const estArrUtc = dayjs(f.scheduled_departure_utc).add(blockMs, 'ms');
       
-      // Try to resolve offsets from metadata if missing from flight data
       const dOff = destUTCOffset ?? (destTimezone ? getOffsetForTz(destTimezone, estArrUtc) : null);
-      const sOff = srcUTCOffset ?? (srcTimezone ? getOffsetForTz(srcTimezone, depDate) : (f.scheduled_departure_local ? getUTCOffH(f.scheduled_departure_local, f.scheduled_departure_utc) : null));
+      const sOff = srcUTCOffset ?? (srcTimezone ? getOffsetForTz(srcTimezone, dayjs(f.scheduled_departure_utc)) : (f.scheduled_departure_local ? getUTCOffH(f.scheduled_departure_local, f.scheduled_departure_utc) : null));
 
       let estStr: string;
       if (dOff !== null) {
-        const destLocalMs = estArrUtc.getTime() + dOff * 3600000;
-        const d = new Date(destLocalMs);
-        estStr = `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+        estStr = estArrUtc.utc().add(dOff, 'hour').format('HH:mm');
       } else {
         estStr = formatTime(estArrUtc.toISOString(), destTimezone);
       }
@@ -79,12 +75,8 @@ export function buildFlightRow(f: Flight, opts: BuildFlightRowOpts): string {
 
 export function formatGroupDateLabel(dateStr: string): string {
   if (!dateStr) return '';
-  try {
-    const d = new Date(dateStr + 'T12:00:00Z');
-    return d.toLocaleDateString(FORMAT_LOCALES.GB, { day: 'numeric', month: 'long', timeZone: 'UTC' });
-  } catch {
-    return dateStr;
-  }
+  const d = dayjs(dateStr);
+  return d.isValid() ? d.format('D MMMM') : dateStr;
 }
 
 export interface BuildPopupHtmlOpts {
@@ -138,11 +130,7 @@ export function buildHeaderDuration(
     f => f.scheduled_departure_utc && f.scheduled_arrival_utc,
   );
   if (firstWithTimes) {
-    const min = Math.round(
-      (new Date(firstWithTimes.scheduled_arrival_utc!).getTime() -
-        new Date(firstWithTimes.scheduled_departure_utc!).getTime()) /
-        60000,
-    );
+    const min = dayjs(firstWithTimes.scheduled_arrival_utc).diff(dayjs(firstWithTimes.scheduled_departure_utc), 'minute');
     if (min > 0) return { durationStr: popupFormatDuration(min, false), estimated: false };
   }
   const srcC = airportCoordsMap[srcCode];

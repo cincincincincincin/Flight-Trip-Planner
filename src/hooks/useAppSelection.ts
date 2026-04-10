@@ -34,6 +34,13 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
   const { travelDate, language } = useSettingsStore();
 
   const [pendingCountryPicker, setPendingCountryPicker] = useState<{ code: string; name: string } | null>(null);
+  const pendingCountryPickerRef = useRef<{ code: string; name: string } | null>(null);
+  /**
+   * [MUTEX SELECTION LOCK]: Ochrona przed Race Conditions w interfejsie.
+   * Używamy useRef zamiast useState dla blokady, ponieważ potrzebujemy natychmiastowej, 
+   * synchronicznej flagi, która nie wyzwala re-renderu, ale blokuje nakładające się akcje asynchroniczne.
+   */
+  const selectionLockRef = useRef(false);
   const fitCameraOnFlightsRef = useRef(false);
 
   const setDisplayMode = useCallback(() => {
@@ -50,114 +57,141 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
   }, [cityAirportsMap]);
 
   /**
-   * Kluczowa funkcja obsługi kliknięcia/wyboru elementu.
-   * Realizuje zasadę Single Source of Truth dla danych geograficznych.
+   * KLUCZOWA FUNKCJA OBSŁUGI WYBORU (Selection Controller)
+   * Implementuje mechanizm Mutex (selectionLockRef) dla eliminacji Race Conditions.
    */
   const handleSelectItem = useCallback(async (item: SelectedItem) => {
-    const itemCode = (item.data as any).code || '';
-    console.log(`[RACE-DEBUG] {useAppSelection} -> handleSelectItem | Type: ${item.type}, Code: ${itemCode}, fromMap: ${!!(item as any).fromMap}`);
-
-    // Szybka akcja dodawania do podróży bezpośrednio z mapy (jeśli podświetlone)
-    if (item.type === 'airport' && item.isHighlighted && tripState) {
-      const flight = (
-        flightsData.find((f: Flight) =>
-          f.destination_airport_code === itemCode &&
-          f.scheduled_departure_local?.startsWith(travelDate)
-        ) ?? flightsData.find((f: Flight) => f.destination_airport_code === itemCode)
-      );
-      if (flight) {
-        console.log(`[RACE-DEBUG] {useAppSelection} -> fast add to trip | Airport: ${itemCode}`);
-        handleAddToTripRef.current?.(flight);
-        return;
-      }
-    }
-
-    if ('fromMap' in item) {
-      fitCameraOnFlightsRef.current = !item.fromMap;
-    }
-
-    // TRYB EKSPLORACJI (Additive) - dodawanie kafli do panelu bocznego
-    if (selectedItem && !tripState && (item.type === 'airport' || item.type === 'city')) {
-      const newCodes = getExplorationAirportCodes(item.type, item.data.code);
-      const allCodes = [...new Set([...explorationItems.flatMap((i: any) => i.airportCodes), ...newCodes])];
-      
-      addExplorationItem({
-        type: item.type,
-        code: item.data.code,
-        name: item.data.name || item.data.code,
-        airportCodes: newCodes,
-      });
-
-      if (!item.fromMap) mapNav.fitBoundsToAirportCodes(allCodes);
-      
-      // Jeśli poprzednio był wybrany kraj, zmieniamy fokus na konkretny element
-      if (selectedItem.type === 'country') {
-        setSelectedItem(item);
-        if (item.type === 'airport') setSelectedAirportCode(item.data.code);
-      }
+    const sequenceId = Math.random().toString(36).substring(7);
+    const showLogs = useSettingsStore.getState().showConsoleLogs;
+    
+    if (selectionLockRef.current) {
+      if (showLogs) console.log(`%c[ACTION-SELECTION] %c[${sequenceId}] Blocked: Selection in progress`, 'color: #f59e0b; font-weight: bold', 'color: inherit');
       return;
     }
 
-    // TRYB KRAJU - otwiera picker lotnisk lub przechodzi do widoku państwa
-    if (item.type === 'country') {
-      if (selectedItem !== null && selectedItem.type !== 'country') {
-        setPendingCountryPicker({ code: item.data.code, name: item.data.name });
+    const itemCode = ((item.data as any).code || '').toUpperCase();
+    if (showLogs) {
+      console.log(`%c[ACTION-SELECTION] %c[${sequenceId}] START | Type: ${item.type}, Code: ${itemCode}`, 'color: #10b981; font-weight: bold', 'color: inherit');
+    }
+
+    selectionLockRef.current = true;
+
+    try {
+      const currentTripState = useTripStore.getState().tripState;
+      const currentSelectedItem = useSelectionStore.getState().selectedItem;
+
+      // 1. Szybka akcja dodawania do podróży bezpośrednio z mapy
+      if (item.type === 'airport' && item.isHighlighted && currentTripState) {
+        const currentOrigin = currentTripState.legs.length > 0 
+          ? currentTripState.legs[currentTripState.legs.length - 1].toAirportCode 
+          : currentTripState.startAirport.code;
+          
+        const groupKey = `${currentOrigin}-${itemCode}`;
+        const group = useSelectionStore.getState().flightsByRouteGroupMap.get(groupKey) || [];
+        
+        const flight = (
+          group.find((f: Flight) => f.scheduled_departure_local?.startsWith(travelDate)) ?? 
+          group[0]
+        );
+
+        if (flight) {
+          if (showLogs) console.log(`%c[ACTION-SELECTION] %c[${sequenceId}] Fast Add Triggered`, 'color: #10b981; font-weight: bold', 'color: inherit');
+          handleAddToTripRef.current?.(flight);
+          return;
+        }
+      }
+
+      if ('fromMap' in item) {
+        fitCameraOnFlightsRef.current = !item.fromMap;
+      }
+
+      // 2. TRYB EKSPLORACJI (Additive)
+      const currentExplorationItems = useSelectionStore.getState().explorationItems;
+      if (currentSelectedItem && !currentTripState && (item.type === 'airport' || item.type === 'city')) {
+        const newCodes = getExplorationAirportCodes(item.type, item.data.code);
+        const allCodes = [...new Set([...currentExplorationItems.flatMap((i: any) => i.airportCodes), ...newCodes])];
+        
+        addExplorationItem({
+          type: item.type,
+          code: item.data.code,
+          name: item.data.name || item.data.code,
+          airportCodes: newCodes,
+        });
+
+        if (!item.fromMap) mapNav.fitBoundsToAirportCodes(allCodes);
+        
+        if (currentSelectedItem.type === 'country') {
+          setSelectedItem(item);
+          if (item.type === 'airport') setSelectedAirportCode(item.data.code);
+        }
+        return;
+      }
+
+      // 3. TRYB KRAJU
+      if (item.type === 'country') {
+        if (currentSelectedItem !== null && currentSelectedItem.type !== 'country') {
+          setPendingCountryPicker({ code: item.data.code, name: item.data.name });
+          if (!item.fromMap) mapNav.fitToCountry(item.data.code);
+          return;
+        }
+        setSelectedItem(item);
+        setSelectedAirportCode(null);
         if (!item.fromMap) mapNav.fitToCountry(item.data.code);
         return;
       }
+
+      // 4. TRYB STANDARDOWY
       setSelectedItem(item);
-      setSelectedAirportCode(null);
-      if (!item.fromMap) mapNav.fitToCountry(item.data.code);
-      return;
-    }
 
-    // TRYB STANDARDOWY (Single selection)
-    setSelectedItem(item);
+      if (item.type === 'airport') {
+        setSelectedAirportCode(item.data.code);
+        setHighlightedAirports([]);
+        setDisplayMode();
+        addExplorationItem({
+          type: 'airport',
+          code: item.data.code,
+          name: item.data.name || item.data.code,
+          airportCodes: [item.data.code],
+        });
+        if (item.fromMap) return;
+      } else if (item.type === 'city') {
+        setSelectedAirportCode(null);
+        const cityAirportCodes = getExplorationAirportCodes('city', item.data.code);
+        addExplorationItem({
+          type: 'city',
+          code: item.data.code,
+          name: item.data.name || item.data.code,
+          airportCodes: cityAirportCodes,
+        });
 
-    if (item.type === 'airport') {
-      setSelectedAirportCode(item.data.code);
-      setHighlightedAirports([]);
-      setDisplayMode();
-      addExplorationItem({
-        type: 'airport',
-        code: item.data.code,
-        name: item.data.name || item.data.code,
-        airportCodes: [item.data.code],
-      });
-      if (item.fromMap) return;
-    } else if (item.type === 'city') {
-      setSelectedAirportCode(null);
-      const cityAirportCodes = getExplorationAirportCodes('city', item.data.code);
-      addExplorationItem({
-        type: 'city',
-        code: item.data.code,
-        name: item.data.name || item.data.code,
-        airportCodes: cityAirportCodes,
-      });
-
-      if (cityAirportCodes.length > 0) {
-        mapNav.fitBoundsToAirportCodes(cityAirportCodes);
+        if (cityAirportCodes.length > 0) {
+          mapNav.fitBoundsToAirportCodes(cityAirportCodes);
+        }
+        return;
       }
-      return;
-    }
 
-    // Nawigacja kamery do wybranego punktu (jeśli nie wybrano trasy)
-    if (item.fromMap || item.type === 'route') return;
+      if (item.fromMap || item.type === 'route') return;
 
-    let coords = extractCoords(item);
+      let coords = extractCoords(item);
 
-    // Fallback: szukanie współrzędnych w bazie głównej lotnisk
-    if (!coords && item.type === 'airport') {
-      const feat = airportFeaturesMap[item.data.code];
-      if (feat && feat.geometry.coordinates) {
-        coords = { lon: feat.geometry.coordinates[0], lat: feat.geometry.coordinates[1] };
+      if (!coords && item.type === 'airport') {
+        const feat = airportFeaturesMap[item.data.code];
+        if (feat && feat.geometry.coordinates) {
+          coords = { lon: feat.geometry.coordinates[0], lat: feat.geometry.coordinates[1] };
+        }
       }
-    }
 
-    if (coords) {
-      mapNav.flyToLocation(coords.lon, coords.lat, CONFIG.FALLBACK_ZOOM.AIRPORT);
+      if (coords) {
+        mapNav.flyToLocation(coords.lon, coords.lat, CONFIG.FALLBACK_ZOOM.AIRPORT);
+      }
+    } finally {
+      // Krótki timeout zapobiega "szaleństwu" przy ultra-szybkich kliknięciach (debouncing sprzętowy)
+      setTimeout(() => {
+        selectionLockRef.current = false;
+        if (showLogs) console.log(`%c[ACTION-SELECTION] %c[${sequenceId}] FINISH | Lock released`, 'color: #10b981; font-weight: bold', 'color: inherit');
+      }, 50);
     }
-  }, [setDisplayMode, mapNav, tripState, flightsData, travelDate, selectedItem, addExplorationItem, explorationItems, getExplorationAirportCodes, setSelectedItem, setSelectedAirportCode, setHighlightedAirports, handleAddToTripRef, airportFeaturesMap]);
+  }, [setDisplayMode, mapNav, travelDate, addExplorationItem, getExplorationAirportCodes, setSelectedItem, setSelectedAirportCode, setHighlightedAirports, handleAddToTripRef, airportFeaturesMap]);
 
 
   const handleSwitchToCountryView = useCallback((code: string, name: string) => {
@@ -167,40 +201,51 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
   }, [clearExploration, setSelectedItem]);
 
   const handleCountryAirportsConfirmed = useCallback((codes: string[], countryCode: string, countryName: string) => {
-    if (codes.length === 0) return;
+    if (codes.length === 0 || selectionLockRef.current) return;
     
-    // Rozwiązywanie nazwy kraju (O(1) z mapy danych)
-    const resolvedName = (countryName && countryName !== countryCode)
-      ? countryName
-      : (countryInfoMap[countryCode]?.name || countryCode);
+    const sequenceId = Math.random().toString(36).substring(7);
+    const showLogs = useSettingsStore.getState().showConsoleLogs;
+    
+    if (showLogs) console.log(`%c[ACTION-SELECTION] %c[${sequenceId}] START | Confirm Country: ${countryCode}`, 'color: #10b981; font-weight: bold', 'color: inherit');
+    
+    selectionLockRef.current = true;
+    try {
+      const resolvedName = (countryName && countryName !== countryCode)
+        ? countryName
+        : (countryInfoMap[countryCode]?.name || countryCode);
 
-    clearExploration();
-    addExplorationItem({ type: 'country', code: countryCode, name: resolvedName, airportCodes: codes });
-    
-    // Ustawienie fokus na pierwsze lotnisko z wybranego zestawu w kraju (O(1))
-    const firstCode = codes[0];
-    const firstFeat = airportFeaturesMap[firstCode];
-    
-    if (firstFeat) {
-      const cityCode = cityMap[firstCode];
-      const countryCodeMap = countryMap[firstCode];
+      clearExploration();
+      addExplorationItem({ type: 'country', code: countryCode, name: resolvedName, airportCodes: codes });
+      
+      const firstCode = codes[0];
+      const firstFeat = airportFeaturesMap[firstCode];
+      
+      if (firstFeat) {
+        const cityCodeMap = cityMap[firstCode];
+        const countryCodeData = countryMap[firstCode];
 
-      setSelectedItem({ 
-        type: 'airport', 
-        data: { 
-          type: 'airport',
-          code: firstCode,
-          name: namesMap[firstCode] || firstCode,
-          city_code: cityCode,
-          city_name: cityCode ? cityInfoMap[cityCode]?.name : '',
-          country_code: countryCodeMap,
-          country_name: countryCodeMap ? countryInfoMap[countryCodeMap]?.name : '',
-        } as Airport 
-      });
+        setSelectedItem({ 
+          type: 'airport', 
+          data: { 
+            type: 'airport',
+            code: firstCode,
+            name: namesMap[firstCode] || firstCode,
+            city_code: cityCodeMap,
+            city_name: cityCodeMap ? cityInfoMap[cityCodeMap]?.name : '',
+            country_code: countryCodeData,
+            country_name: countryCodeData ? countryInfoMap[countryCodeData]?.name : '',
+          } as Airport 
+        });
+      }
+      
+      mapNav.fitBoundsToAirportCodes(codes);
+    } finally {
+      setTimeout(() => {
+        selectionLockRef.current = false;
+        if (showLogs) console.log(`%c[ACTION-SELECTION] %c[${sequenceId}] FINISH | Confirm Lock released`, 'color: #10b981; font-weight: bold', 'color: inherit');
+      }, 100);
     }
-    
-    mapNav.fitBoundsToAirportCodes(codes);
-  }, [airportFeaturesMap, namesMap, cityMap, countryMap, cityInfoMap, countryInfoMap, clearExploration, addExplorationItem, setSelectedItem, mapNav, language]);
+  }, [airportFeaturesMap, namesMap, cityMap, countryMap, cityInfoMap, countryInfoMap, clearExploration, addExplorationItem, setSelectedItem, mapNav]);
 
   return {
     handleSelectItem,

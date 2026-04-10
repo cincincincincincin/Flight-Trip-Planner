@@ -29,12 +29,12 @@ import './RightPanel.css';
 import { useTexts } from '../hooks/useTexts';
 import type { Language } from '../constants/text';
 import { UI_SYMBOLS } from '../constants/ui';
-import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
 import { CONFIG } from '../constants/config';
+import dayjs from '../lib/dayjs';
 import { haversineKm } from '../utils/math';
 import { BROWSER_TIMEZONE, buildTzGroups } from '../utils/timezoneUtils';
 import { getLocalizedProp } from '../utils/i18n';
-import { getTripCurrentArrivalTimeUTC } from '../utils/dateFormatting';
+import { getTripCurrentArrivalTimeUTC, getIsoDate, getIsoDatetime, getTodayInTz } from '../utils/dateFormatting';
 
 interface RightPanelProps {
   onClose: () => void;
@@ -392,16 +392,9 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
     // This avoids loading from current time instead of the arrival time.
     if (effectiveArrivalTimeUTC) return null;
     if (airportInfo?.current_local_datetime) return airportInfo.current_local_datetime;
-    // Fallback: use the display timezone (or browser TZ) to compute current local datetime
     const tz = timezone ?? BROWSER_TIMEZONE;
     if (!tz) return null;
-    const now = new Date();
-    const local = now.toLocaleString('sv-SE', {
-      timeZone: tz,
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-    });
-    return local.replace(' ', 'T').substring(0, 19);
+    return getIsoDatetime(new Date(), tz);
   }, [airportInfo, selectedItem, flightAirportCodes.length, effectiveArrivalTimeUTC, timezone]);
 
   const handleManualDateChange = useCallback((newDate: string) => {
@@ -414,7 +407,7 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
     const thresholdMs = new Date(effectiveArrivalTimeUTC).getTime()
       + (minTransferHours + manualTransferCount * minManualTransferHours) * 3600000;
     const thresholdDate = new Date(thresholdMs);
-    if (timezone) return thresholdDate.toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
+    if (timezone) return getIsoDate(thresholdDate, timezone);
     return thresholdDate.toISOString().split('T')[0];
   }, [effectiveArrivalTimeUTC, minTransferHours, manualTransferCount, minManualTransferHours, timezone]);
 
@@ -425,20 +418,17 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
 
   const isToday = useMemo(() => {
     if (!timezone) return false;
-    const now = new Date();
-    return travelDate === now.toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
+    return travelDate === getTodayInTz(timezone);
   }, [timezone, travelDate]);
 
   const actualArrivalDate = useMemo(() => {
     if (!effectiveArrivalTimeUTC || !timezone) return null;
-    return new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
+    return getIsoDate(new Date(effectiveArrivalTimeUTC), timezone);
   }, [effectiveArrivalTimeUTC, timezone]);
 
   const actualArrivalLocalTime = useMemo(() => {
     if (!effectiveArrivalTimeUTC || !timezone) return null;
-    return new Date(effectiveArrivalTimeUTC).toLocaleTimeString(FORMAT_LOCALES.GB, {
-      timeZone: timezone, hour: '2-digit', minute: '2-digit',
-    });
+    return dayjs(effectiveArrivalTimeUTC).tz(timezone).format('HH:mm');
   }, [effectiveArrivalTimeUTC, timezone]);
 
   // Ref so the midnight handler can read travelDate without restarting the timer
@@ -450,14 +440,14 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
     let intervalId: ReturnType<typeof setInterval>;
     const updateTime = () => {
       try {
-        setAirportTime(new Date().toLocaleTimeString(FORMAT_LOCALES.GB, { timeZone: timezone, hour: '2-digit', minute: '2-digit' }));
+        setAirportTime(dayjs().tz(timezone).format('HH:mm'));
       } catch { setAirportTime(null); }
       // Midnight detection: advance travelDate when the day rolls over
-      const newToday = new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
+      const newToday = getTodayInTz(timezone);
       if (travelDateRef.current !== newToday) {
         // Only auto-advance if the user hadn't manually chosen a different date.
         // We detect this by checking whether the stored date was "yesterday" in this TZ.
-        const yesterday = new Date(Date.now() - 86400000).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone });
+        const yesterday = getIsoDate(new Date(Date.now() - 86400000), timezone);
         if (travelDateRef.current === yesterday) {
           updateSettings({ travelDate: newToday });
         }
@@ -481,23 +471,23 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
     const originalTZ = airportTimezoneMap[originalArrCode];
     if (!originalTZ || originalTZ === selectedTimezoneOverride) return null;
 
-    const date = new Date(effectiveArrivalTimeUTC);
-    const selectedTime = date.toLocaleTimeString(FORMAT_LOCALES.GB, { timeZone: selectedTimezoneOverride, hour: '2-digit', minute: '2-digit' });
-    const originalTime = date.toLocaleTimeString(FORMAT_LOCALES.GB, { timeZone: originalTZ, hour: '2-digit', minute: '2-digit' });
+    const date = dayjs(effectiveArrivalTimeUTC);
+    const selectedTime = date.tz(selectedTimezoneOverride).format('HH:mm');
+    const originalTime = date.tz(originalTZ).format('HH:mm');
 
     // Compute hour offset: how many hours originalTZ is ahead of selectedTZ
     const toUTCOffset = (tz: string) => {
-      const utcStr = date.toLocaleString(FORMAT_LOCALES.SE, { timeZone: 'UTC' });
-      const localStr = date.toLocaleString(FORMAT_LOCALES.SE, { timeZone: tz });
-      return Math.round((new Date(localStr.replace(' ', 'T') + 'Z').getTime() - new Date(utcStr.replace(' ', 'T') + 'Z').getTime()) / 3600000);
+      const utcStr = getIsoDatetime(date.toDate(), 'UTC');
+      const localStr = getIsoDatetime(date.toDate(), tz);
+      return Math.round((new Date((localStr || '') + ':00Z').getTime() - new Date((utcStr || '') + ':00Z').getTime()) / 3600000);
     };
     const diff = toUTCOffset(originalTZ) - toUTCOffset(selectedTimezoneOverride);
     const diffStr = diff > 0 ? `+${diff}` : `${diff}`;
 
-    const selectedDay = date.toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: selectedTimezoneOverride });
-    const originalDay = date.toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: originalTZ });
+    const selectedDay = getIsoDate(date.toDate(), selectedTimezoneOverride);
+    const originalDay = getIsoDate(date.toDate(), originalTZ);
     const dayLabel = selectedDay !== originalDay
-      ? date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: originalTZ })
+      ? date.tz(originalTZ).format('D MMM')
       : null;
 
     const dayDiff = selectedDay !== originalDay 
@@ -516,9 +506,9 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
     if (!tz || tz === timezone) return null;
     const now = new Date();
     const getOffsetMs = (tzName: string) => {
-      const utcStr = now.toLocaleString(FORMAT_LOCALES.SE, { timeZone: 'UTC' });
-      const localStr = now.toLocaleString(FORMAT_LOCALES.SE, { timeZone: tzName });
-      return new Date(localStr).getTime() - new Date(utcStr).getTime();
+      const utcStr = getIsoDatetime(now, 'UTC');
+      const localStr = getIsoDatetime(now, tzName);
+      return new Date(localStr + ':00').getTime() - new Date(utcStr + ':00').getTime();
     };
     const diffH = (getOffsetMs(tz) - getOffsetMs(timezone)) / 3600000;
     if (diffH === 0) return null;
@@ -536,9 +526,9 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
     if (!relativeTo || tz === relativeTo || tz === CONFIG.UNKNOWN_TIMEZONE) return null;
     const now = new Date();
     const getOffsetMs = (tzName: string) => {
-      const utcStr = now.toLocaleString(FORMAT_LOCALES.SE, { timeZone: 'UTC' });
-      const localStr = now.toLocaleString(FORMAT_LOCALES.SE, { timeZone: tzName });
-      return new Date(localStr).getTime() - new Date(utcStr).getTime();
+      const utcStr = getIsoDatetime(now, 'UTC');
+      const localStr = getIsoDatetime(now, tzName);
+      return new Date(localStr + ':00').getTime() - new Date(utcStr + ':00').getTime();
     };
     const diffH = (getOffsetMs(tz) - getOffsetMs(relativeTo)) / 3600000;
     if (diffH === 0) return null;
@@ -558,16 +548,16 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
     if (effectiveArrivalTimeUTC) {
       // Trip mode: only jump to arrival date in new TZ if currently on the arrival date.
       // If user manually changed the date, preserve it.
-      const arrivalDateInCurrentTZ = new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone ?? 'UTC' });
+      const arrivalDateInCurrentTZ = getIsoDate(new Date(effectiveArrivalTimeUTC), timezone ?? 'UTC');
       if (travelDate === arrivalDateInCurrentTZ) {
-        updateSettings({ travelDate: new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: tz }) });
+        updateSettings({ travelDate: getIsoDate(new Date(effectiveArrivalTimeUTC), tz) });
       }
     } else {
       // Non-trip mode: if viewing TODAY in current TZ, jump to TODAY in new TZ
       // If viewing a manually-selected date, keep it
-      const todayInCurrentTZ = new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone ?? 'UTC' });
+      const todayInCurrentTZ = getTodayInTz(timezone ?? 'UTC');
       if (travelDate === todayInCurrentTZ) {
-        updateSettings({ travelDate: new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: tz }) });
+        updateSettings({ travelDate: getTodayInTz(tz) });
       }
     }
   }, [airportTimezoneMap, selectedTimezoneOverride, updateSettings, effectiveArrivalTimeUTC, timezone, travelDate]);
@@ -586,9 +576,9 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
       // Update travelDate to today in the restored timezone if the user was viewing today.
       // (The main travelDate effect won't catch this because resolvedTimezone didn't change.)
       if (resolvedTimezone) {
-        const todayInOverrideTZ = new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: selectedTimezoneOverride });
+        const todayInOverrideTZ = getTodayInTz(selectedTimezoneOverride);
         if (travelDate === todayInOverrideTZ) {
-          updateSettings({ travelDate: new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: resolvedTimezone }) });
+          updateSettings({ travelDate: getTodayInTz(resolvedTimezone) });
         }
       }
     }
@@ -630,8 +620,9 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
     return '';
   };
 
+  const isExplorationActive = explorationItems.length > 0;
   const showFlightsList = flightAirportCodes.length > 0 && !!timezone &&
-    (flightAirportCodes.length > 1 || !!initialFromDatetime || !!effectiveArrivalTimeUTC);
+    (isExplorationActive || !!initialFromDatetime || !!effectiveArrivalTimeUTC);
 
   const explorationListEl = (
     <ExplorationList
@@ -663,7 +654,7 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
                   {arrivalTwoTZ ? (
                     <div className="arrival-two-tz">
                       <div className="arrival-main">
-                        {arrivalTwoTZ.originalCode}: {arrivalTwoTZ.originalTime}
+                        <span className="tz-label">{t.common?.localAtArrival || 'Arr'}:</span> {arrivalTwoTZ.originalTime}
                         {arrivalTwoTZ.dayLabel && (
                           <span className={`arrival-different-day ${arrivalTwoTZ.dayDiff > 0 ? 'positive' : arrivalTwoTZ.dayDiff < 0 ? 'negative' : ''}`}>
                             ({arrivalTwoTZ.dayLabel})
@@ -671,7 +662,7 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
                         )}
                       </div>
                       <div className="arrival-alt">
-                        {arrivalTwoTZ.selectedCode}: {arrivalTwoTZ.selectedTime}
+                        <span className="tz-label">{t.common?.localAtSelected || 'Sel'}:</span> {arrivalTwoTZ.selectedTime}
                         {arrivalTwoTZ.diffH !== 0 && (
                           <span className={`arrival-tz-diff ${arrivalTwoTZ.diffH > 0 ? 'negative' : 'positive'}`}>
                             ({arrivalTwoTZ.invDiffStr}h)
@@ -680,10 +671,14 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
                       </div>
                     </div>
                   ) : (
-                    <div className="arrival-single-tz">{lastRealLeg?.toAirportCode}: {actualArrivalLocalTime}</div>
+                    <div className="arrival-single-tz">
+                      <span className="tz-label">{t.common?.localTime || 'Local'}:</span> {actualArrivalLocalTime}
+                    </div>
                   )}
                   {isArrivalEstimated && (
-                    <div className="arrival-estimated-note">{t.card.estimated}</div>
+                    <div className="arrival-estimated-note">
+                      <span className="est-icon">~</span> {t.card.estimated}
+                    </div>
                   )}
                   {isArrivalEstimated && (
                     <div className="arrival-estimated-tooltip">

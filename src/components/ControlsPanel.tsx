@@ -8,10 +8,8 @@ import ColorSettings from './ColorSettings';
 import './ControlsPanel.css';
 import { useTexts } from '../hooks/useTexts';
 import { UI_SYMBOLS } from '../constants/ui';
-import { MAP_STYLES, isArcGISUrl } from '../constants/mapStyles';
+import { MAP_STYLES } from '../constants/mapStyles';
 import { CURRENCIES } from '../constants/config';
-import { buildPrefsSnapshot } from '../utils/prefsUtils';
-import { savePreferences } from '../api/preferences';
 import type { Language } from '../constants/text';
 
 interface ControlsPanelProps {
@@ -29,39 +27,10 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
   const {
     currency, minTransferHours, minManualTransferHours,
     showRefreshButton, showConsoleLogs, language,
-    savedSnapshot, updateSettings,
+    updateSettings,
   } = useSettingsStore();
   const { session } = useAuthStore();
   const isLoggedIn = !!session;
-  const mapState = { mapStyle, globeMode };
-  const colorState = useColorStore();
-
-  const settingsState = { language, currency, minTransferHours, minManualTransferHours, showRefreshButton, showConsoleLogs };
-
-  const [isSaving, setIsSaving] = useState(false);
-  const [justSaved, setJustSaved] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  const currentSnapshot = JSON.stringify(
-    buildPrefsSnapshot(settingsState, mapState, colorState as unknown as Record<string, unknown>)
-  );
-  const isDirty = isLoggedIn && savedSnapshot !== null && currentSnapshot !== savedSnapshot;
-
-  const handleSavePreferences = async () => {
-    setIsSaving(true);
-    setSaveError(null);
-    try {
-      const snap = buildPrefsSnapshot(settingsState, mapState, colorState as unknown as Record<string, unknown>);
-      await savePreferences(snap);
-      updateSettings({ savedSnapshot: JSON.stringify(snap) });
-      setJustSaved(true);
-      setTimeout(() => setJustSaved(false), 2000);
-    } catch {
-      setSaveError(t.errors.generic);
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const { data: airportsData, isFetching: loadingAirports } = useAirportsQuery();
   // const { data: routesData, isFetching: loadingRoutes, isError } = useRoutesQuery(showRoutes);
@@ -243,22 +212,6 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
 
             {showSizes && <ColorSettings showOnlySizes={true} />}
           </div>
-        )}
-
-        {isLoggedIn && isDirty && (
-          <button
-            className="save-preferences-btn"
-            onClick={handleSavePreferences}
-            disabled={isSaving}
-          >
-            {isSaving ? t.controls.saving : t.controls.saveSettings}
-          </button>
-        )}
-        {justSaved && (
-          <span className="save-preferences-confirm">{t.controls.settingsSaved}</span>
-        )}
-        {saveError && (
-          <span className="save-preferences-error">{saveError}</span>
         )}
       </div>
     </div>

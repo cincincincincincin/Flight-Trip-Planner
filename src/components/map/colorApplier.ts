@@ -8,7 +8,7 @@
 import maplibregl from 'maplibre-gl';
 import { useColorStore } from '../../stores/colorStore';
 import { useMapStore } from '../../stores/mapStore';
-import { getHaloColorForTextColor, getTextColorForStyle } from './utils';
+import { getHaloColorForTextColor, getTextColorForStyle, isDarkStyle } from './utils';
 import { THEME_COLORS } from '../../constants/theme';
 import { CONFIG } from '../../constants/config';
 
@@ -78,6 +78,21 @@ export function applyMapColors(map: maplibregl.Map, ctx: ColorApplierContext): v
     map.setPaintProperty('airports-circles', 'circle-color', generalAirport);
   if (map.getLayer('airports-route-hover'))
     map.setPaintProperty('airports-route-hover', 'circle-color', destinationAirportHover);
+
+  // --- Dynamic Stroke Alignment (Zero-Waste Connectivity) ---
+  const isDark = isDarkStyle(mapStyle);
+  const strokeColor = isDark ? THEME_COLORS.textInverse : "rgba(0, 0, 0, 0.4)";
+  
+  const circleLayers = [
+    'airports-circles', 'airports-trip', 'airports-highlighted', 
+    'airports-hover', 'airports-selected', 'airports-route-hover'
+  ];
+  circleLayers.forEach(id => {
+    if (map.getLayer(id)) {
+      map.setPaintProperty(id, 'circle-stroke-color', strokeColor);
+    }
+  });
+
   if (map.getLayer('manual-transfer-preview-line'))
     map.setPaintProperty('manual-transfer-preview-line', 'line-color', transferRoute);
 

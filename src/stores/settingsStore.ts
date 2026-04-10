@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { FORMAT_LOCALES } from '../constants/format';
 import { CONFIG } from '../constants/config';
+import { getTodayInTz } from '../utils/dateFormatting';
 import type { Language } from '../constants/text';
 
 /**
@@ -36,7 +36,7 @@ const detectLanguage = (): Language =>
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       // Wartości inicjalne pobierane z modułu CONFIG (Single Source of Truth)
       language: detectLanguage(),
       currency: CONFIG.DEFAULT_CURRENCY,
@@ -44,7 +44,7 @@ export const useSettingsStore = create<SettingsState>()(
       minManualTransferHours: CONFIG.DEFAULT_MIN_MANUAL_TRANSFER_HOURS,
       showRefreshButton: false,
       showConsoleLogs: false,
-      travelDate: new Date().toLocaleDateString(FORMAT_LOCALES.CA),
+      travelDate: getTodayInTz(),
       timezone: null,
       savedSnapshot: null,
 

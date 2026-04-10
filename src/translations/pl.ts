@@ -4,6 +4,9 @@ export const TEXTS_PL = {
   common: {
     userFallback: "Użytkownik", // UserMenu.tsx fallback
     unknown: "Nieznany", // Phase2.tsx fallback
+    localAtArrival: "Czas lokalny w miejscu przylotu",
+    localAtSelected: "Czas lokalny w wybranym miejscu",
+    localTime: "Czas lokalny",
   },
   buttons: {
     signIn: "Zaloguj się", // App.tsx, AuthModal.tsx

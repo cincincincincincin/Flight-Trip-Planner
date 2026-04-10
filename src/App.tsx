@@ -1,8 +1,9 @@
 import React, { useRef, memo, useEffect, useState, useMemo } from 'react';
 import MapComponent from './components/MapComponent';
 import ControlsPanel from './components/ControlsPanel';
-import RightPanel from './components/RightPanel';
+import { useSettingsEmergencySave } from './hooks/useSettingsEmergencySave';
 import Search from './components/Search';
+import RightPanel from './components/RightPanel';
 import TripItinerary from './components/TripItinerary';
 import AuthModal from './components/auth/AuthModal';
 import UserMenu from './components/auth/UserMenu';
@@ -43,9 +44,10 @@ function App() {
   // Dane z Zustand stores
   const { setViewport, controlsPanelOpen, setControlsPanelOpen } = useMapStore();
   const { selectedItem, clearSelection, clearExploration } = useSelectionStore();
+  const { language, currency, minTransferHours, minManualTransferHours, showRefreshButton, showConsoleLogs, updateSettings } = useSettingsStore();
   const { tripState, clearTrip, updateTrip } = useTripStore();
-  const { showConsoleLogs } = useSettingsStore();
   const { user } = useAuthStore();
+  const isLoggedIn = !!user;
 
   // Logika wydzielona do hooków
   const mapNav = useMapNavigation(mapRef);
@@ -126,6 +128,12 @@ function App() {
     // Tło mapy z parametrów
     document.documentElement.style.setProperty('--map-bg-image', MAP_ASSETS.BACKGROUND_IMAGE);
   }, []);
+
+  // Emergency save on exit/tab switch
+  useSettingsEmergencySave();
+
+  const handleLanguageChange = (lang: string) => updateSettings({ language: lang as any });
+  const handleCurrencyChange = (curr: string) => updateSettings({ currency: curr });
 
   const handleCloseLoadedTrip = () => {
     setPendingCountryPicker(null);

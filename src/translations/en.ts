@@ -4,6 +4,9 @@ export const TEXTS_EN = {
   common: {
     userFallback: "User", // UserMenu.tsx fallback
     unknown: "Unknown", // Phase2.tsx fallback
+    localAtArrival: "Local time at arrival",
+    localAtSelected: "Local time at selected",
+    localTime: "Local time",
   },
   buttons: {
     signIn: "Sign In", // App.tsx, AuthModal.tsx

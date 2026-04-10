@@ -1,21 +1,26 @@
-import { FORMAT_LOCALES, FORMAT_OPTIONS } from '../constants/format';
+import dayjs from '../lib/dayjs';
 import { UI_SYMBOLS } from '../constants/ui';
-import { CONFIG } from '../constants/config';
 
-// Formatuje godzinę (24h) z opcjonalną strefą czasową
+/**
+ * [STRATEGIA DAT]: Pełna migracja na Day.js.
+ * Eliminujemy "haki" oparte na lokalach (en-CA, sv-SE) na rzecz 
+ * profesjonalnej biblioteki obsługującej strefy czasowe.
+ */
+
+// Formatuje godzinę (HH:mm) w zadanej strefie czasowej
 export const formatTime = (str: string | null | undefined, tz?: string): string => {
   if (!str) return UI_SYMBOLS.DASH;
-  const d = new Date(str);
-  if (isNaN(d.getTime())) return UI_SYMBOLS.DASH; 
-  return d.toLocaleTimeString(FORMAT_LOCALES.GB, { ...FORMAT_OPTIONS.TIME_24H, ...(tz ? { timeZone: tz } : {}) });
+  const d = dayjs(str);
+  if (!d.isValid()) return UI_SYMBOLS.DASH;
+  return tz ? d.tz(tz).format('HH:mm') : d.format('HH:mm');
 };
 
-// Formatuje datę (DD/MM/YYYY)
+// Formatuje datę (DD/MM/YYYY) w zadanej strefie czasowej
 export const formatDate = (str: string | null | undefined, tz?: string): string => {
   if (!str) return UI_SYMBOLS.DASH;
-  const d = new Date(str);
-  if (isNaN(d.getTime())) return UI_SYMBOLS.DASH;
-  return d.toLocaleDateString(FORMAT_LOCALES.GB, { ...FORMAT_OPTIONS.DATE_SHORT, ...(tz ? { timeZone: tz } : {}) });
+  const d = dayjs(str);
+  if (!d.isValid()) return UI_SYMBOLS.DASH;
+  return tz ? d.tz(tz).format('DD/MM/YYYY') : d.format('DD/MM/YYYY');
 };
 
 // Przelicza milisekundy na czytelny format (np. 2d 5h 30m)
@@ -34,44 +39,43 @@ export const formatDurationMs = (ms: number): string => {
 // Czas trwania lotu między dwoma datami ISO
 export const getDuration = (dep: string | undefined, arr: string | undefined): string | null => {
   if (!dep || !arr) return null;
-  const diff = new Date(arr).getTime() - new Date(dep).getTime();
+  const diff = dayjs(arr).diff(dayjs(dep));
   if (diff <= 0) return null;
   return formatDurationMs(diff);
 };
 
 export const getDurationMs = (from: string | undefined, to: string | undefined): number | null => {
   if (!from || !to) return null;
-  const diff = new Date(to).getTime() - new Date(from).getTime();
+  const diff = dayjs(to).diff(dayjs(from));
   return diff > 0 ? diff : null;
 };
 
-/**
- * HACK: sv-SE (Szwecja) do wyciągania czasu w konkretnej strefie.
- * Zwraca RRRR-MM-DD GG:MM:SS, co Mapujemy na format ISO (zamiast spacji dajemy 'T').
- * 
- * ZALETY:
- * - Nie potrzebujemy Moment.js/Luxon (oszczędność ~50-100KB w bundle).
- * - Działa natywnie w przeglądarce.
- * 
- * RYZYKA:
- * - Polegamy na implementacji Intl. Zmiana formatu w sv-SE przez twórców przeglądarek 
- *   może zepsuć parsowanie date (na razie jest stabilnie).
- */
-export const getTimestampInTz = (date: Date, tz: string): number => {
-  // console.log('Computing timestamp for TZ:', tz);
-  const localStr = date.toLocaleString(FORMAT_LOCALES.SE, { timeZone: tz });
-  return new Date(localStr.replace(' ', 'T')).getTime();
+/** Zwraca datę w formacie YYYY-MM-DD w zadanej strefie czasowej. */
+export const getIsoDate = (date: Date | string, tz?: string): string => {
+  return tz ? dayjs(date).tz(tz).format('YYYY-MM-DD') : dayjs(date).format('YYYY-MM-DD');
+};
+
+/** Zwraca dzisiejszą datę w formacie YYYY-MM-DD w zadanej strefie czasowej. */
+export const getTodayInTz = (tz?: string): string => getIsoDate(new Date(), tz);
+
+/** Zwraca pełny timestamp w formacie YYYY-MM-DDTHH:mm w zadanej strefie czasowej. */
+export const getIsoDatetime = (date: Date | string, tz?: string): string => {
+  return tz ? dayjs(date).tz(tz).format('YYYY-MM-DDTHH:mm') : dayjs(date).format('YYYY-MM-DDTHH:mm');
+};
+
+/** Zwraca timestamp (ms) dla danej daty w konkretnej strefie czasowej. */
+export const getTimestampInTz = (date: Date | string, tz: string): number => {
+  return dayjs(date).tz(tz).valueOf();
 };
 
 // Obliczanie różnicy między strefami (w godzinach)
 export const computeTzDiff = (depUtc: string, depTz: string, destTz: string): number | null => {
   if (depTz === destTz) return null;
-  const d = new Date(depUtc);
-  if (isNaN(d.getTime())) return null;
+  const d = dayjs(depUtc);
+  if (!d.isValid()) return null;
 
   const getOffH = (tz: string) => {
-    const msInHour = 3600000;
-    return (getTimestampInTz(d, tz) - getTimestampInTz(d, 'UTC')) / msInHour;
+    return dayjs(d).tz(tz).utcOffset() / 60;
   };
 
   const diff = getOffH(destTz) - getOffH(depTz);

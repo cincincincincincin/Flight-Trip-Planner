@@ -49,7 +49,13 @@ export const useCountryCentersQuery = () => {
 };
 
 /** 
- * ZUNIFIKOWANE INDEKSY (O(1) Access)
+ * [STRATEGIA O(1)]: ZUNIFIKOWANE INDEKSY
+ * Ten hook stanowi fundament wydajności systemu. Buduje precyzyjne mapy (HashMaps) 
+ * umożliwiające natychmiastowy dostęp do danych geograficznych.
+ * 
+ * Wydajność:
+ * - Budowa: O(N) przy zmianie meta/search.
+ * - Odczyt: O(1) dla całej aplikacji - brak przeszukiwania dużych tablic w pętli renderowania.
  */
 export const useAirportIndexes = () => {
   const { data: meta } = useMetadataQuery();
@@ -68,7 +74,8 @@ export const useAirportIndexes = () => {
       cityLabelCodeByCity: {} as Record<string, string>,
     };
     
-    return { 
+    const start = performance.now();
+    const result = { 
       airportFeaturesMap: meta.airportFeaturesMap, 
       coordsMap: meta.coordsMap, 
       cityMap: meta.cityMap, 
@@ -79,6 +86,13 @@ export const useAirportIndexes = () => {
       cityLabelCodes: meta.cityLabelCodes,
       cityLabelCodeByCity: meta.cityLabelCodeByCity
     };
+    const end = performance.now();
+
+    if (useSettingsStore.getState().showConsoleLogs) {
+      console.log(`%c[QUERY-WATCH] %cuseAirportIndexes rebuilt in ${(end - start).toFixed(2)}ms`, 'color: #3b82f6; font-weight: bold', 'color: inherit');
+    }
+
+    return result;
   }, [meta, search]);
 };
 
@@ -101,8 +115,8 @@ export const useCountryInfoMap = () => {
 export const useCityAirportsMap = () => useAirportIndexes().cityAirportsMap;
 export const useCityLabelCodes = () => useAirportIndexes().cityLabelCodes;
 
-/**
- * INDEKS WYSZUKIWANIA
+/** 
+ * ZWRACA INDEKS WYSZUKIWANIA (Lokalizowany)
  */
 export const useSearchIndex = () => {
   const { data: search } = useSearchQuery();
@@ -130,9 +144,12 @@ export const useAirportData = (code: string | null) => {
 
   return useMemo<Airport | null>(() => {
     if (!code) return null;
-    const ap = iataMap[code.toLowerCase()];
+    const upperCode = code.toUpperCase();
+    // iataMap klucze są małe (z scripts/generate_static.py), metadata używa wielkich liter
+    const ap = iataMap[upperCode.toLowerCase()];
+    
     if (ap) {
-      const feat = airportFeaturesMap[code];
+      const feat = airportFeaturesMap[upperCode];
       if (feat) {
         return {
           ...ap,
@@ -146,35 +163,36 @@ export const useAirportData = (code: string | null) => {
   }, [code, iataMap, airportFeaturesMap]);
 };
 
+/** Hook dla pojedynczego lotniska - zwraca czas lokalny i strefę czasową. */
 export const useAirportInfoQuery = (code: string | null) => {
   const airportFeaturesMap = useAirportsMap();
   return useMemo(() => {
     if (!code) return { data: undefined };
-    const tz = airportFeaturesMap[code]?.properties.time_zone;
-    if (!tz) return { data: undefined };
-    return { data: computeAirportInfo(tz) };
+    const tz = airportFeaturesMap[code.toUpperCase()]?.properties.time_zone;
+    return { data: tz ? computeAirportInfo(tz) : undefined };
   }, [code, airportFeaturesMap]);
 };
 
+/** Pobiera zbiorcze informacje (czas lokalny) dla listy kodów lotnisk. */
 export const useAirportInfosQuery = (codes: string[]) => {
   const airportFeaturesMap = useAirportsMap();
   return useMemo(() => {
     if (Object.keys(airportFeaturesMap).length === 0) return codes.map(() => ({ data: undefined }));
     const now = new Date();
     return codes.map(code => {
-      const tz = airportFeaturesMap[code]?.properties.time_zone;
-      if (!tz) return { data: undefined };
-      return { data: computeAirportInfo(tz, now) };
+      const tz = airportFeaturesMap[code.toUpperCase()]?.properties.time_zone;
+      return { data: tz ? computeAirportInfo(tz, now) : undefined };
     });
   }, [codes, airportFeaturesMap]);
 };
 
+/** Pobiera listę lotnisk dla danego kraju (używane w panelu bocznym). */
 export const useAirportsByCountryQuery = (countryCode: string | null) => {
   const { countryAirportsMap, airportFeaturesMap, namesMap } = useAirportIndexes();
 
   return useMemo(() => {
     if (!countryCode || !countryAirportsMap) return { data: undefined };
-    const codes = countryAirportsMap[countryCode] || [];
+    const codes = countryAirportsMap[countryCode.toUpperCase()] || [];
     return { data: codes.map((code: string) => {
       const f = airportFeaturesMap[code];
       return {
@@ -187,33 +205,58 @@ export const useAirportsByCountryQuery = (countryCode: string | null) => {
 };
 
 export const useCityAirports = (cityCode: string | null) => {
-  const { countryMap } = useSearchIndex();
-  const cityInfoMap = useCityInfoMap();
+  const { cityAirportsMap, airportFeaturesMap, namesMap } = useAirportIndexes();
 
   return useMemo<Airport[]>(() => {
     if (!cityCode) return [];
-    const cityInfo = cityInfoMap[cityCode];
-    if (!cityInfo || !cityInfo.country_code) return [];
-    return countryMap[cityInfo.country_code]?.cities[cityCode]?.airports || [];
-  }, [cityCode, countryMap, cityInfoMap]);
+    const upperCode = cityCode.toUpperCase();
+    
+    // Optymalizacja O(1): Korzystamy z bezpośredniej mapy kody lotnisk -> miasto z metadanych.
+    const codes = cityAirportsMap[upperCode] || [];
+    
+    if (useSettingsStore.getState().showConsoleLogs) {
+      console.log(`%c[QUERY-WATCH] %cuseCityAirports(city: ${upperCode}) | Found airports: ${codes.length}`, 'color: #3b82f6; font-weight: bold', 'color: inherit');
+    }
+
+    return codes.map(code => {
+      const feat = airportFeaturesMap[code];
+      if (!feat) return null;
+      
+      return {
+        code,
+        name: namesMap[code] || (feat.properties as any).name_en || code,
+        city_name: (feat.properties as any).city_name_en || '',
+        coordinates: { 
+          lon: feat.geometry.coordinates[0], 
+          lat: feat.geometry.coordinates[1] 
+        },
+        time_zone: feat.properties.time_zone || undefined
+      };
+    }).filter(Boolean) as Airport[];
+  }, [cityCode, cityAirportsMap, airportFeaturesMap, namesMap]);
 };
 
+/** Zwraca listę miast i lotnisk dla danego kraju (posortowane). */
 export const useCountryData = (countryCode: string | null) => {
   const { countryMap } = useSearchIndex();
   return useMemo(() => {
-    if (!countryCode || !countryMap[countryCode]) return { cities: [], flatAirports: [] };
-    const countryData = countryMap[countryCode];
+    if (!countryCode) return { cities: [], flatAirports: [] };
+    const countryData = countryMap[countryCode.toUpperCase()];
+    if (!countryData) return { cities: [], flatAirports: [] };
+    
     const cities = Object.values(countryData.cities).sort((a: any, b: any) => a.name.localeCompare(b.name));
     const flatAirports = cities.flatMap((c: any) => c.airports || []);
     return { cities, flatAirports };
   }, [countryCode, countryMap]);
 };
 
+/** Pobiera oferty cenowe dla wybranej trasy (Aviasales API). */
 export const useFlightOffersQuery = (origin: string | null, dest: string | null, params: Record<string, unknown>, enabled: boolean) =>
   useQuery<FlightOffer>({
     queryKey: ['flightOffers', origin, dest, params],
     queryFn: () => {
       const { departure_at, ...rest } = params;
+      // Normalizacja daty do pełnych minut dla lepszego cache'owania na backendzie
       const minuteDepartureAt = typeof departure_at === 'string' ? departure_at.substring(0, 16) : departure_at;
       return getOffers({ origin, destination: dest, departure_at: minuteDepartureAt, ...rest });
     },
@@ -271,6 +314,7 @@ export const useTripVisibleAirports = () => {
 /** 
  * Agreguje wszystkie źródła podświetleń lotnisk.
  * Używane do optymalizacji warstw WebGL i mechanizmu hover.
+ * Inżynierski Smaczek: Wykorzystuje Set dla stałej złożoności O(1) przy renderingu.
  */
 export const useHighlightedState = () => {
   const highlightedAirports = useSelectionStore(s => s.highlightedAirports);
@@ -278,8 +322,9 @@ export const useHighlightedState = () => {
   const explorationItems = useSelectionStore(s => s.explorationItems);
   
   return useMemo(() => {
+    // const start = performance.now();
     const explorationCodes = explorationItems.flatMap(i => i.airportCodes);
-    return {
+    const state = {
       highlightedAirports,
       selectedAirportCodes,
       explorationCodes,
@@ -290,5 +335,8 @@ export const useHighlightedState = () => {
         ...explorationCodes
       ])
     };
+    // const end = performance.now();
+    // if (end - start > 2) console.warn(`[Performance] useHighlightedState took ${(end-start).toFixed(2)}ms`);
+    return state;
   }, [highlightedAirports, selectedAirportCodes, explorationItems]);
 };

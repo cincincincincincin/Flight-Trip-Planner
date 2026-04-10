@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { SelectedItem } from '../types';
 import type { ExplorationItem } from '../stores/selectionStore';
-import { FORMAT_LOCALES } from '../constants/format';
+import { getIsoDate, getTodayInTz } from '../utils/dateFormatting';
 
 interface UseTravelDateParams {
   selectedItem: SelectedItem | null;
@@ -55,31 +55,39 @@ export function useTravelDate({
     if (key !== prevSelectedItemKeyRef.current) {
       prevSelectedItemKeyRef.current = key;
       if (effectiveArrivalTimeUTC) {
-        updateSettings({ travelDate: new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }) });
+        updateSettings({ travelDate: getIsoDate(new Date(effectiveArrivalTimeUTC), timezone) });
       } else {
-        updateSettings({ travelDate: new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }) });
+        updateSettings({ travelDate: getTodayInTz(timezone) });
       }
       prevTimezoneRef.current = timezone;
       prevExplorationItemsCountRef.current = explorationItems.length;
       return;
     }
 
-    const itemsWereRemoved = explorationItems.length < prevExplorationItemsCountRef.current;
     const timezoneChanged = timezone !== prevTimezoneRef.current;
 
-    if (itemsWereRemoved && timezoneChanged && prevTimezoneRef.current) {
-      const oldTzToday = new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: prevTimezoneRef.current });
-      if (travelDate === oldTzToday) {
-        console.log(`[RACE-DEBUG] {useTravelDate} -> Items removed & TZ changed | Syncing date to ${timezone}`);
-        const dateArg = effectiveArrivalTimeUTC || new Date();
-        updateSettings({ travelDate: new Date(dateArg).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }) });
-      }
-    } else if (!itemsWereRemoved && timezoneChanged) {
-      console.log(`[RACE-DEBUG] {useTravelDate} -> TZ changed | Syncing date to ${timezone}`);
+    if (timezoneChanged && prevTimezoneRef.current) {
+      const todayInNewTZ = getTodayInTz(timezone);
+      const todayInOldTZ = getTodayInTz(prevTimezoneRef.current);
+
       if (effectiveArrivalTimeUTC) {
-        updateSettings({ travelDate: new Date(effectiveArrivalTimeUTC).toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }) });
+        // Priority 1: Trip Mode — always sync to arrival day in local TZ
+        const arrDay = getIsoDate(new Date(effectiveArrivalTimeUTC), timezone);
+        if (travelDate !== arrDay) {
+          console.log(`[RACE-DEBUG] {useTravelDate} -> Trip mode sync | ${travelDate} -> ${arrDay}`);
+          updateSettings({ travelDate: arrDay });
+        }
+      } else if (travelDate < todayInNewTZ) {
+        // Priority 2: Safety — never stay in a day that is already past in active TZ
+        console.log(`[RACE-DEBUG] {useTravelDate} -> Safety sync | ${travelDate} < ${todayInNewTZ}`);
+        updateSettings({ travelDate: todayInNewTZ });
+      } else if (travelDate === todayInOldTZ) {
+        // Priority 3: Continuity — if we were on "today", stay on "today" (even if it's a backward jump)
+        console.log(`[RACE-DEBUG] {useTravelDate} -> Continuity sync | ${travelDate} was today in ${prevTimezoneRef.current}`);
+        updateSettings({ travelDate: todayInNewTZ });
       } else {
-        updateSettings({ travelDate: new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: timezone }) });
+        // Priority 4: Preserve — user-selected future date, keep as is
+        console.log(`[RACE-DEBUG] {useTravelDate} -> Preserve manual date | ${travelDate}`);
       }
     }
 
@@ -94,9 +102,9 @@ export function useTravelDate({
     const prevTZ = prevResolvedTZRef.current;
     prevResolvedTZRef.current = resolvedTimezone;
     if (prevTZ === undefined || resolvedTimezone === prevTZ || !resolvedTimezone) return;
-    const todayInPrevTZ = prevTZ ? new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: prevTZ }) : null;
+    const todayInPrevTZ = prevTZ ? getTodayInTz(prevTZ) : null;
     if (!todayInPrevTZ || travelDateForTZRef.current === todayInPrevTZ) {
-      updateSettings({ travelDate: new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: resolvedTimezone }) });
+      updateSettings({ travelDate: getTodayInTz(resolvedTimezone) });
     }
   }, [resolvedTimezone, selectedTimezoneOverride, selectedItem?.type, updateSettings]);
 
@@ -106,7 +114,7 @@ export function useTravelDate({
     if (countryDisplayTZ === prevCountryDisplayTZRef.current) return;
     prevCountryDisplayTZRef.current = countryDisplayTZ;
     if (countryDisplayTZ) {
-      updateSettings({ travelDate: new Date().toLocaleDateString(FORMAT_LOCALES.CA, { timeZone: countryDisplayTZ }) });
+      updateSettings({ travelDate: getTodayInTz(countryDisplayTZ) });
     }
   }, [selectedItem?.type, countryDisplayTZ, updateSettings]);
 

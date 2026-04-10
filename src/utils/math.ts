@@ -32,3 +32,37 @@ export const medianVal = (arr: number[]): number => {
     ? (sorted[mid - 1] + sorted[mid]) / 2
     : sorted[mid];
 };
+
+/**
+ * Filtruje punkty (lon, lat) leżące zbyt daleko od mediany zbioru.
+ * Zapobiega "rozciąganiu" mapy przez pojedyncze lotniska na drugim końcu świata (np. terytoria zamorskie).
+ */
+export const filterOutliers = (
+  coords: Array<[number, number]>,
+  maxDegrees = 5.0
+): Array<[number, number]> => {
+  if (coords.length <= 1) return coords;
+
+  let current = [...coords];
+  let prevLen = 0;
+
+  // Wykonujemy pętlę dopóki usuwamy jakieś punkty (zbieżność do stabilnego jądra)
+  while (current.length !== prevLen) {
+    prevLen = current.length;
+    const lons = current.map(c => c[0]);
+    const lats = current.map(c => c[1]);
+
+    const medLon = medianVal(lons);
+    const medLat = medianVal(lats);
+
+    const filtered = current.filter(([lon, lat]) => {
+      const dist = Math.sqrt((lon - medLon) ** 2 + (lat - medLat) ** 2);
+      return dist <= maxDegrees;
+    });
+
+    if (filtered.length === 0) break;
+    current = filtered;
+  }
+
+  return current;
+};

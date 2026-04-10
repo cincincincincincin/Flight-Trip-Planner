@@ -69,38 +69,68 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
 
   /** 
    * AGREGACJA DANYCH DOCELOWYCH (O(Flights))
-   * Buduje hierarchiczną strukturę krajów i miast na podstawie aktywnych lotów.
+   * Inżynierska Optymalizacja: Używamy zagnieżdżonych map do budowy struktury w czasie liniowym,
+   * eliminując kosztowne operacje .find() i .some() wewnątrz głównej pętli.
    */
   const destData = useMemo<DestCountry[]>(() => {
-    const countriesMap = new Map<string, DestCountry>();
+    const countriesMap = new Map<string, { 
+      data: DestCountry; 
+      citiesMap: Map<string, { data: DestCity; airportsSet: Set<string> }> 
+    }>();
+
     destScopeFlights.forEach(f => {
-      const aC = f.destination_airport_code;
+      const aC = f.destination_airport_code?.toUpperCase();
       if (!aC) return;
+      
       const cityCode = airportCityMap[aC];
       const countryCode = airportCountryMap[aC];
       if (!countryCode) return;
 
+      // 1. Zapewnienie istnienia kraju
       if (!countriesMap.has(countryCode)) {
-        countriesMap.set(countryCode, { code: countryCode, name: getCountryName(countryCode), cities: [] });
+        countriesMap.set(countryCode, { 
+          data: { code: countryCode, name: getCountryName(countryCode), cities: [] },
+          citiesMap: new Map()
+        });
       }
-      const country = countriesMap.get(countryCode)!;
-      let city = country.cities.find(c => c.code === cityCode);
-      if (!city && cityCode) {
-        city = { code: cityCode, name: cityInfoMap[cityCode]?.name || cityCode, countryCode, airports: [] };
-        country.cities.push(city);
+      const countryEntry = countriesMap.get(countryCode)!;
+
+      // 2. Zapewnienie istnienia miasta (lub placeholderu)
+      const effectiveCityCode = cityCode || CONFIG.NO_CITY_PLACEHOLDER;
+      if (!countryEntry.citiesMap.has(effectiveCityCode)) {
+        countryEntry.citiesMap.set(effectiveCityCode, {
+          data: { 
+            code: effectiveCityCode, 
+            name: effectiveCityCode === CONFIG.NO_CITY_PLACEHOLDER ? '' : (cityInfoMap[effectiveCityCode]?.name || effectiveCityCode), 
+            countryCode, 
+            airports: [] 
+          },
+          airportsSet: new Set()
+        });
       }
-      const ap: DestAirport = { code: aC, name: airportNameMap[aC] || aC, cityCode, countryCode };
-      if (city && !city.airports.some(a => a.code === aC)) city.airports.push(ap);
-      else if (!city) {
-        let noCityEntry = country.cities.find(c => c.code === CONFIG.NO_CITY_PLACEHOLDER);
-        if (!noCityEntry) {
-          noCityEntry = { code: CONFIG.NO_CITY_PLACEHOLDER, name: '', countryCode, airports: [] };
-          country.cities.push(noCityEntry);
-        }
-        if (!noCityEntry.airports.some(a => a.code === aC)) noCityEntry.airports.push(ap);
+      const cityEntry = countryEntry.citiesMap.get(effectiveCityCode)!;
+
+      // 3. Dodanie lotniska (O(1) dzięki Set)
+      if (!cityEntry.airportsSet.has(aC)) {
+        cityEntry.airportsSet.add(aC);
+        cityEntry.data.airports.push({ 
+          code: aC, 
+          name: airportNameMap[aC] || aC, 
+          cityCode: effectiveCityCode !== CONFIG.NO_CITY_PLACEHOLDER ? effectiveCityCode : undefined, 
+          countryCode 
+        });
       }
     });
-    return Array.from(countriesMap.values()).sort((a, b) => a.code.localeCompare(b.code));
+
+    // Konwersja map na wynikową strukturę tablicową
+    return Array.from(countriesMap.values())
+      .map(entry => ({
+        ...entry.data,
+        cities: Array.from(entry.citiesMap.values())
+          .map(ce => ce.data)
+          .sort((a, b) => a.name.localeCompare(b.name))
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [destScopeFlights, airportCityMap, airportCountryMap, airportNameMap, getCountryName, cityInfoMap]);
 
   const airlines = useMemo(() => {

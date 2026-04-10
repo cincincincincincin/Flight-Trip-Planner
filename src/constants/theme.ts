@@ -18,6 +18,8 @@ export const THEME_COLORS = {
   textBlack: '#000000',
   
   cRose: '#FF6B6B',
+  cPrimary: '#FF6B6B',
+  cPrimary60: 'rgba(255, 107, 107, 0.6)',
   accent: '#1B6EF7',
   red: '#D03545',
   cGold: '#FFA500', 

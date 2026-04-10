@@ -1,6 +1,6 @@
-import { FORMAT_LOCALES } from '../constants/format';
 import { CONFIG } from '../constants/config';
-import { getTimestampInTz } from './dateFormatting';
+import { getTimestampInTz, getIsoDatetime } from './dateFormatting';
+import dayjs from '../lib/dayjs';
 
 export const BROWSER_TIMEZONE = (() => {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return null; }
@@ -27,8 +27,8 @@ export function buildTzGroups(airports: Array<{ code: string; name: string; time
       continue;
     }
 
-    // Obliczamy przesunięcie przy użyciu helpera getTimestampInTz (logika szczegółowo opisana w dateFormatting.ts)
-    const diffMin = Math.round((getTimestampInTz(now, tz) - getTimestampInTz(now, 'UTC')) / 60000);
+    // Obliczamy przesunięcie (UTC offset w minutach) dla danej strefy
+    const diffMin = dayjs(now).tz(tz).utcOffset();
 
     if (!groups.has(diffMin)) {
       const diffH = diffMin / CONFIG.MINUTES_IN_HOUR;
@@ -40,11 +40,13 @@ export function buildTzGroups(airports: Array<{ code: string; name: string; time
       // Etykieta wyświetlana w UI obok czasu lokalnego (np. "UTC+05:30")
       const utcLabel = `UTC${sign}${h}${m > 0 ? ':' + String(m).padStart(2, '0') : ''}`;
 
-      const currentDateStr = now.toLocaleDateString(FORMAT_LOCALES.GB, { timeZone: tz, weekday: 'short', day: '2-digit', month: '2-digit' });
-      const currentTimeStr = now.toLocaleTimeString(FORMAT_LOCALES.GB, { timeZone: tz, hour: '2-digit', minute: '2-digit' });
+      // Formaty prezentacyjne dopasowane do Day.js (spójne z lokalizacją aplikacji)
+      // ddd, DD/MM -> np. "Wt, 10/04" lub "Tue, 10/04"
+      const currentDateStr = dayjs(now).tz(tz).format('ddd, DD/MM');
+      const currentTimeStr = dayjs(now).tz(tz).format('HH:mm');
 
-      // localDT używamy jako klucza sortującego (alfabetyczne sortowanie formatu ISO = sortowanie chronologiczne)
-      const localDT = now.toLocaleString(FORMAT_LOCALES.SE, { timeZone: tz });
+      // localDT używamy jako klucza sortującego (ISO format)
+      const localDT = getIsoDatetime(now, tz);
 
       groups.set(diffMin, { tz, airports: [], currentDT: localDT, utcLabel, currentDateStr, currentTimeStr });
     }

@@ -7,6 +7,7 @@ import { useTripStore } from '../../stores/tripStore';
 import TripNameModal from '../TripNameModal';
 import './SaveTripButton.css';
 import { useTexts } from '../../hooks/useTexts';
+import dayjs from '../../lib/dayjs';
 
 const SaveTripButton: React.FC = () => {
   const t = useTexts();
@@ -63,7 +64,7 @@ const SaveTripButton: React.FC = () => {
 
   const handleNameConfirm = (name: string) => {
     setShowNameModal(false);
-    const autoName = `${t.auth.autoNamePrefix}${new Date().toLocaleDateString()}`;
+    const autoName = `${t.auth.autoNamePrefix}${dayjs().format('L')}`;
     saveMutation.mutate({ name: name || autoName, stateJSON: currentStateJSON! });
   };
 
@@ -80,7 +81,7 @@ const SaveTripButton: React.FC = () => {
 
       {showNameModal && createPortal(
         <TripNameModal
-          initialName={`${t.auth.autoNamePrefix}${new Date().toLocaleDateString()}`}
+          initialName={`${t.auth.autoNamePrefix}${dayjs().format('L')}`}
           title={t.auth.nameYourTrip}
           confirmLabel={t.buttons.save}
           onConfirm={handleNameConfirm}
