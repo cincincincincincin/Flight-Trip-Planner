@@ -64,7 +64,8 @@ const Search = ({ onSelectItem }: SearchProps) => {
   const handleItemClick = useCallback((item: Country | City | Airport) => {
 
     if (onSelectItem) {
-      onSelectItem({ type: item.type, data: item } as SelectedItem);
+      const type = item.type || 'airport';
+      onSelectItem({ type, data: item } as SelectedItem);
     }
 
     if (containerRef.current) {

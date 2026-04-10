@@ -29,16 +29,32 @@ interface FlightsListProps {
 const FlightsList = forwardRef<unknown, FlightsListProps>(
   ({ airportCodes, timezone, initialFromDatetime, airportTimezones, originalAirportCode, tripArrivalTimeUTC, travelDateOverride, onAddToTrip }, ref) => {
     const t = useTexts();
+    // ── STABILITY SHIELD (Phase 10) ──────────────────────────────────────────
+    // Aby uniknąć "Pętli Przerywania" (Abort Loop), zamrażamy referencje tablic i obiektów.
+    // Dzięki temu useFlightLoader nie restartuje się, jeśli dane są takie same.
+    const stableAirportCodesJson = JSON.stringify(airportCodes);
+    const stableAirportCodes = useMemo(() => JSON.parse(stableAirportCodesJson), [stableAirportCodesJson]);
+    
+    const stableAirportTimezonesJson = JSON.stringify(airportTimezones);
+    const stableAirportTimezones = useMemo(() => JSON.parse(stableAirportTimezonesJson), [stableAirportTimezonesJson]);
+
     // ── Stores ────────────────────────────────────────────────────────────────
     const { travelDate, minTransferHours, minManualTransferHours, showRefreshButton } = useSettingsStore();
     const { setHighlightedAirports, setHighlightedCities, setDisplayedFlights } = useSelectionStore();
     const { tripState } = useTripStore();
     const { airportFeaturesMap, cityMap, countryMap } = useAirportIndexes();
-    const { destinationFilter, airlineFilter } = useFilterStore();
+    const { flightsData: globalFlightsData } = useSelectionStore();
 
     // ── Data loading ──────────────────────────────────────────────────────────
     const { error, lastFetched, perAirportLoading, anyLoading, flightsByDate, handleRefresh } =
-      useFlightLoader({ airportCodes, timezone, initialFromDatetime, airportTimezones, tripArrivalTimeUTC, travelDateOverride });
+      useFlightLoader({ 
+        airportCodes: stableAirportCodes, 
+        timezone, 
+        initialFromDatetime, 
+        airportTimezones: stableAirportTimezones, 
+        tripArrivalTimeUTC, 
+        travelDateOverride 
+      });
 
     // ── Derived from tripState ────────────────────────────────────────────────
     const tripStartAirport = tripState?.startAirport ?? null;
@@ -65,6 +81,13 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
         intervalId = setInterval(tick, 60000);
       }, msToNextMinute);
       return () => { clearTimeout(timeoutId); clearInterval(intervalId); };
+    }, []);
+
+    useEffect(() => {
+      console.log("%c[ACTION-LOAD] %cFlightsList MOUNT", 'color: #3b82f6; font-weight: bold', 'color: inherit');
+      return () => {
+        console.log("%c[ACTION-LOAD] %cFlightsList UNMOUNT", 'color: #ef4444; font-weight: bold', 'color: inherit');
+      };
     }, []);
 
     // ── Expansion state (Smart Collapse) ──────────────────────────────────────
@@ -98,22 +121,33 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
 
     /** Przefiltrowana lista lotów na wybrany dzień. */
     const displayedFlatFlights = useMemo(() => {
-      let flights = todayFlights.filter(matchesFilter);
+      // Optymalizacja: filtrujemy najpierw po źródłowych lotniskach wg aktualnej selekcji
+      const validOrigins = new Set(airportCodes.map((c: string) => c.toUpperCase()));
+      let flights = todayFlights.filter(f => validOrigins.has((f.origin_airport_code || '').toUpperCase()));
+      
+      // Następnie aplikujemy ręczne filtry użytkownika
+      flights = flights.filter(matchesFilter);
       
       // Jeśli nie jesteśmy w trybie planowania trasy, ukrywamy loty, które odleciały dawno.
       if (!tripArrivalTimeUTC) {
         const selectedTodayStr = timezone ? getTodayInTz(timezone) : getTodayInTz();
-        
+        console.log(`%c[ACTION-LOAD] %cFiltering Flights | Today: ${selectedTodayStr}, TravelDate: ${travelDate}, Before Grace: ${todayFlights.length}, Filtered: ${flights.length}`, 'color: #10b981; font-weight: bold', 'color: inherit');
+
         if (travelDate === selectedTodayStr) {
-          // Wyświetlamy loty odleciane max 20 minut temu (grace period)
-          const graceMs = nowMs - (20 * 60_000);
+          // Ukrywamy wszystkie loty, które już odleciały.
+          // Używamy dayjs.utc(), ponieważ scheduled_departure_utc z API nie ma znaku 'Z'.
           flights = flights.filter(f =>
-            !f.scheduled_departure_utc || new Date(f.scheduled_departure_utc).getTime() > graceMs
+            !f.scheduled_departure_utc || dayjs.utc(f.scheduled_departure_utc).valueOf() > nowMs
           );
         }
       }
+      const finalCount = flights.length;
+      if (finalCount === 0 && todayFlights.length > 0) {
+        console.warn(`%c[ACTION-LOAD] %cREBOUND DETECTED | todayFlights: ${todayFlights.length}, finalCount: 0. Keys in flightsByDate: ${Object.keys(flightsByDate).join(',')}, travelDate: ${travelDate}, timezone: ${timezone}`, 'color: #f59e0b; font-weight: bold', 'color: inherit');
+      }
+      console.log(`%c[ACTION-LOAD] %cFiltering Flights | Final Count: ${finalCount}`, 'color: #10b981; font-weight: bold', 'color: inherit');
       return flights;
-    }, [todayFlights, matchesFilter, tripArrivalTimeUTC, nowMs, travelDate, timezone]);
+    }, [todayFlights, matchesFilter, tripArrivalTimeUTC, nowMs, travelDate, timezone, flightsByDate]);
 
     // ── Synchronizacja podświetlenia na mapie (Phase 2: Ultra-Lean) ───────────
     // Wysyłamy dane tylko gdy faktycznie się zmieniły, żeby uniknąć thrashingu WebGL.
@@ -129,8 +163,9 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       const newCities = new Set<string>();
       
       sourceFlights.forEach(f => {
-        const code = f.destination_airport_code;
-        if (code) {
+        const rawCode = f.destination_airport_code;
+        if (rawCode) {
+          const code = rawCode.toUpperCase();
           newAirports.add(code);
           const cCode = cityMap[code];
           if (cCode) newCities.add(cCode);
@@ -183,7 +218,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
     const getTripHighlight = useCallback(
       (flight: Flight) => {
         if (!tripStartAirport) return null;
-        const destCode = flight.destination_airport_code;
+        const destCode = (flight.destination_airport_code || '').toUpperCase();
         const destCityCode = cityMap[destCode];
         const destCountry = countryMap[destCode];
         if (destCode === tripStartAirport.code) return 'airport';

@@ -277,7 +277,7 @@ export const useFlightFilter = () => {
 
     const matchesFilter = (flight: { destination_airport_code: string; airline_code?: string }): boolean => {
       if (!isFilterActive) return true;
-      const destAirport = flight.destination_airport_code;
+      const destAirport = (flight.destination_airport_code || '').toUpperCase();
       const destCity = airportCityMap[destAirport];
       const destCountry = airportCountryMap[destAirport];
       const airline = flight.airline_code;

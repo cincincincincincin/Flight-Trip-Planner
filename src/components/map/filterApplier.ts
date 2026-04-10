@@ -43,12 +43,12 @@ export function applyMapAirportFilters(
   // INŻYNIERSKA NAPRAWA: MapLibre nie obsługuje poprawnie ['!in', 'code'] (pusta tablica).
   // Musimy jawnie sprawdzić obecność elementów lub ustawić filtr na null.
   const highlightedCodes = [...new Set([
-    ...ha,
-    ...(tvac ?? []),
-    ...sacMulti,
-    ...explorationCodes,
-    ...(sac ? [sac] : []),
-    ...ctx.manualTransferAirportCodes,
+    ...ha.map(c => c.toUpperCase()),
+    ...(tvac ?? []).map(c => c.toUpperCase()),
+    ...sacMulti.map(c => c.toUpperCase()),
+    ...explorationCodes.map(c => c.toUpperCase()),
+    ...(sac ? [sac.toUpperCase()] : []),
+    ...ctx.manualTransferAirportCodes.map(c => c.toUpperCase()),
   ])];
 
   if (map.getLayer('airports-circles')) {
@@ -61,10 +61,10 @@ export function applyMapAirportFilters(
     }
   }
   if (map.getLayer('airports-highlighted')) {
-    map.setFilter('airports-highlighted', ['in', 'code', ...ha]);
+    map.setFilter('airports-highlighted', ['in', 'code', ...ha.map(c => c.toUpperCase())]);
   }
   if (map.getLayer('airports-trip')) {
-    map.setFilter('airports-trip', ['in', 'code', ...(tvac ?? [])]);
+    map.setFilter('airports-trip', ['in', 'code', ...(tvac ?? []).map(c => c.toUpperCase())]);
   }
   {
     const hovCode = ctx.hoveredAirportCode;
@@ -79,8 +79,9 @@ export function applyMapAirportFilters(
         const baseFilter: any[] = highlightedCodes.length > 0
           ? ['!in', 'code', ...highlightedCodes]
           : [];
-        const excludeFilter: any[] = ctx.excludeCodes && ctx.excludeCodes.length > 0
-          ? ['!in', 'code', ...ctx.excludeCodes]
+        const excludeCodes = (ctx.excludeCodes || []).map(c => c.toUpperCase());
+        const excludeFilter: any[] = excludeCodes.length > 0
+          ? ['!in', 'code', ...excludeCodes]
           : [];
 
         const allFilters = [
@@ -115,8 +116,9 @@ export function applyMapAirportFilters(
           highlightedCityCodesFromHighlighted.size > 0
             ? ['!in', 'code', ...[...highlightedCityCodesFromHighlighted]]
             : [];
-        const excludeCityFilter: any[] = (ctx.excludeCodes || []).length > 0
-            ? ['!in', 'code', ...ctx.excludeCodes!]
+        const excludeCodes = (ctx.excludeCodes || []).map(c => c.toUpperCase());
+        const excludeCityFilter: any[] = excludeCodes.length > 0
+            ? ['!in', 'code', ...excludeCodes]
             : [];
 
         const allFilters = [
@@ -140,24 +142,26 @@ export function applyMapAirportFilters(
       if (map.getLayer('airports-labels-highlighted') || map.getLayer('airports-labels-highlighted-city')) {
         // INŻYNIERSKA OPTYMALIZACJA (O(N)): Używamy Set zamiast wielokrotnych .includes w pętli.
         // Zapobiega to wydajnościowej degradacji O(N^2) przy dużej liczbie zaznaczonych punktów.
-        const codesSet = new Set<string>(ha);
+        const haUpper = ha.map(c => c.toUpperCase());
+        const codesSet = new Set<string>(haUpper);
         
         if (inTripMode) {
-          (tvac ?? []).forEach(c => codesSet.add(c));
-          sacMulti.forEach(c => codesSet.add(c));
-          ctx.manualTransferAirportCodes.forEach(c => codesSet.add(c));
+          (tvac ?? []).forEach(c => codesSet.add(c.toUpperCase()));
+          sacMulti.forEach(c => codesSet.add(c.toUpperCase()));
+          ctx.manualTransferAirportCodes.forEach(c => codesSet.add(c.toUpperCase()));
         } else {
           if (sacMulti.length > 0) {
-            sacMulti.forEach(c => codesSet.add(c));
+            sacMulti.forEach(c => codesSet.add(c.toUpperCase()));
           } else if (sac) {
-            codesSet.add(sac);
+            codesSet.add(sac.toUpperCase());
           }
         }
 
         const codes = [...codesSet];
         writableRefs.highlightedLabelCodesRef.current = codes;
 
-        const filterCodes = hovCode ? codes.filter(c => c !== hovCode) : codes;
+        const hovCodeLower = ctx.hoveredAirportCode?.toUpperCase();
+        const filterCodes = hovCodeLower ? codes.filter(c => c !== hovCodeLower) : codes;
         const filter: maplibregl.FilterSpecification = filterCodes.length === 0 
           ? ['==', 'code', ''] 
           : ['in', 'code', ...filterCodes];
@@ -205,8 +209,10 @@ export function applyMapAirportFilters(
   }
 
     if (map.getLayer('airports-selected')) {
-      if (sacMulti.length > 0) map.setFilter('airports-selected', ['in', 'code', ...sacMulti]);
-      else if (sac) map.setFilter('airports-selected', ['==', 'code', sac]);
+      const sacMultiUpper = sacMulti.map(c => c.toUpperCase());
+      const sacUpper = sac?.toUpperCase();
+      if (sacMultiUpper.length > 0) map.setFilter('airports-selected', ['in', 'code', ...sacMultiUpper]);
+      else if (sacUpper) map.setFilter('airports-selected', ['==', 'code', sacUpper]);
       else map.setFilter('airports-selected', ['==', 'code', '']);
     }
 

@@ -64,6 +64,8 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
   const { travelDate, minTransferHours, minManualTransferHours, language, updateSettings } = useSettingsStore();
   const { clearFilters } = useFilterStore();
   
+  console.log(`%c[DEBUG-PANEL] %cRENDER | selectedItem: ${selectedItem?.type} (${(selectedItem?.data as any)?.code}), travelDate: ${travelDate}`, 'color: #ec4899; font-weight: bold', 'color: inherit');
+
   const airportCoordsMap = useAirportCoordsMap();
   const airportsMap = useAirportsMap();
 
@@ -431,9 +433,15 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
     return dayjs(effectiveArrivalTimeUTC).tz(timezone).format('HH:mm');
   }, [effectiveArrivalTimeUTC, timezone]);
 
-  // Ref so the midnight handler can read travelDate without restarting the timer
   const travelDateRef = useRef(travelDate);
   useEffect(() => { travelDateRef.current = travelDate; }, [travelDate]);
+
+  // [FLICKER GUARD]: Stabilize timezone passed to list
+  const lastValidTimezoneRef = useRef<string | null>(timezone);
+  useEffect(() => {
+    if (timezone) lastValidTimezoneRef.current = timezone;
+  }, [timezone]);
+  const stableTimezone = timezone || lastValidTimezoneRef.current || undefined;
 
   useEffect(() => {
     if (!timezone) { setAirportTime(null); return; }
@@ -621,8 +629,9 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
   };
 
   const isExplorationActive = explorationItems.length > 0;
-  const showFlightsList = flightAirportCodes.length > 0 && !!timezone &&
-    (isExplorationActive || !!initialFromDatetime || !!effectiveArrivalTimeUTC);
+  // ULTRA-LEAN: Don't unmount FlightsList just because timezone is flickering during transition.
+  // As long as we have airports to show, keep the component alive to preserve its downloaded data.
+  const showFlightsList = flightAirportCodes.length > 0;
 
   const explorationListEl = (
     <ExplorationList
@@ -742,7 +751,7 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
                 <FlightsList
                   ref={flightsListRef}
                   airportCodes={flightAirportCodes}
-                  timezone={timezone!}
+                  timezone={stableTimezone}
                   initialFromDatetime={initialFromDatetime ?? undefined}
                   airportTimezones={airportTimezoneMap}
                   originalAirportCode={tripState ? selectedItem.data.code : null}
@@ -772,7 +781,7 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
                 <FlightsList
                   ref={flightsListRef}
                   airportCodes={flightAirportCodes}
-                  timezone={timezone!}
+                  timezone={stableTimezone}
                   initialFromDatetime={initialFromDatetime ?? undefined}
                   airportTimezones={airportTimezoneMap}
                   travelDateOverride={effectiveTravelDate}

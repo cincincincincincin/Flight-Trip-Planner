@@ -34,7 +34,10 @@ export function useMapNavigation(mapRef: React.RefObject<MapComponentRef | null>
    */
   const fitBoundsToAirportCodes = useCallback((codes: string[]) => {
     if (Object.keys(airportsMap).length === 0 || codes.length === 0) return;
-    const allCodes = [...new Set([...codes, ...highlightedAirportsRef.current])];
+    const allCodes = [...new Set([
+      ...codes.map(c => c.toUpperCase()), 
+      ...highlightedAirportsRef.current.map(c => c.toUpperCase())
+    ])];
     const points = allCodes
       .map(code => airportsMap[code]?.geometry?.coordinates as [number, number] | undefined)
       .filter((p): p is [number, number] => !!p);

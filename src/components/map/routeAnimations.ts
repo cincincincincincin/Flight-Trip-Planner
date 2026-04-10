@@ -42,8 +42,8 @@ export function buildGCPaths(
     const destSet = new Set(newDestCodes);
     const srcSet = new Set(sourceCodes);
     flightsData.forEach(f => {
-      const src = f.origin_airport_code;
-      const dst = f.destination_airport_code;
+      const src = (f.origin_airport_code || '').toUpperCase();
+      const dst = (f.destination_airport_code || '').toUpperCase();
       if (src && dst && srcSet.has(src) && destSet.has(dst)) {
         if (!sourceToDestsMap.has(src)) sourceToDestsMap.set(src, new Set());
         sourceToDestsMap.get(src)!.add(dst);
@@ -191,8 +191,8 @@ export function startPreviewAnimation(
     return;
   }
 
-  const startCoords = coordsMap[selectedAirportCode];
-  const destCoords = coordsMap[previewAirportCode];
+  const startCoords = selectedAirportCode ? coordsMap[selectedAirportCode.toUpperCase()] : null;
+  const destCoords = previewAirportCode ? coordsMap[previewAirportCode.toUpperCase()] : null;
 
   if (!startCoords || !destCoords) {
     source.setData({ type: 'FeatureCollection', features: [] });

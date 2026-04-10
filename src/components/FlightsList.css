@@ -91,7 +91,7 @@
 /* ── Virtuoso wrapper ────────────────────────────────────────── */
 .flights-virtuoso-wrapper {
   flex: 1;
-  min-height: 0;
+  min-height: 300px; /* FORCE VISIBILITY: Prevent Virtuoso from collapsing to 0px and halting render */
   overflow: hidden;
 }
 

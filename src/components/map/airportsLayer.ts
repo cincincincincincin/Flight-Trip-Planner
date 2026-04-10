@@ -12,6 +12,9 @@ import type { AirportFeatureProps } from '../../types';
 import { getLabelPaint } from './utils';
 import { THEME_COLORS } from '../../constants/theme';
 import { CONFIG } from '../../constants/config';
+import { useColorStore } from '../../stores/colorStore';
+
+type ColorContext = ReturnType<typeof useColorStore.getState>;
 
 /** Kolejność warstw etykiet zapewniająca poprawne nadpisywanie się (Z-Index) */
 export const AIRPORT_LABEL_LAYERS = [
@@ -60,7 +63,8 @@ export function addAirportsLayer(
   currentMapStyle: string,
   startAirportCodes: string[] = [],
   lang = 'en',
-  sessionId?: number
+  sessionId?: number,
+  colorContext?: ColorContext
 ) {
   if (!map) {
     console.warn('[RACE-DEBUG] {airportsLayer} -> ABORT | Reason: map is null');
@@ -118,7 +122,7 @@ export function addAirportsLayer(
         'circle-radius': [
           'interpolate', ['linear'], ['zoom'],
           4, CONFIG.MAP_AIRPORT_LAYER.RADIUS_TINY,
-          10, CONFIG.MAP_AIRPORT_LAYER.RADIUS_MEDIUM
+          10, colorContext?.generalAirportRadiusMax ?? CONFIG.MAP_AIRPORT_LAYER.RADIUS_MEDIUM
         ],
         'circle-color': [
           'case',
@@ -136,7 +140,7 @@ export function addAirportsLayer(
       source: 'airports',
       filter: ['in', 'code', ''],
       paint: {
-        'circle-radius': CONFIG.MAP_AIRPORT_LAYER.RADIUS_SMALL,
+        'circle-radius': colorContext?.highlightedAirportRadiusMin ?? CONFIG.MAP_AIRPORT_LAYER.RADIUS_SMALL,
         'circle-color': THEME_COLORS.textBlack,
         'circle-stroke-width': 1,
         'circle-stroke-color': strokeColor
@@ -148,7 +152,7 @@ export function addAirportsLayer(
       source: 'airports',
       filter: ['in', 'code', ''],
       paint: {
-        'circle-radius': CONFIG.MAP_AIRPORT_LAYER.RADIUS_SMALL,
+        'circle-radius': colorContext?.highlightedAirportRadiusMin ?? CONFIG.MAP_AIRPORT_LAYER.RADIUS_SMALL,
         'circle-color': THEME_COLORS.accent,
         'circle-stroke-width': 1,
         'circle-stroke-color': strokeColor
@@ -160,7 +164,7 @@ export function addAirportsLayer(
       source: 'airports',
       filter: ['==', 'code', ''],
       paint: {
-        'circle-radius': CONFIG.MAP_AIRPORT_LAYER.RADIUS_MEDIUM,
+        'circle-radius': colorContext?.highlightedAirportRadiusMax ?? CONFIG.MAP_AIRPORT_LAYER.RADIUS_MEDIUM,
         'circle-color': THEME_COLORS.textBlack,
         'circle-stroke-width': 2,
         'circle-stroke-color': strokeColor
@@ -221,9 +225,9 @@ export function addAirportsLayer(
         'text-size': [
           'interpolate', ['linear'], ['zoom'],
           4, 0, 
-          5, CONFIG.MAP_AIRPORT_LAYER.TEXT_TINY,
-          8, CONFIG.MAP_AIRPORT_LAYER.TEXT_SMALL,
-          12, CONFIG.MAP_AIRPORT_LAYER.TEXT_MEDIUM
+          5, colorContext?.generalAirportLabelSizeMin ?? CONFIG.MAP_AIRPORT_LAYER.TEXT_TINY,
+          8, colorContext?.generalAirportLabelSizeMin ?? CONFIG.MAP_AIRPORT_LAYER.TEXT_SMALL,
+          12, colorContext?.generalAirportLabelSizeMax ?? CONFIG.MAP_AIRPORT_LAYER.TEXT_MEDIUM
         ],
         'text-offset': [0, 1.5],
         'text-anchor': 'top',
@@ -345,18 +349,9 @@ export function addAirportsLayer(
         console.error(`addAirportsLayer: error adding layer ${layerId}`, err);
       }
     } else {
-      // ZERO WASTE: Synchronizacja stylów tylko gdy warstwa już istnieje
-      // Skip updates if paint properties haven't changed (MapLibre optimization)
-      if (layerDef.paint) {
-        Object.entries(layerDef.paint).forEach(([key, val]) => {
-          try {
-            // map.setPaintProperty handles internal diffing, but we can avoid the call if we track state
-            map.setPaintProperty(layerId, key, val);
-          } catch (err) {
-            console.warn(`addAirportsLayer: warning updating ${key} for ${layerId}`, err);
-          }
-        });
-      }
+      // ZERO WASTE: Synchronizacja stylów tylko gdy warstwa już istnieje.
+      // USUNIĘTO: Pętlę nadpisującą paint-properties, aby uniknąć clobberingu 
+      // dynamicznych wartości z applyMapColors.
     }
   });
 

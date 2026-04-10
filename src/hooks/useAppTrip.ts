@@ -245,7 +245,7 @@ export function useAppTrip({ mapNav, selection, rightPanelRef }: UseAppTripProps
         let snapCode: string | null = null;
         for (let j = slicedLegs.length - 1; j >= 0; j--) {
           const l = slicedLegs[j];
-          if ((l as { type?: string }).type !== 'manual') { snapCode = l.toAirportCode; break; }
+          if ((l as { type?: string }).type !== 'manual') { snapCode = l.toAirportCode.toUpperCase(); break; }
         }
         
         const snapData = snapCode ? {
@@ -279,7 +279,7 @@ export function useAppTrip({ mapNav, selection, rightPanelRef }: UseAppTripProps
       for (let i = legs.length - 1; i >= 0; i--) {
         const leg = legs[i];
         if ((leg as { type?: string }).type !== 'manual' && leg.flight?.scheduled_arrival_utc) {
-          lastCode = leg.toAirportCode;
+          lastCode = leg.toAirportCode.toUpperCase();
           lastArrivalUTC = leg.flight.scheduled_arrival_utc;
           lastArrivalLocal = leg.flight.scheduled_arrival_local ?? null;
           break;

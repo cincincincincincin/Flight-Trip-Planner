@@ -1,17 +1,26 @@
-import { useCallback, useState, useRef, useEffect } from 'react';
+import { useCallback, useState, useRef, useEffect, useMemo } from 'react';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useMapStore } from '../stores/mapStore';
 import { useTripStore } from '../stores/tripStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { CONFIG } from '../constants/config';
 import { extractCoords } from '../utils/geoUtils';
-import { useAirportIndexes, useAirportsMap, useCityAirportsMap, useAirportsQuery, useCountryInfoMap, useCityInfoMap } from './queries';
-import type { SelectedItem, Flight, Airport } from '../types';
+import { useAirportIndexes, useCityAirportsMap, useCountryInfoMap, useCityInfoMap } from './queries';
+import type { SelectedItem, Flight, Airport, City } from '../types';
 import type { MapComponentRef } from '../components/MapComponent';
+
+interface UseAppSelectionProps {
+  mapNav: {
+    flyToLocation: (lon: number, lat: number, zoom: number) => void;
+    fitBoundsToAirportCodes: (codes: string[]) => void;
+    fitToCountry: (countryCode: string) => void;
+  };
+  mapRef: React.RefObject<MapComponentRef | null>;
+  handleAddToTripRef: React.MutableRefObject<((flight: Flight) => Promise<void>) | null>;
+}
 
 /**
  * Główny hook orkiestrujący logikę wyboru na mapie i w wyszukiwarce.
- * Łączy zdarzenia UI z magazynem stanu i nawigacją kamery.
  */
 export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSelectionProps) {
   const { airportFeaturesMap, namesMap, cityMap, countryMap } = useAirportIndexes();
@@ -20,26 +29,18 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
   const countryInfoMap = useCountryInfoMap();
 
   const {
-    selectedItem, setSelectedItem,
+    setSelectedItem,
     setSelectedAirportCode,
     setHighlightedAirports,
-    flightsData,
     addExplorationItem,
     clearExploration,
     explorationItems,
   } = useSelectionStore();
 
   const { setShowAirports, viewport } = useMapStore();
-  const { tripState } = useTripStore();
-  const { travelDate, language } = useSettingsStore();
+  const { travelDate } = useSettingsStore();
 
   const [pendingCountryPicker, setPendingCountryPicker] = useState<{ code: string; name: string } | null>(null);
-  const pendingCountryPickerRef = useRef<{ code: string; name: string } | null>(null);
-  /**
-   * [MUTEX SELECTION LOCK]: Ochrona przed Race Conditions w interfejsie.
-   * Używamy useRef zamiast useState dla blokady, ponieważ potrzebujemy natychmiastowej, 
-   * synchronicznej flagi, która nie wyzwala re-renderu, ale blokuje nakładające się akcje asynchroniczne.
-   */
   const selectionLockRef = useRef(false);
   const fitCameraOnFlightsRef = useRef(false);
 
@@ -50,16 +51,11 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
     }
   }, [viewport.zoom, setShowAirports, mapRef]);
 
-  // Pobiera wszystkie lotniska przypisane do miasta/lotniska
   const getExplorationAirportCodes = useCallback((type: 'airport' | 'city', code: string): string[] => {
-    if (type === 'airport') return [code];
-    return cityAirportsMap[code] || [];
+    if (type === 'airport') return [code.toUpperCase()];
+    return cityAirportsMap[code.toUpperCase()] || [];
   }, [cityAirportsMap]);
 
-  /**
-   * KLUCZOWA FUNKCJA OBSŁUGI WYBORU (Selection Controller)
-   * Implementuje mechanizm Mutex (selectionLockRef) dla eliminacji Race Conditions.
-   */
   const handleSelectItem = useCallback(async (item: SelectedItem) => {
     const sequenceId = Math.random().toString(36).substring(7);
     const showLogs = useSettingsStore.getState().showConsoleLogs;
@@ -80,11 +76,11 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
       const currentTripState = useTripStore.getState().tripState;
       const currentSelectedItem = useSelectionStore.getState().selectedItem;
 
-      // 1. Szybka akcja dodawania do podróży bezpośrednio z mapy
+      // 1. Fast Add to Trip
       if (item.type === 'airport' && item.isHighlighted && currentTripState) {
-        const currentOrigin = currentTripState.legs.length > 0 
+        const currentOrigin = (currentTripState.legs.length > 0 
           ? currentTripState.legs[currentTripState.legs.length - 1].toAirportCode 
-          : currentTripState.startAirport.code;
+          : currentTripState.startAirport.code).toUpperCase();
           
         const groupKey = `${currentOrigin}-${itemCode}`;
         const group = useSelectionStore.getState().flightsByRouteGroupMap.get(groupKey) || [];
@@ -95,104 +91,130 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
         );
 
         if (flight) {
-          if (showLogs) console.log(`%c[ACTION-SELECTION] %c[${sequenceId}] Fast Add Triggered`, 'color: #10b981; font-weight: bold', 'color: inherit');
           handleAddToTripRef.current?.(flight);
           return;
         }
       }
 
+
+
       if ('fromMap' in item) {
         fitCameraOnFlightsRef.current = !item.fromMap;
       }
 
-      // 2. TRYB EKSPLORACJI (Additive)
-      const currentExplorationItems = useSelectionStore.getState().explorationItems;
+      // 3. Exploration Item Management
+      const currentState = useSelectionStore.getState();
+      const currentExplorationItems = currentState.explorationItems;
       if (currentSelectedItem && !currentTripState && (item.type === 'airport' || item.type === 'city')) {
-        const newCodes = getExplorationAirportCodes(item.type, item.data.code);
-        const allCodes = [...new Set([...currentExplorationItems.flatMap((i: any) => i.airportCodes), ...newCodes])];
+        const itemCodeUpper = (item.data as any).code?.toUpperCase();
+        const updates: any = {
+          selectedItem: item,
+          selectedAirportCode: item.type === 'airport' ? itemCodeUpper : null
+        };
         
-        addExplorationItem({
-          type: item.type,
-          code: item.data.code,
-          name: item.data.name || item.data.code,
-          airportCodes: newCodes,
-        });
+        if (item.type === 'airport') {
+          const isAlreadyCovered = currentExplorationItems.some(existing => 
+            (existing.type === 'city' || existing.type === 'country') && existing.airportCodes.includes(itemCodeUpper)
+          );
+          
+          if (!isAlreadyCovered) {
+            const newCodes = getExplorationAirportCodes(item.type, itemCodeUpper);
+            const allCodes = [...new Set([...currentExplorationItems.flatMap((i: any) => i.airportCodes), ...newCodes])];
+            const id = `airport-${itemCodeUpper}`;
+            
+            if (!currentExplorationItems.some(i => i.id === id)) {
+              updates.explorationItems = [
+                ...currentExplorationItems,
+                { type: item.type, code: itemCodeUpper, name: (item.data as any).name || (item.data as any).code, airportCodes: newCodes, id }
+              ];
+            }
 
-        if (!item.fromMap) mapNav.fitBoundsToAirportCodes(allCodes);
-        
-        if (currentSelectedItem.type === 'country') {
-          setSelectedItem(item);
-          if (item.type === 'airport') setSelectedAirportCode(item.data.code);
+            if (!item.fromMap) mapNav.fitBoundsToAirportCodes(allCodes);
+          }
+        } else if (item.type === 'city') {
+          const newCodes = getExplorationAirportCodes(item.type, itemCodeUpper);
+          const allCodes = [...new Set([...currentExplorationItems.flatMap((i: any) => i.airportCodes), ...newCodes])];
+          const id = `city-${itemCodeUpper}`;
+          
+          if (!currentExplorationItems.some(i => i.id === id)) {
+            updates.explorationItems = [
+              ...currentExplorationItems,
+              { type: item.type, code: itemCodeUpper, name: (item.data as any).name || (item.data as any).code, airportCodes: newCodes, id }
+            ];
+          }
+
+          if (!item.fromMap) mapNav.fitBoundsToAirportCodes(allCodes);
         }
+        
+        // Atomic selection update
+        useSelectionStore.setState(updates);
         return;
       }
 
-      // 3. TRYB KRAJU
+      // 4. Country Mode
       if (item.type === 'country') {
         if (currentSelectedItem !== null && currentSelectedItem.type !== 'country') {
-          setPendingCountryPicker({ code: item.data.code, name: item.data.name });
-          if (!item.fromMap) mapNav.fitToCountry(item.data.code);
+          setPendingCountryPicker({ code: (item.data as any).code, name: (item.data as any).name });
+          if (!item.fromMap) mapNav.fitToCountry((item.data as any).code);
           return;
         }
-        setSelectedItem(item);
-        setSelectedAirportCode(null);
-        if (!item.fromMap) mapNav.fitToCountry(item.data.code);
+        useSelectionStore.setState({ selectedItem: item, selectedAirportCode: null });
+        if (!item.fromMap) mapNav.fitToCountry((item.data as any).code);
         return;
       }
 
-      // 4. TRYB STANDARDOWY
-      setSelectedItem(item);
+      // 5. Standard Mode (Atomic)
+      const baseState = useSelectionStore.getState();
+      const updates: any = { 
+        selectedItem: item, 
+        selectedAirportCode: item.type === 'airport' ? (item.data as any).code : null 
+      };
 
       if (item.type === 'airport') {
-        setSelectedAirportCode(item.data.code);
-        setHighlightedAirports([]);
-        setDisplayMode();
-        addExplorationItem({
-          type: 'airport',
-          code: item.data.code,
-          name: item.data.name || item.data.code,
-          airportCodes: [item.data.code],
-        });
-        if (item.fromMap) return;
+        updates.highlightedAirports = [];
+        const code = (item.data as any).code;
+        const id = `airport-${code}`;
+        if (!baseState.explorationItems.some(i => i.id === id)) {
+          updates.explorationItems = [
+            ...baseState.explorationItems,
+            { type: 'airport', code, name: (item.data as any).name || code, airportCodes: [code], id }
+          ];
+        }
       } else if (item.type === 'city') {
-        setSelectedAirportCode(null);
-        const cityAirportCodes = getExplorationAirportCodes('city', item.data.code);
-        addExplorationItem({
-          type: 'city',
-          code: item.data.code,
-          name: item.data.name || item.data.code,
-          airportCodes: cityAirportCodes,
-        });
+        const cityCode = (item.data as any).code;
+        const cityAirportCodes = getExplorationAirportCodes('city', cityCode);
+        const id = `city-${cityCode.toUpperCase()}`;
+        if (!baseState.explorationItems.some(i => i.id === id)) {
+          updates.explorationItems = [
+            ...baseState.explorationItems,
+            { type: 'city', code: cityCode.toUpperCase(), name: (item.data as any).name || cityCode, airportCodes: cityAirportCodes, id }
+          ];
+        }
 
         if (cityAirportCodes.length > 0) {
           mapNav.fitBoundsToAirportCodes(cityAirportCodes);
         }
-        return;
+      }
+
+      useSelectionStore.setState(updates);
+
+      if (item.type === 'airport') {
+        setDisplayMode();
       }
 
       if (item.fromMap || item.type === 'route') return;
 
-      let coords = extractCoords(item);
-
-      if (!coords && item.type === 'airport') {
-        const feat = airportFeaturesMap[item.data.code];
-        if (feat && feat.geometry.coordinates) {
-          coords = { lon: feat.geometry.coordinates[0], lat: feat.geometry.coordinates[1] };
-        }
-      }
-
+      const coords = extractCoords(item);
       if (coords) {
         mapNav.flyToLocation(coords.lon, coords.lat, CONFIG.FALLBACK_ZOOM.AIRPORT);
       }
     } finally {
-      // Krótki timeout zapobiega "szaleństwu" przy ultra-szybkich kliknięciach (debouncing sprzętowy)
       setTimeout(() => {
         selectionLockRef.current = false;
         if (showLogs) console.log(`%c[ACTION-SELECTION] %c[${sequenceId}] FINISH | Lock released`, 'color: #10b981; font-weight: bold', 'color: inherit');
       }, 50);
     }
-  }, [setDisplayMode, mapNav, travelDate, addExplorationItem, getExplorationAirportCodes, setSelectedItem, setSelectedAirportCode, setHighlightedAirports, handleAddToTripRef, airportFeaturesMap]);
-
+  }, [setDisplayMode, mapNav, addExplorationItem, getExplorationAirportCodes, setSelectedAirportCode, setHighlightedAirports, handleAddToTripRef, travelDate]);
 
   const handleSwitchToCountryView = useCallback((code: string, name: string) => {
     clearExploration();
@@ -206,8 +228,6 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
     const sequenceId = Math.random().toString(36).substring(7);
     const showLogs = useSettingsStore.getState().showConsoleLogs;
     
-    if (showLogs) console.log(`%c[ACTION-SELECTION] %c[${sequenceId}] START | Confirm Country: ${countryCode}`, 'color: #10b981; font-weight: bold', 'color: inherit');
-    
     selectionLockRef.current = true;
     try {
       const resolvedName = (countryName && countryName !== countryCode)
@@ -217,10 +237,8 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
       clearExploration();
       addExplorationItem({ type: 'country', code: countryCode, name: resolvedName, airportCodes: codes });
       
-      const firstCode = codes[0];
-      const firstFeat = airportFeaturesMap[firstCode];
-      
-      if (firstFeat) {
+      const firstCode = codes[0]?.toUpperCase();
+      if (firstCode) {
         const cityCodeMap = cityMap[firstCode];
         const countryCodeData = countryMap[firstCode];
 
@@ -245,9 +263,9 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
         if (showLogs) console.log(`%c[ACTION-SELECTION] %c[${sequenceId}] FINISH | Confirm Lock released`, 'color: #10b981; font-weight: bold', 'color: inherit');
       }, 100);
     }
-  }, [airportFeaturesMap, namesMap, cityMap, countryMap, cityInfoMap, countryInfoMap, clearExploration, addExplorationItem, setSelectedItem, mapNav]);
+  }, [namesMap, cityMap, countryMap, cityInfoMap, countryInfoMap, clearExploration, addExplorationItem, setSelectedItem, mapNav]);
 
-  return {
+  return useMemo(() => ({
     handleSelectItem,
     handleSwitchToCountryView,
     handleCountryAirportsConfirmed,
@@ -255,15 +273,10 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
     setPendingCountryPicker,
     fitCameraOnFlightsRef,
     extractCoordinates: extractCoords,
-  };
-}
-
-interface UseAppSelectionProps {
-  mapNav: {
-    flyToLocation: (lon: number, lat: number, zoom: number) => void;
-    fitBoundsToAirportCodes: (codes: string[]) => void;
-    fitToCountry: (countryCode: string) => void;
-  };
-  mapRef: React.RefObject<MapComponentRef | null>;
-  handleAddToTripRef: React.MutableRefObject<((flight: Flight) => Promise<void>) | null>;
+  }), [
+    handleSelectItem, 
+    handleSwitchToCountryView, 
+    handleCountryAirportsConfirmed, 
+    pendingCountryPicker,
+  ]);
 }

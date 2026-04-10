@@ -52,7 +52,12 @@ export const getDurationMs = (from: string | undefined, to: string | undefined):
 
 /** Zwraca datę w formacie YYYY-MM-DD w zadanej strefie czasowej. */
 export const getIsoDate = (date: Date | string, tz?: string): string => {
-  return tz ? dayjs(date).tz(tz).format('YYYY-MM-DD') : dayjs(date).format('YYYY-MM-DD');
+  if (!date) return '';
+  // [LEGACY COMPAT]: Jeśli dostajemy string bez 'Z'/'T' (z API), traktujemy go jako UTC.
+  const d = (typeof date === 'string' && !date.includes('Z') && !date.includes('T'))
+    ? dayjs.utc(date)
+    : dayjs(date);
+  return tz ? d.tz(tz).format('YYYY-MM-DD') : d.format('YYYY-MM-DD');
 };
 
 /** Zwraca dzisiejszą datę w formacie YYYY-MM-DD w zadanej strefie czasowej. */
@@ -60,7 +65,11 @@ export const getTodayInTz = (tz?: string): string => getIsoDate(new Date(), tz);
 
 /** Zwraca pełny timestamp w formacie YYYY-MM-DDTHH:mm w zadanej strefie czasowej. */
 export const getIsoDatetime = (date: Date | string, tz?: string): string => {
-  return tz ? dayjs(date).tz(tz).format('YYYY-MM-DDTHH:mm') : dayjs(date).format('YYYY-MM-DDTHH:mm');
+  if (!date) return '';
+  const d = (typeof date === 'string' && !date.includes('Z') && !date.includes('T'))
+    ? dayjs.utc(date)
+    : dayjs(date);
+  return tz ? d.tz(tz).format('YYYY-MM-DDTHH:mm') : d.format('YYYY-MM-DDTHH:mm');
 };
 
 /** Zwraca timestamp (ms) dla danej daty w konkretnej strefie czasowej. */

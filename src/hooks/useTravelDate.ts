@@ -41,9 +41,9 @@ export function useTravelDate({
   // Keep travelDateForTZRef in sync (used in closure of the resolvedTimezone effect)
   useEffect(() => { travelDateForTZRef.current = travelDate; }, [travelDate]);
 
-  // ── Main travelDate effect ─────────────────────────────────────────────────
-  // When the user manually overrides the timezone, preserve the current travelDate.
-  // Only reset when selectedItem or arrival time changes.
+  // ── Main travelDate effect ─────────────────────────────────────────────────────────
+  // Gdy użytkownik ręcznie nadpisuje strefę, zachowujemy aktualną datę.
+  // Reset tylko gdy selectedItem lub czas przylotu się zmienia (nowy kontekst eksploracji).
   useEffect(() => {
     if (!timezone) return;
     if (selectedTimezoneOverride) return;
@@ -54,40 +54,41 @@ export function useTravelDate({
       : null;
     if (key !== prevSelectedItemKeyRef.current) {
       prevSelectedItemKeyRef.current = key;
+
+      // [KLUCZOWY FIX]: Jeśli explorationItems rosło (użytkownik dodał lotnisko do eksploracji),
+      // nie resetujemy travelDate — kontekst jest ten sam, zmieniamy tylko wybrany airport.
+      // Reset robimy tylko gdy kontekst się zmienia (np. inne miasto/kraj).
+      const isAddingToExploration = explorationItems.length > prevExplorationItemsCountRef.current;
+      prevExplorationItemsCountRef.current = explorationItems.length;
+
+      if (!isAddingToExploration) {
+        if (effectiveArrivalTimeUTC) {
+          updateSettings({ travelDate: getIsoDate(new Date(effectiveArrivalTimeUTC), timezone) });
+        } else {
+          updateSettings({ travelDate: getTodayInTz(timezone) });
+        }
+      }
+
+      prevTimezoneRef.current = timezone;
+      return;
+    }
+
+    const itemsWereRemoved = explorationItems.length < prevExplorationItemsCountRef.current;
+    const timezoneChanged = timezone !== prevTimezoneRef.current;
+
+    // [LEGACY LOGIC]: Jeśli usuwamy elementy I strefa się zmienia, i byliśmy na "dziś" w starej strefie
+    // → przeskocz na "dziś" w nowej strefie.
+    if (itemsWereRemoved && timezoneChanged && prevTimezoneRef.current) {
+      const oldTzToday = getTodayInTz(prevTimezoneRef.current);
+      if (travelDate === oldTzToday) {
+        updateSettings({ travelDate: getTodayInTz(timezone) });
+      }
+    } else if (!itemsWereRemoved && timezoneChanged) {
+      // [LEGACY LOGIC]: Zmiana strefy przy dodaniu lotniska → synchronizuj datę.
       if (effectiveArrivalTimeUTC) {
         updateSettings({ travelDate: getIsoDate(new Date(effectiveArrivalTimeUTC), timezone) });
       } else {
         updateSettings({ travelDate: getTodayInTz(timezone) });
-      }
-      prevTimezoneRef.current = timezone;
-      prevExplorationItemsCountRef.current = explorationItems.length;
-      return;
-    }
-
-    const timezoneChanged = timezone !== prevTimezoneRef.current;
-
-    if (timezoneChanged && prevTimezoneRef.current) {
-      const todayInNewTZ = getTodayInTz(timezone);
-      const todayInOldTZ = getTodayInTz(prevTimezoneRef.current);
-
-      if (effectiveArrivalTimeUTC) {
-        // Priority 1: Trip Mode — always sync to arrival day in local TZ
-        const arrDay = getIsoDate(new Date(effectiveArrivalTimeUTC), timezone);
-        if (travelDate !== arrDay) {
-          console.log(`[RACE-DEBUG] {useTravelDate} -> Trip mode sync | ${travelDate} -> ${arrDay}`);
-          updateSettings({ travelDate: arrDay });
-        }
-      } else if (travelDate < todayInNewTZ) {
-        // Priority 2: Safety — never stay in a day that is already past in active TZ
-        console.log(`[RACE-DEBUG] {useTravelDate} -> Safety sync | ${travelDate} < ${todayInNewTZ}`);
-        updateSettings({ travelDate: todayInNewTZ });
-      } else if (travelDate === todayInOldTZ) {
-        // Priority 3: Continuity — if we were on "today", stay on "today" (even if it's a backward jump)
-        console.log(`[RACE-DEBUG] {useTravelDate} -> Continuity sync | ${travelDate} was today in ${prevTimezoneRef.current}`);
-        updateSettings({ travelDate: todayInNewTZ });
-      } else {
-        // Priority 4: Preserve — user-selected future date, keep as is
-        console.log(`[RACE-DEBUG] {useTravelDate} -> Preserve manual date | ${travelDate}`);
       }
     }
 

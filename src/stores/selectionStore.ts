@@ -147,23 +147,35 @@ export const useSelectionStore = create<SelectionState>((set) => ({
     // Identyfikator deterministyczny: zapobiega kolizjom (np. city-WAW vs airport-WAW)
     const id = `${item.type}-${item.code}`;
 
-    // Sprawdzanie duplikatów na podstawie stałego klucza
+    // 1. Sprawdzanie duplikatów na podstawie stałego klucza (Idempotentność)
     if (state.explorationItems.some(i => i.id === id)) {
       return state;
     }
 
+    // 2. [ZASADA HIERARCHII]: Jeśli dodajemy lotnisko, sprawdzamy czy nie jest już objęte kafelkiem Miasta/Kraju.
+    // "Jeżeli zostało dodane miasto, a potem lotnisko z tego miasta, to nic nie robimy"
+    if (item.type === 'airport') {
+      const code = item.code.toUpperCase();
+      const isAlreadyCovered = state.explorationItems.some(existing => 
+        (existing.type === 'city' || existing.type === 'country') && existing.airportCodes.includes(code)
+      );
+      if (isAlreadyCovered) return state;
+    }
+
     const newItem: ExplorationItem = { ...item, id };
     
-    // Konsolidacja lotnisk: jeśli nowe lotniska (np. z miasta) są już obecne w innych
-    // kafelkach, usuwamy je stamtąd, aby zapobiec duplikacji danych na UI.
-    let items = state.explorationItems.filter(i => i.id !== id);
+    // Funkcja pomocnicza do zliczania unikalnych lotnisk w kolekcjach
     const getUniqueAirportCount = (itms: ExplorationItem[]) => 
       new Set(itms.flatMap(i => i.airportCodes)).size;
 
-    const newCodes = new Set(newItem.airportCodes);
+    // 3. Konsolidacja lotnisk: jeśli nowy kafelek (np. Miasto) zawiera lotniska, które są już
+    // wyświetlane jako osobne kafelki, usuwamy te mniejsze kafelki (Up-promotion).
+    let items = state.explorationItems.filter(i => i.id !== id);
+    const newCodes = new Set(newItem.airportCodes.map(c => c.toUpperCase()));
+    
     items = items.map(i => ({ 
       ...i, 
-      airportCodes: i.airportCodes.filter(c => !newCodes.has(c)) 
+      airportCodes: i.airportCodes.filter(c => !newCodes.has(c.toUpperCase())) 
     })).filter(i => i.airportCodes.length > 0);
 
     // Dynamiczne zwalnianie miejsca (FIFO).

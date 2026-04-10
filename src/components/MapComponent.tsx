@@ -172,38 +172,25 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
 
   useMapHover(hoverRefs, mapLoaded, showAirports);
   const colors = useMapColors();
-  // --- OPTYMALIZACJA WEBGL: Throttling Kolorów ---
-  const lastColorUpdateTimeRef = useRef<number>(0);
-  const colorUpdateRequestedRef = useRef<boolean>(false);
 
-  const throttledApplyColors = useCallback(() => {
-    const now = performance.now();
-    const wait = 32; // Inżynierski kompromis: ~30 FPS (płynna zmiana kolorów bez thrashingu GPU)
-    
-    if (now - lastColorUpdateTimeRef.current >= wait) {
-      if (map.current && mapLoaded) {
-        const context = {
-          selectedAirportCodes: selectedAirportCodesRef.current,
-          tripVisibleAirportCodes: tripVisibleAirportCodesRef.current,
-          highlightedAirports: highlightedAirportsRef.current,
-          manualTransferAirportCodes: manualTransferAirportCodes,
-          explorationAirportCodes: explorationAirportCodesRef.current,
-          selectedAirportCode: selectedAirportCode,
-          highlightedLabelCodes: highlightedLabelCodesRef.current,
-        };
-        applyMapColors(map.current, context);
-      }
-      lastColorUpdateTimeRef.current = now;
-      colorUpdateRequestedRef.current = false;
-    } else if (!colorUpdateRequestedRef.current) {
-      colorUpdateRequestedRef.current = true;
-      setTimeout(throttledApplyColors, wait - (now - lastColorUpdateTimeRef.current));
+  const handleApplyColors = useCallback(() => {
+    if (map.current && mapLoaded) {
+      const context = {
+        selectedAirportCodes: selectedAirportCodesRef.current,
+        tripVisibleAirportCodes: tripVisibleAirportCodesRef.current,
+        highlightedAirports: highlightedAirportsRef.current,
+        manualTransferAirportCodes: manualTransferAirportCodes,
+        explorationAirportCodes: explorationAirportCodesRef.current,
+        selectedAirportCode: selectedAirportCode,
+        highlightedLabelCodes: highlightedLabelCodesRef.current,
+      };
+      applyMapColors(map.current, context);
     }
-  }, [mapLoaded, selectedAirportCode, manualTransferAirportCodes, mapStyle]);
+  }, [mapLoaded, selectedAirportCode, manualTransferAirportCodes]);
 
   useEffect(() => {
-    if (mapLoaded) throttledApplyColors();
-  }, [mapLoaded, colors, selectedAirportCode, manualTransferAirportCodes, mapStyle, throttledApplyColors]);
+    if (mapLoaded) handleApplyColors();
+  }, [mapLoaded, colors, selectedAirportCode, manualTransferAirportCodes, mapStyle, handleApplyColors]);
 
   useRouteAnimation({
     map, mapLoaded, highlightedAirports, coordsMap,
@@ -341,7 +328,8 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
         mapStyle, 
         tripState?.startAirport?.code ? [tripState.startAirport.code] : [],
         language,
-        (m as any)._sessionId
+        (m as any)._sessionId,
+        useColorStore.getState()
       );
       console.log(`[RACE-DEBUG] {MapComponent} -> addLayers SUCCESS [sess:${(m as any)._sessionId}] | Total layers: ${m.getStyle().layers?.length}`);
     } catch (err) {
@@ -502,7 +490,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     (m as any)._currentStyleUrl = rawUrl;
     
     const isArcGIS = mapStyle.startsWith('ArcGIS_');
-    const styleWithBuster = typeof rawUrl === 'string' ? `${rawUrl}?t=${Date.now()}` : rawUrl;
+    const styleWithBuster = rawUrl; // [FIX]: Removed ?t=Date.now() which caused incessant resets
 
     console.log(`[RACE-DEBUG] {MapComponent} -> setStyle START [sess:${(m as any)._sessionId}] | Style: ${mapStyle}, Diff: ${!isArcGIS}`);
 

@@ -30,7 +30,21 @@ export interface ColorApplierContext {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyExpr = any;
+
+/**
+ * Injects or overrides the alpha channel in an rgb/rgba color string.
+ * Prevents "rgbaa" errors by using a robust regex.
+ */
+function injectAlpha(color: string, opacity: number): string {
+  if (!color) return color;
+  // Match rgb(r, g, b) or rgba(r, g, b, a)
+  // [1,2,3] = r,g,b
+  const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d\.]+)?\)/);
+  if (!match) return color;
+  return `rgba(${match[1]}, ${match[2]}, ${match[3]}, ${opacity})`;
+}
 
 export function applyMapColors(map: maplibregl.Map, ctx: ColorApplierContext): void {
   const { startPoints: sp, generalAirport, destinationAirport, tripAirport,
@@ -75,9 +89,20 @@ export function applyMapColors(map: maplibregl.Map, ctx: ColorApplierContext): v
   if (map.getLayer('airports-trip'))
     map.setPaintProperty('airports-trip', 'circle-color', tripAirport);
   if (map.getLayer('airports-circles'))
-    map.setPaintProperty('airports-circles', 'circle-color', generalAirport);
+    map.setPaintProperty('airports-circles', 'circle-color', [
+      'case',
+      ['coalesce', ['get', 'is_major'], false], generalAirport,
+      injectAlpha(generalAirport, 0.6) // Fallback na opacity 0.6 dla mniejszych
+    ]);
+  
   if (map.getLayer('airports-route-hover'))
     map.setPaintProperty('airports-route-hover', 'circle-color', destinationAirportHover);
+
+  // --- Single Hover Feedback (Zero-Waste UI) ---
+  if (map.getLayer('airports-hover-single-circle'))
+    map.setPaintProperty('airports-hover-single-circle', 'circle-color', destinationAirportHover);
+  if (map.getLayer('airports-hover-single-route'))
+    map.setPaintProperty('airports-hover-single-route', 'circle-color', sp[0]?.airportHover ?? THEME_COLORS.cGold);
 
   // --- Dynamic Stroke Alignment (Zero-Waste Connectivity) ---
   const isDark = isDarkStyle(mapStyle);
@@ -85,7 +110,8 @@ export function applyMapColors(map: maplibregl.Map, ctx: ColorApplierContext): v
   
   const circleLayers = [
     'airports-circles', 'airports-trip', 'airports-highlighted', 
-    'airports-hover', 'airports-selected', 'airports-route-hover'
+    'airports-selected', 'airports-route-hover',
+    'airports-hover-single-circle', 'airports-hover-single-route'
   ];
   circleLayers.forEach(id => {
     if (map.getLayer(id)) {
@@ -99,7 +125,7 @@ export function applyMapColors(map: maplibregl.Map, ctx: ColorApplierContext): v
   // --- Kolory stanu Hover (Interakcja) ---
   const startHoverExpr: AnyExpr = sacMulti.length > 1
     ? ['match', ['get', 'code'],
-        ...sacMulti.flatMap((code, i) => [code, sp[i]?.airportHover ?? THEME_COLORS.textBlack]),
+        ...sacMulti.flatMap((code, i) => [code.toUpperCase(), sp[i]?.airportHover ?? THEME_COLORS.textBlack]),
         sp[0]?.airportHover ?? THEME_COLORS.textBlack,
       ]
     : (sp[0]?.airportHover ?? THEME_COLORS.textBlack);
@@ -107,7 +133,7 @@ export function applyMapColors(map: maplibregl.Map, ctx: ColorApplierContext): v
   const destinationHoverCodes = [...new Set([
     ...ha,
     ...ctx.highlightedLabelCodes,
-  ])].filter(c => !startCodes.includes(c) && !tripCodes.includes(c));
+  ])].map(c => c.toUpperCase()).filter(c => !startCodes.includes(c) && !tripCodes.includes(c));
   
   if (map.getLayer('airports-hover'))
     map.setPaintProperty('airports-hover', 'circle-color', [

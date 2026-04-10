@@ -174,7 +174,7 @@
 /* ── Panel content ───────────────────────────────────────────── */
 .panel-content {
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden; /* ULTRA-LEAN: Let children handle scrolling (like Virtuoso) so flex: 1 expands correctly. */
   overflow-x: hidden;
   display: flex;
   flex-direction: column;

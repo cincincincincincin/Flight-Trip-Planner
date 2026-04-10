@@ -174,7 +174,8 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
 
     const feature = features[0];
     const featureId = feature.id;
-    const destCode = (feature.properties as { destCode?: string })?.destCode ?? '';
+    const destCodeRaw = (feature.properties as { destCode?: string })?.destCode ?? '';
+    const destCode = destCodeRaw.toUpperCase();
     if (featureId == null) {
       clearRouteHover();
       return;
@@ -197,12 +198,12 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
     const manualCodes = manualTransferAirportCodesRef.current ?? [];
 
     const allHighlighted = [...new Set([
-      ...ha,
-      ...tvac,
-      ...sacMulti,
-      ...explorationCodes,
-      ...(sac ? [sac] : []),
-      ...manualCodes,
+      ...ha.map(c => c.toUpperCase()),
+      ...tvac.map(c => c.toUpperCase()),
+      ...sacMulti.map(c => c.toUpperCase()),
+      ...explorationCodes.map(c => c.toUpperCase()),
+      ...(sac ? [sac.toUpperCase()] : []),
+      ...manualCodes.map(c => c.toUpperCase()),
     ])];
 
     const filterCodes = allHighlighted.filter(c => c !== destCode);
@@ -234,11 +235,11 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
     }
 
     const srcIdx = (feature.properties as { srcIdx?: number })?.srcIdx ?? 0;
-    const startCodes = selectedAirportCodesRef.current.length > 0
+    const startCodes = (selectedAirportCodesRef.current.length > 0
       ? selectedAirportCodesRef.current
       : explorationAirportCodesRef.current.length > 0
         ? explorationAirportCodesRef.current
-        : (selectedAirportCodeRef.current ? [selectedAirportCodeRef.current] : []);
+        : (selectedAirportCodeRef.current ? [selectedAirportCodeRef.current] : [])).map(c => c.toUpperCase());
     const srcCode = startCodes[srcIdx] ?? startCodes[0] ?? '';
 
     // INŻYNIERSKA OPTYMALIZACJA (O(1)): Pobieramy grupę lotów bezpośrednio z indeksu.
