@@ -1,19 +1,19 @@
 /**
- * HOOK INTERAKCJI MAPY (useMapHover.ts)
- * Zarządza logiką hover, selekcji oraz dynamicznego filtrowania warstw etykiet.
- * Wykorzystuje Spatial Grid Indexing (O(1)) dla zapewnienia wysokiego FPS przy 3000+ lotniskach.
+ * HOOK INTERAKCJI MAPY (useMapHover.ts - WERSJA ATOMYCZNA v9.2)
+ * 
+ * Implementuje logikę "Snajperskiej Precyzji" - hit-testing idealnie zgrany z rozmiarem GPU.
+ * Przygotowuje dane (Feature) dla Heartbeata w MapComponent.
  */
+
 import { useEffect } from 'react';
 import maplibregl from 'maplibre-gl';
-import type { SelectedItem, AirportFeatureProps, Flight } from '../../types';
+import type { SelectedItem, AirportFeatureProps } from '../../types';
 import { useColorStore } from '../../stores/colorStore';
-import { useFilterStore } from '../../stores/filterStore';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { getLocalizedProp } from '../../utils/i18n';
-import { CONFIG } from '../../constants/config';
-import { applyMapAirportFilters } from './filterApplier';
-import { spatialIndex } from '../../utils/spatialIndex';
 import { useTripStore } from '../../stores/tripStore';
+import { CONFIG } from '../../constants/config';
+import { spatialIndex } from '../../utils/spatialIndex';
+import { getLocalizedProp } from '../../utils/i18n';
 
 interface AirportFeature {
   properties: AirportFeatureProps;
@@ -23,6 +23,11 @@ interface AirportFeature {
 interface AirportsGeoJSON {
   features: AirportFeature[];
 }
+
+const n = (v: any, fallback: number): number => {
+  const num = Number(v);
+  return isNaN(num) ? fallback : num;
+};
 
 export interface MapHoverRefs {
   map: React.MutableRefObject<maplibregl.Map | null>;
@@ -46,11 +51,9 @@ export interface MapHoverRefs {
   tripVisibleAirportCodesRef: React.MutableRefObject<string[] | null>;
   airportsDataRef: React.MutableRefObject<AirportsGeoJSON | undefined>;
   onSelectItemRef: React.MutableRefObject<(item: SelectedItem) => void>;
-  flightsByRouteMapRef: React.MutableRefObject<Map<string, Flight>>;
-  selectedAirportCodeRef: React.MutableRefObject<string | null>;
-  tripRoutesRef: React.MutableRefObject<any[]>;
-  tripStateRef: React.MutableRefObject<any>;
-  coordsMapRef: React.MutableRefObject<Record<string, [number, number]>>;
+  hoverFeatureDataRef: React.MutableRefObject<any | null>;
+  applyColors: (mode: 'all' | 'hover-only') => void;
+  applyHoverRef: React.MutableRefObject<((code: string | null) => void) | null>;
 }
 
 export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports: boolean): void {
@@ -60,244 +63,209 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
     if (!mapLoaded || !refs.map.current) return;
     const m = refs.map.current;
     const canvas = m.getCanvas();
-    const HOVER_SAMPLE_EVERY = CONFIG.HOVER_SAMPLE_EVERY;
-    const LABEL_CLEAR_RADIUS = CONFIG.LABEL_CLEAR_RADIUS;
 
-    const getNearbyAirportCodes = (point: { x: number; y: number }) => {
-      // Używamy profesjonalnego indeksu przestrzennego RBush (O(log N))
-      // Zapewnia to stałą wydajność niezależnie od gęstości lotnisk.
-      const results = spatialIndex.searchRadius(point.x, point.y, LABEL_CLEAR_RADIUS);
-      return results.map(r => r.code);
-    };
+    // 1. KESZOWANIE CECH (O(1))
+    const airportFeaturesMap = new Map<string, AirportFeature>();
+    if (refs.airportsDataRef.current) {
+      refs.airportsDataRef.current.features.forEach(f => {
+        airportFeaturesMap.set(f.properties.code.toUpperCase(), f);
+      });
+    }
 
-    const updateHoverSource = (code: string | null) => {
-      const hoverSource = m.getSource('airports-hover-single') as maplibregl.GeoJSONSource | undefined;
-      if (!hoverSource) return;
+    /**
+     * SNAJPERSKI RADIUS (v11.6)
+     * Oblicza promień klikalności na podstawie zooma i typu punktu.
+     * @param isHover - jeśli true, zwraca większy promień powiększonej kropki GPU.
+     */
+    const getVisualRadius = (code: string, zoom: number, cS: any, isHover = false): number => {
+      const isSelected = refs.selectedAirportCodesRef.current.includes(code);
+      const isDest = refs.highlightedAirportsRef.current.includes(code);
+      const tvac = refs.tripVisibleAirportCodesRef.current || [];
+      const isTrip = tvac.includes(code);
 
-      if (code && refs.airportsDataRef.current) {
-        const feat = refs.airportsDataRef.current.features.find(f => f.properties.code === code);
-        if (feat) {
-          hoverSource.setData({
-            type: 'FeatureCollection',
-            features: [JSON.parse(JSON.stringify(feat))]
-          });
-          if (canvas) canvas.style.cursor = 'pointer';
-          return;
-        }
-      }
-      hoverSource.setData({ type: 'FeatureCollection', features: [] });
-      if (canvas) canvas.style.cursor = '';
-    };
+      const zMin = n(cS.zoomRangeMin, 1.3);
+      const zMax = n(cS.zoomRangeMax, 12);
+      const t = Math.max(0, Math.min(1, (zoom - zMin) / (zMax - zMin)));
 
-    const applyHover = (code: string | null, point?: { x: number; y: number }, isMoving = false) => {
-      const sameCode = code === refs.hoveredAirportCodeRef.current;
+      // Wyznaczamy progi na podstawie tego, czy obiekt jest "Ważny"
+      const isHigh = isSelected || isDest || isTrip;
       
-      // Zero-Waste: Update the high-performance overlay immediately on every valid move
-      if (!sameCode) {
-        refs.hoveredAirportCodeRef.current = code;
-        updateHoverSource(code);
+      let minR, maxR;
+      if (isHover) {
+        // Promień HOVER (Powiększony)
+        minR = isHigh ? n(cS.highlightedAirportHoverRadiusMin, 10) : n(cS.generalAirportHoverRadiusMin, 6);
+        maxR = isHigh ? n(cS.highlightedAirportHoverRadiusMax, 22) : n(cS.generalAirportHoverRadiusMax, 14);
+      } else {
+        // Promień NORMALNY
+        minR = isHigh ? n(cS.highlightedAirportRadiusMin, 6) : n(cS.generalAirportRadiusMin, 2);
+        maxR = isHigh ? n(cS.highlightedAirportRadiusMax, 16) : n(cS.generalAirportRadiusMax, 8);
       }
 
-      // Expensive Silence Zone: Only re-filter the global labels when the cursor stops
-      // or when explicitly forced (e.g. leaving the airport).
-      if (isMoving && code !== null) {
-        return; 
-      }
-
-      const prevRouteId = refs.hoveredRouteId.current;
-      if (code !== null && prevRouteId != null) {
-        m.setFeatureState({ source: 'selected-routes', id: prevRouteId }, { hover: false });
-        refs.hoveredRouteId.current = null;
-      }
-
-      const isFocused =
-        code !== null &&
-        (refs.highlightedAirportsRef.current.includes(code) ||
-          refs.selectedAirportCodesRef.current.includes(code) ||
-          refs.explorationAirportCodesRef.current.includes(code) ||
-          (refs.tripVisibleAirportCodesRef.current?.includes(code) ?? false));
-
-      const cityKey = code ? refs.airportCityKeyRef.current[code] : null;
-      const cityRep = cityKey ? refs.cityLabelCodeByCityRef.current[cityKey] : null;
-      const nearbyAirports = point ? getNearbyAirportCodes(point) : [];
-      const nearbyCityReps: string[] = [];
-      for (const apCode of nearbyAirports) {
-        const apCity = refs.airportCityKeyRef.current[apCode];
-        const rep = apCity ? refs.cityLabelCodeByCityRef.current[apCity] : null;
-        if (rep) nearbyCityReps.push(rep);
-      }
-      const nearby = [...new Set([...nearbyAirports, ...nearbyCityReps])].filter(c => c !== code);
-      const excludeCodes = code ? [code, ...(cityRep ? [cityRep] : []), ...nearby] : nearby;
-
-      const currentManualCodes = useTripStore.getState().manualTransferAirportCodes;
-      const isManualTransferActive = refs.tripVisibleAirportCodesRef.current && refs.tripVisibleAirportCodesRef.current.length > 0;
-      const ghostCodes = (isManualTransferActive && code && !currentManualCodes.includes(code))
-        ? [...currentManualCodes, code]
-        : currentManualCodes;
-
-      applyMapAirportFilters(
-        m,
-        {
-          tripVisibleAirportCodes: refs.tripVisibleAirportCodesRef.current,
-          highlightedAirports: refs.highlightedAirportsRef.current,
-          selectedAirportCode: refs.selectedAirportCodeRef.current,
-          selectedAirportCodes: refs.selectedAirportCodesRef.current,
-          explorationAirportCodes: refs.explorationAirportCodesRef.current,
-          hoveredAirportCode: code,
-          cityLabelCodes: refs.cityLabelCodesRef.current,
-          airportCityKeyMap: refs.airportCityKeyRef.current,
-          cityLabelCodeByCity: refs.cityLabelCodeByCityRef.current,
-          manualTransferAirportCodes: ghostCodes, 
-          isRouteHovered: refs.isRouteHoveredRef.current,
-          tripRoutes: refs.tripRoutesRef.current,
-          tripState: refs.tripStateRef.current,
-          coordsMap: refs.coordsMapRef.current,
-          excludeCodes,
-          isHoverFocused: isFocused,
-        },
-        {
-          highlightedLabelCodesRef: refs.highlightedLabelCodesRef,
-          highlightedCityLabelCodesRef: refs.highlightedCityLabelCodesRef,
-        }
-      );
+      return minR + t * (maxR - minR);
     };
 
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!refs.map.current) return;
+    const applyHover = (code: string | null) => {
+      const m = refs.map.current;
+      if (!m || !(m as any).getStyle()) return;
+
+      if (code === null) {
+        refs.hoveredAirportCodeRef.current = null;
+        refs.hoverFeatureDataRef.current = null;
+        if (canvas) canvas.style.cursor = '';
+        
+        const s = m.getSource('airports-hover-single') as maplibregl.GeoJSONSource;
+        if (s) s.setData({ type: 'FeatureCollection', features: [] });
+        return;
+      }
+
+      refs.hoveredAirportCodeRef.current = code;
+      const feat = airportFeaturesMap.get(code.toUpperCase());
+      if (feat) {
+        const hoverFeature = JSON.parse(JSON.stringify(feat));
+        const cS = useColorStore.getState();
+
+        // Wyznaczanie typu dla kolorów (Priorytety)
+        let type: 'selected' | 'destination' | 'trip' | 'general' = 'general';
+        const sac = refs.selectedAirportCodesRef.current || [];
+        const ha = refs.highlightedAirportsRef.current || [];
+        const tvac = refs.tripVisibleAirportCodesRef.current || [];
+
+        if (sac.includes(code)) type = 'selected';
+        else if (tvac.includes(code)) type = 'trip';
+        else if (ha.includes(code)) type = 'destination';
+
+        const isHigh = type !== 'general';
+        
+        // Ustawianie parametrów dynamicznych w Feature (dla GPU)
+        hoverFeature.properties.h_r_min = isHigh ? cS.highlightedAirportHoverRadiusMin : cS.generalAirportHoverRadiusMin;
+        hoverFeature.properties.h_r_max = isHigh ? cS.highlightedAirportHoverRadiusMax : cS.generalAirportHoverRadiusMax;
+        hoverFeature.properties.h_f_min = isHigh ? cS.highlightedLabelHoverSizeMin : cS.generalLabelHoverSizeMin;
+        hoverFeature.properties.h_f_max = isHigh ? cS.highlightedLabelHoverSizeMax : cS.generalLabelHoverSizeMax;
+
+        let color = cS.generalAirportHover;
+        let textColor = cS.generalLabelHoverColor;
+
+        if (type === 'selected') {
+          const idx = sac.indexOf(code);
+          color = cS.startPoints[idx === -1 ? 0 : idx]?.airportHover || '#2563eb';
+          textColor = cS.startPoints[idx === -1 ? 0 : idx]?.labelHover || '#ffffff';
+        } else if (type === 'destination') {
+          color = cS.destinationAirportHover;
+          textColor = cS.destinationLabelHoverColor;
+        } else if (type === 'trip') {
+          color = cS.tripAirportHover;
+          textColor = cS.tripLabelHoverColor;
+        }
+
+        hoverFeature.properties.h_color = color;
+        hoverFeature.properties.h_text_color = textColor;
+        hoverFeature.properties.h_type = type;
+
+        const pad = 4;
+        hoverFeature.properties.h_off_n = [0, (n(hoverFeature.properties.h_r_min, 6) + pad) / (n(hoverFeature.properties.h_f_min, 11) || 11)];
+        hoverFeature.properties.h_off_f = [0, (n(hoverFeature.properties.h_r_max, 10) + pad) / (n(hoverFeature.properties.h_f_max, 13) || 13)];
+
+        const data = { type: 'FeatureCollection', features: [hoverFeature] };
+        refs.hoverFeatureDataRef.current = data;
+        if (canvas) canvas.style.cursor = 'pointer';
+
+        const s = m.getSource('airports-hover-single') as maplibregl.GeoJSONSource;
+        if (s) s.setData(data as any);
+      }
+    };
+
+    refs.applyHoverRef.current = applyHover;
+
+    const handleMouseMove = (e: MouseEvent | { clientX: number, clientY: number }) => {
+      if (!showAirports || !spatialIndex) return;
+      if (Date.now() < refs.hoverLockUntilRef.current) return;
+
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
 
-      let code: string | null = null;
-      if (showAirports) {
-        const THRESHOLD = CONFIG.HOVER_RADIUS_FALLBACK;
-        // Błyskawiczne wyszukiwanie w R-Tree (Spatial Engine)
-        const results = spatialIndex.searchRadius(x, y, THRESHOLD);
-        if (results.length > 0) {
-          // Pobierz najbliższe lotnisko z wyników
-          results.sort((a, b) => a.distance - b.distance);
-          code = results[0].code;
-        }
+      const zoom = m.getZoom();
+      const cS = useColorStore.getState();
 
-        if (code !== null) {
-          refs.hoverLockUntilRef.current = Date.now() + CONFIG.HOVER_LOCK_DURATION_MS;
-          const tripCodes = refs.tripVisibleAirportCodesRef.current;
-          const hlCodes = refs.highlightedAirportsRef.current;
-          if (tripCodes && tripCodes.length > 0) {
-            const isTripPart = tripCodes.includes(code);
-            const isHighlighted = hlCodes.includes(code);
-            if (!isTripPart && !isHighlighted) code = null;
+      // 1. ZASADA HISTEREZY (v11.6): Najpierw sprawdzamy, czy wciąż jesteśmy nad AKTUALNIE podświetlonym punktem
+      const currentHovered = refs.hoveredAirportCodeRef.current;
+      if (currentHovered) {
+        const dist = spatialIndex.getDistance(currentHovered, x, y);
+        const stickyRadius = getVisualRadius(currentHovered, zoom, cS, true);
+        if (dist <= stickyRadius) {
+          // Jesteśmy wciąż wewnątrz powiększonej kropki GPU -> Zostajemy tutaj!
+          if (canvas) canvas.style.cursor = 'pointer';
+          return;
+        }
+      }
+
+      // 2. NORMALNY SKAN (Broad search)
+      const SCAN_DIST = 35; // Zwiększony zasięg dla ogólnego skanu
+      const candidates = spatialIndex.searchRadius(x, y, SCAN_DIST);
+      
+      let bestCode: string | null = null;
+      let minDistance = Infinity;
+      let highestPriority = -1;
+
+      for (const cand of candidates) {
+        const visualR = getVisualRadius(cand.code, zoom, cS, false);
+        const HIT_MARGIN = 2; // Mały margines błędu dla normalnych kropek
+        
+        if (cand.distance <= visualR + HIT_MARGIN) {
+          // Priorytetyzacja (hierarchia)
+          let priority = 0; // general
+          if (refs.selectedAirportCodesRef.current.includes(cand.code)) priority = 3;
+          else if (refs.highlightedAirportsRef.current.includes(cand.code)) priority = 2;
+          else if (refs.tripVisibleAirportCodesRef.current?.includes(cand.code)) priority = 1;
+
+          if (priority > highestPriority) {
+            highestPriority = priority;
+            bestCode = cand.code;
+            minDistance = cand.distance;
+          } else if (priority === highestPriority && cand.distance < minDistance) {
+            bestCode = cand.code;
+            minDistance = cand.distance;
           }
         }
       }
 
-      if (refs.hoveredAirportCodeRef.current && (!code || code === refs.hoveredAirportCodeRef.current)) {
-        const {
-          highlightedAirportHoverRadiusMin,
-          highlightedAirportHoverRadiusMax,
-          generalAirportHoverRadiusMin,
-          generalAirportHoverRadiusMax,
-          zoomRangeMin,
-          zoomRangeMax,
-        } = useColorStore.getState();
-        const zMin = Math.min(zoomRangeMin, zoomRangeMax);
-        const zMax = Math.max(zoomRangeMin, zoomRangeMax);
-        const z = m.getZoom();
-        const interp = (min: number, max: number) => {
-          if (zMin === zMax) return max;
-          const clamped = Math.min(Math.max(z, zMin), zMax);
-          const t = (clamped - zMin) / (zMax - zMin);
-          return min + (max - min) * t;
-        };
-        const keepRadius = Math.max(
-          CONFIG.HOVER_RADIUS_FALLBACK,
-          interp(highlightedAirportHoverRadiusMin, highlightedAirportHoverRadiusMax),
-          interp(generalAirportHoverRadiusMin, generalAirportHoverRadiusMax),
-        ) + 6;
-        const keepRadiusSq = keepRadius * keepRadius;
-        const hoveredCode = refs.hoveredAirportCodeRef.current;
-        const hoveredPoint = refs.projectedAirportsRef.current.find(ap => ap.code === hoveredCode);
-        if (hoveredPoint) {
-          const dx = hoveredPoint.x - x;
-          const dy = hoveredPoint.y - y;
-          if (dx * dx + dy * dy <= keepRadiusSq) {
-            code = hoveredCode;
-            refs.hoverLockUntilRef.current = Date.now() + CONFIG.HOVER_LOCK_EXTENSION;
-          }
-        }
+      if (bestCode !== refs.lastDetectedCodeRef.current) {
+        refs.lastDetectedCodeRef.current = bestCode;
+        applyHover(bestCode);
+        refs.applyColors('all');
       }
-
-      if (!code && refs.hoveredAirportCodeRef.current && Date.now() < refs.hoverLockUntilRef.current) {
-        code = refs.hoveredAirportCodeRef.current;
-      }
-
-      refs.lastDetectedCodeRef.current = code;
-
-      if (code === null) {
-        if (!refs.isRouteHoveredRef.current) {
-          refs.hoverSampleCountRef.current = 0;
-          if (refs.hoverClearTimerRef.current === null) {
-            refs.hoverClearTimerRef.current = setTimeout(() => {
-              refs.hoverClearTimerRef.current = null;
-              applyHover(null);
-            }, CONFIG.HOVER_CLEAR_DELAY_MS);
-          }
-        }
-      } else if (code !== refs.hoveredAirportCodeRef.current) {
-        if (refs.hoverClearTimerRef.current !== null) {
-          clearTimeout(refs.hoverClearTimerRef.current);
-          refs.hoverClearTimerRef.current = null;
-        }
-        refs.hoverSampleCountRef.current += 1;
-        if (refs.hoverSampleCountRef.current >= HOVER_SAMPLE_EVERY) {
-          refs.hoverSampleCountRef.current = 0;
-          applyHover(code, { x, y }, true);
-        }
-      } else if (refs.hoverClearTimerRef.current !== null) {
-        clearTimeout(refs.hoverClearTimerRef.current);
-        refs.hoverClearTimerRef.current = null;
-      }
-
-      if (refs.mouseStopTimerRef.current !== null) clearTimeout(refs.mouseStopTimerRef.current);
-      refs.mouseStopTimerRef.current = setTimeout(() => {
-        refs.mouseStopTimerRef.current = null;
-        refs.hoverSampleCountRef.current = 0;
-        if (refs.hoverClearTimerRef.current !== null) {
-          clearTimeout(refs.hoverClearTimerRef.current);
-          refs.hoverClearTimerRef.current = null;
-        }
-        applyHover(refs.lastDetectedCodeRef.current, { x, y });
-      }, CONFIG.HOVER_STOP_DELAY_MS);
     };
 
-    const handleMouseLeave = () => {
-      refs.lastDetectedCodeRef.current = null;
-      refs.hoverSampleCountRef.current = 0;
-      if (refs.mouseStopTimerRef.current !== null) {
-        clearTimeout(refs.mouseStopTimerRef.current);
-        refs.mouseStopTimerRef.current = null;
-      }
-      if (refs.hoverClearTimerRef.current !== null) {
-        clearTimeout(refs.hoverClearTimerRef.current);
-        refs.hoverClearTimerRef.current = null;
-      }
+    // 4. TRANSFORM LOCK (v11.10)
+    const onMoveStart = () => {
+      refs.hoverLockUntilRef.current = 9999999999999; // LOCK
       applyHover(null);
+      refs.applyColors('all');
     };
 
-    const handleClick = (_e: MouseEvent) => {
-      if (!refs.airportsDataRef.current || !refs.map.current) return;
-      const code = refs.hoveredAirportCodeRef.current;
-      if (!code) return;
-      const feat = refs.airportsDataRef.current.features.find(f => f.properties.code === code);
-      if (!feat) return;
-      const isTripAirport = (refs.tripVisibleAirportCodesRef.current ?? []).includes(code);
-      if (isTripAirport) return;
-      const inTripMode = refs.tripVisibleAirportCodesRef.current && refs.tripVisibleAirportCodesRef.current.length > 0;
-      if (inTripMode) {
-        useFilterStore.getState().setDestinationFilter({ airports: [code], cities: [], countries: [] });
-        return;
+    const onMoveEnd = () => {
+      refs.hoverLockUntilRef.current = 0; // UNLOCK
+      // Trigger scan after movement stops
+      const lastPos = (m as any)._mousePos;
+      if (lastPos) {
+         handleMouseMove({ clientX: lastPos.x, clientY: lastPos.y });
       }
-      const isHighlighted = refs.highlightedAirportsRef.current.includes(code);
+    };
+
+    m.on('movestart', onMoveStart);
+    m.on('moveend', onMoveEnd);
+
+    window.addEventListener('mousemove', handleMouseMove);
+    const handleClick = (_e: MouseEvent) => {
+      const code = refs.hoveredAirportCodeRef.current;
+      if (!code || !refs.airportsDataRef.current) return;
+
+      const feat = airportFeaturesMap.get(code.toUpperCase());
+      if (!feat) return;
+
+      const isTrip = (refs.tripVisibleAirportCodesRef.current || []).includes(code);
+      if (isTrip) return;
+
       const data = {
         code: feat.properties.code,
         name: getLocalizedProp(feat.properties, 'name', language),
@@ -308,19 +276,23 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
         time_zone: feat.properties.time_zone || null,
         coordinates: { lon: feat.geometry.coordinates[0], lat: feat.geometry.coordinates[1] },
       };
-      refs.onSelectItemRef.current?.({ type: 'airport', data: data as any, isHighlighted, fromMap: true });
+
+      refs.onSelectItemRef.current({
+        type: 'airport',
+        data: data as any,
+        isHighlighted: refs.highlightedAirportsRef.current.includes(code),
+        fromMap: true
+      });
     };
 
     canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('mouseleave', handleMouseLeave);
     canvas.addEventListener('click', handleClick);
-
     return () => {
+      m.off('movestart', onMoveStart);
+      m.off('moveend', onMoveEnd);
+      window.removeEventListener('mousemove', handleMouseMove);
       canvas.removeEventListener('mousemove', handleMouseMove);
-      canvas.removeEventListener('mouseleave', handleMouseLeave);
       canvas.removeEventListener('click', handleClick);
-      if (refs.mouseStopTimerRef.current !== null) clearTimeout(refs.mouseStopTimerRef.current);
-      if (refs.hoverClearTimerRef.current !== null) clearTimeout(refs.hoverClearTimerRef.current);
     };
-  }, [mapLoaded, showAirports, language]);
+  }, [mapLoaded, showAirports, language, refs.map]);
 }

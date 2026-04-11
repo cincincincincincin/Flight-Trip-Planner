@@ -26,20 +26,38 @@ export interface SearchResult {
  * Indeks jest przebudowywany po każdym przesunięciu mapy (moveend).
  */
 class SpatialIndexService extends RBush<SpatialItem> {
+  private coordMap = new Map<string, { x: number; y: number }>();
+
   /**
    * Inicjalizuje indeks nowymi danymi rzutowanymi na piksele.
    * @param items Lista lotnisk z aktualnymi współrzędnymi X, Y (px).
    */
   public update(items: Array<{ code: string; x: number; y: number }>) {
     this.clear();
-    const spatialItems: SpatialItem[] = items.map(item => ({
-      minX: item.x,
-      minY: item.y,
-      maxX: item.x,
-      maxY: item.y,
-      code: item.code
-    }));
+    this.coordMap.clear();
+    const spatialItems: SpatialItem[] = items.map(item => {
+      this.coordMap.set(item.code, { x: item.x, y: item.y });
+      return {
+        minX: item.x,
+        minY: item.y,
+        maxX: item.x,
+        maxY: item.y,
+        code: item.code
+      };
+    });
     this.load(spatialItems);
+  }
+
+  /**
+   * Oblicza dystans euklidesowy od punktu do lotniska o danym kodzie.
+   * Jeśli lotnisko nie istnieje w indeksie, zwraca Infinity.
+   */
+  public getDistance(code: string, x: number, y: number): number {
+    const coords = this.coordMap.get(code);
+    if (!coords) return Infinity;
+    const dx = coords.x - x;
+    const dy = coords.y - y;
+    return Math.sqrt(dx * dx + dy * dy);
   }
 
   /**

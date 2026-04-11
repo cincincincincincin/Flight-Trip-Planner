@@ -146,6 +146,11 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
         console.warn(`%c[ACTION-LOAD] %cREBOUND DETECTED | todayFlights: ${todayFlights.length}, finalCount: 0. Keys in flightsByDate: ${Object.keys(flightsByDate).join(',')}, travelDate: ${travelDate}, timezone: ${timezone}`, 'color: #f59e0b; font-weight: bold', 'color: inherit');
       }
       console.log(`%c[ACTION-LOAD] %cFiltering Flights | Final Count: ${finalCount}`, 'color: #10b981; font-weight: bold', 'color: inherit');
+      // Wymuszamy ścisłą chronologię UTC (Przywrócenie logiki LEGACY)
+      flights.sort((a, b) => 
+        dayjs.utc(a.scheduled_departure_utc).valueOf() - dayjs.utc(b.scheduled_departure_utc).valueOf()
+      );
+
       return flights;
     }, [todayFlights, matchesFilter, tripArrivalTimeUTC, nowMs, travelDate, timezone, flightsByDate]);
 

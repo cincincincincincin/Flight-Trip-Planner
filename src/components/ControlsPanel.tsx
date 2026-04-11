@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useMapStore } from '../stores/mapStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAuthStore } from '../stores/authStore';
@@ -20,9 +20,36 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
   const t = useTexts();
   // showRoutes, setShowRoutes,
   const mapStyle = useMapStore(s => s.mapStyle);
-  const setMapStyle = useMapStore(s => s.setMapStyle);
+  const setMapStyleStore = useMapStore(s => s.setMapStyle);
   const globeMode = useMapStore(s => s.globeMode);
-  const setGlobeMode = useMapStore(s => s.setGlobeMode);
+  const setGlobeModeStore = useMapStore(s => s.setGlobeMode);
+
+  // RACE-CONDITION GUARD: Local debounce to prevent state thrashing
+  const lastActionTimeRef = useRef(0);
+  const ACTION_DEBOUNCE_MS = 400;
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleSetMapStyle = (style: string) => {
+    const now = Date.now();
+    if (now - lastActionTimeRef.current < ACTION_DEBOUNCE_MS) return;
+    lastActionTimeRef.current = now;
+    
+    setIsUpdating(true);
+    setTimeout(() => setIsUpdating(false), ACTION_DEBOUNCE_MS);
+    
+    setMapStyleStore(style);
+  };
+
+  const handleSetGlobeMode = (mode: boolean) => {
+    const now = Date.now();
+    if (now - lastActionTimeRef.current < ACTION_DEBOUNCE_MS) return;
+    lastActionTimeRef.current = now;
+
+    setIsUpdating(true);
+    setTimeout(() => setIsUpdating(false), ACTION_DEBOUNCE_MS);
+
+    setGlobeModeStore(mode);
+  };
 
   const {
     currency, minTransferHours, minManualTransferHours,
@@ -114,9 +141,11 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
           </div>
         </div>
 
+        <div className="settings-section" style={{ opacity: isUpdating ? 0.6 : 1, pointerEvents: isUpdating ? 'none' : 'auto', transition: 'opacity 0.2s' }}>
+        <h3>{t.controls.layersTitle}</h3>
         <div className="map-style-selector">
           <label>{t.controls.mapStyle}</label>
-          <select onChange={e => setMapStyle(e.target.value)} className="style-select" value={mapStyle}>
+          <select onChange={e => handleSetMapStyle(e.target.value)} className="style-select" value={mapStyle}>
             <option value={MAP_STYLES.LIGHT}>{t.controls.lightDefault}</option>
             {/* <option value={MAP_STYLES.DARK_MATTER}>{t.controls.darkMatter}</option> */}
             {/* <option value={MAP_STYLES.POSITRON}>{t.controls.positron}</option> */}
@@ -130,7 +159,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
             <span className="globe-toggle-label">{t.controls.globe}</span>
             <button
               className={`globe-toggle-btn ${globeMode ? 'active' : ''}`}
-              onClick={() => setGlobeMode(!globeMode)}
+              onClick={() => handleSetGlobeMode(!globeMode)}
               title={globeMode ? t.controls.switchToFlat : t.controls.switchToGlobe}
             >
               <span className="globe-toggle-thumb" />
@@ -215,7 +244,8 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
         )}
       </div>
     </div>
-  );
+  </div>
+);
 };
 
 export default ControlsPanel;

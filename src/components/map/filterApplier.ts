@@ -33,12 +33,12 @@ export function applyMapAirportFilters(
   ctx: FilterApplierContext,
   writableRefs: FilterApplierWritableRefs,
 ): void {
-  const tvac            = ctx.tripVisibleAirportCodes;
-  const ha              = ctx.highlightedAirports;
-  const sac             = ctx.selectedAirportCode;
-  const sacMulti        = ctx.selectedAirportCodes;
+  const tvac = ctx.tripVisibleAirportCodes;
+  const ha = ctx.highlightedAirports;
+  const sac = ctx.selectedAirportCode;
+  const sacMulti = ctx.selectedAirportCodes;
   const explorationCodes = ctx.explorationAirportCodes;
-  const inTripMode      = tvac && tvac.length > 0;
+  const inTripMode = tvac && tvac.length > 0;
 
   // INŻYNIERSKA NAPRAWA: MapLibre nie obsługuje poprawnie ['!in', 'code'] (pusta tablica).
   // Musimy jawnie sprawdzić obecność elementów lub ustawić filtr na null.
@@ -68,8 +68,8 @@ export function applyMapAirportFilters(
   }
   {
     const hovCode = ctx.hoveredAirportCode;
-    const cityLabelCodes      = ctx.cityLabelCodes;
-    const cityCodeByAirport   = ctx.airportCityKeyMap;
+    const cityLabelCodes = ctx.cityLabelCodes;
+    const cityCodeByAirport = ctx.airportCityKeyMap;
     const cityLabelCodeByCity = ctx.cityLabelCodeByCity;
 
     if (map.getLayer('airports-labels-normal')) {
@@ -118,8 +118,8 @@ export function applyMapAirportFilters(
             : [];
         const excludeCodes = (ctx.excludeCodes || []).map(c => c.toUpperCase());
         const excludeCityFilter: any[] = excludeCodes.length > 0
-            ? ['!in', 'code', ...excludeCodes]
-            : [];
+          ? ['!in', 'code', ...excludeCodes]
+          : [];
 
         const allFilters = [
           baseCityFilter.length > 0 ? baseCityFilter : null,
@@ -144,7 +144,7 @@ export function applyMapAirportFilters(
         // Zapobiega to wydajnościowej degradacji O(N^2) przy dużej liczbie zaznaczonych punktów.
         const haUpper = ha.map(c => c.toUpperCase());
         const codesSet = new Set<string>(haUpper);
-        
+
         if (inTripMode) {
           (tvac ?? []).forEach(c => codesSet.add(c.toUpperCase()));
           sacMulti.forEach(c => codesSet.add(c.toUpperCase()));
@@ -162,8 +162,8 @@ export function applyMapAirportFilters(
 
         const hovCodeLower = ctx.hoveredAirportCode?.toUpperCase();
         const filterCodes = hovCodeLower ? codes.filter(c => c !== hovCodeLower) : codes;
-        const filter: maplibregl.FilterSpecification = filterCodes.length === 0 
-          ? ['==', 'code', ''] 
+        const filter: maplibregl.FilterSpecification = filterCodes.length === 0
+          ? ['==', 'code', '']
           : ['in', 'code', ...filterCodes];
 
         // Wyznaczanie reprezentatywnych kodów miast dla podświetlonych lotnisk
@@ -173,7 +173,7 @@ export function applyMapAirportFilters(
           const rep = cityLabelCodeByCity[cityKey];
           if (rep) highlightedCityCodesSet.add(rep);
         }
-        
+
         const highlightedCityCodes = [...highlightedCityCodesSet];
         writableRefs.highlightedCityLabelCodesRef.current = highlightedCityCodes;
 
@@ -181,19 +181,19 @@ export function applyMapAirportFilters(
           const excludeFilter: any[] = (ctx.excludeCodes || []).length > 0
             ? ['!in', 'code', ...ctx.excludeCodes!]
             : [];
-          
+
           if (excludeFilter.length > 0) {
             map.setFilter('airports-labels-highlighted', ['all', filter, excludeFilter] as any);
           } else {
             map.setFilter('airports-labels-highlighted', filter);
           }
         }
-        
+
         if (map.getLayer('airports-labels-highlighted-city')) {
           const cityFilter: maplibregl.FilterSpecification = highlightedCityCodes.length === 0
             ? ['==', 'code', '']
             : ['in', 'code', ...highlightedCityCodes];
-          
+
           const excludeFilter: any[] = (ctx.excludeCodes || []).length > 0
             ? ['!in', 'code', ...ctx.excludeCodes!]
             : [];
@@ -208,19 +208,19 @@ export function applyMapAirportFilters(
     }
   }
 
-    if (map.getLayer('airports-selected')) {
-      const sacMultiUpper = sacMulti.map(c => c.toUpperCase());
-      const sacUpper = sac?.toUpperCase();
-      if (sacMultiUpper.length > 0) map.setFilter('airports-selected', ['in', 'code', ...sacMultiUpper]);
-      else if (sacUpper) map.setFilter('airports-selected', ['==', 'code', sacUpper]);
-      else map.setFilter('airports-selected', ['==', 'code', '']);
-    }
+  if (map.getLayer('airports-selected')) {
+    const sacMultiUpper = sacMulti.map(c => c.toUpperCase());
+    const sacUpper = sac?.toUpperCase();
+    if (sacMultiUpper.length > 0) map.setFilter('airports-selected', ['in', 'code', ...sacMultiUpper]);
+    else if (sacUpper) map.setFilter('airports-selected', ['==', 'code', sacUpper]);
+    else map.setFilter('airports-selected', ['==', 'code', '']);
+  }
 
-// Wyłączamy stare filtry hover - teraz są obsługiwane przez airports-hover-single
+  // Wyłączamy stare filtry hover - teraz są obsługiwane przez airports-hover-single
   // (Warstwy te zostały usunięte w airportsLayer.ts, więc m.getLayer zwróci false)
 
   // --- SOURCE UPDATES (Zero-Waste Route Sync) ---
-  
+
   // 1. Permanent trip routes (Itinerary)
   const tripSrc = map.getSource('trip-permanent-routes') as maplibregl.GeoJSONSource | undefined;
   if (tripSrc) {

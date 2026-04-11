@@ -1,6 +1,8 @@
 export const CONFIG = {
   /** Cache duration for airport info requests */
   CACHE_AIRPORT_INFO_MS: 300000,
+  /** Enable detailed diagnostic logs in console */
+  DEBUG_LOGS: true,
 
   // ──────────────────────────────────────────────────────────────────────────
   // AirportTransferPicker.tsx

@@ -1,99 +1,53 @@
 import { useColorStore } from '../../stores/colorStore';
 
 export function useMapColors() {
-  const startPoints                    = useColorStore(s => s.startPoints);
-  const clrGeneral                     = useColorStore(s => s.generalAirport);
-  const clrDestination                 = useColorStore(s => s.destinationAirport);
-  const clrTripAirport                 = useColorStore(s => s.tripAirport);
-  const clrTripRoute                   = useColorStore(s => s.tripRoute);
-  const clrTransferRoute               = useColorStore(s => s.transferRoute);
-  const clrTripHover                   = useColorStore(s => s.tripAirportHover);
-  const clrGeneralHover                = useColorStore(s => s.generalAirportHover);
-  const clrDestinationHover            = useColorStore(s => s.destinationAirportHover);
-  const clrTransferRouteHover          = useColorStore(s => s.transferRouteHover);
-  const clrGeneralLabelHover           = useColorStore(s => s.generalLabelHoverColor);
-  const clrGeneralLabel                = useColorStore(s => s.generalLabelColor);
-  const clrDestinationLabel            = useColorStore(s => s.destinationLabelColor);
-  const clrDestinationLabelHover       = useColorStore(s => s.destinationLabelHoverColor);
-  const clrTripLabel                   = useColorStore(s => s.tripLabelColor);
-  const clrTripLabelHover              = useColorStore(s => s.tripLabelHoverColor);
-  const szRouteWidthMin                = useColorStore(s => s.routeLineWidthMin);
-  const szRouteWidthMax                = useColorStore(s => s.routeLineWidthMax);
-  const szRouteHoverWidthMin           = useColorStore(s => s.routeLineHoverWidthMin);
-  const szRouteHoverWidthMax           = useColorStore(s => s.routeLineHoverWidthMax);
-  const szHighlightedRadiusMin         = useColorStore(s => s.highlightedAirportRadiusMin);
-  const szHighlightedRadiusMax         = useColorStore(s => s.highlightedAirportRadiusMax);
-  const szHighlightedHoverRadiusMin    = useColorStore(s => s.highlightedAirportHoverRadiusMin);
-  const szHighlightedHoverRadiusMax    = useColorStore(s => s.highlightedAirportHoverRadiusMax);
-  const szGeneralRadiusMin             = useColorStore(s => s.generalAirportRadiusMin);
-  const szGeneralRadiusMax             = useColorStore(s => s.generalAirportRadiusMax);
-  const szGeneralHoverRadiusMin        = useColorStore(s => s.generalAirportHoverRadiusMin);
-  const szGeneralHoverRadiusMax        = useColorStore(s => s.generalAirportHoverRadiusMax);
-  const szTripRouteWidthMin            = useColorStore(s => s.tripRouteWidthMin);
-  const szTripRouteWidthMax            = useColorStore(s => s.tripRouteWidthMax);
-  const szTripRouteHoverWidthMin       = useColorStore(s => s.tripRouteHoverWidthMin);
-  const szTripRouteHoverWidthMax       = useColorStore(s => s.tripRouteHoverWidthMax);
-  const clrHighlightedCity             = useColorStore(s => s.highlightedCity);
-  const clrGeneralCity                 = useColorStore(s => s.generalCity);
-  const szHighlightedCityRadius        = useColorStore(s => s.highlightedCityRadius);
-  const szGeneralCityRadius            = useColorStore(s => s.generalCityRadius);
-  const szGeneralLabelSizeMin          = useColorStore(s => s.generalAirportLabelSizeMin);
-  const szGeneralLabelSizeMax          = useColorStore(s => s.generalAirportLabelSizeMax);
-  const szGeneralLabelHoverSizeMin     = useColorStore(s => s.generalLabelHoverSizeMin);
-  const szGeneralLabelHoverSizeMax     = useColorStore(s => s.generalLabelHoverSizeMax);
-  const szHighlightedLabelSizeMin      = useColorStore(s => s.highlightedLabelSizeMin);
-  const szHighlightedLabelSizeMax      = useColorStore(s => s.highlightedLabelSizeMax);
-  const szHighlightedLabelHoverSizeMin = useColorStore(s => s.highlightedLabelHoverSizeMin);
-  const szHighlightedLabelHoverSizeMax = useColorStore(s => s.highlightedLabelHoverSizeMax);
-  const zoomRangeMin                   = useColorStore(s => s.zoomRangeMin);
-  const zoomRangeMax                   = useColorStore(s => s.zoomRangeMax);
 
   return {
-    startPoints,
-    clrGeneral,
-    clrDestination,
-    clrTripAirport,
-    clrTripRoute,
-    clrTransferRoute,
-    clrTripHover,
-    clrGeneralHover,
-    clrDestinationHover,
-    clrTransferRouteHover,
-    clrGeneralLabelHover,
-    clrGeneralLabel,
-    clrDestinationLabel,
-    clrDestinationLabelHover,
-    clrTripLabel,
-    clrTripLabelHover,
-    szRouteWidthMin,
-    szRouteWidthMax,
-    szRouteHoverWidthMin,
-    szRouteHoverWidthMax,
-    szHighlightedRadiusMin,
-    szHighlightedRadiusMax,
-    szHighlightedHoverRadiusMin,
-    szHighlightedHoverRadiusMax,
-    szGeneralRadiusMin,
-    szGeneralRadiusMax,
-    szGeneralHoverRadiusMin,
-    szGeneralHoverRadiusMax,
-    szTripRouteWidthMin,
-    szTripRouteWidthMax,
-    szTripRouteHoverWidthMin,
-    szTripRouteHoverWidthMax,
-    clrHighlightedCity,
-    clrGeneralCity,
-    szHighlightedCityRadius,
-    szGeneralCityRadius,
-    szGeneralLabelSizeMin,
-    szGeneralLabelSizeMax,
-    szGeneralLabelHoverSizeMin,
-    szGeneralLabelHoverSizeMax,
-    szHighlightedLabelSizeMin,
-    szHighlightedLabelSizeMax,
-    szHighlightedLabelHoverSizeMin,
-    szHighlightedLabelHoverSizeMax,
-    zoomRangeMin,
-    zoomRangeMax,
+    startPoints: useColorStore(s => s.startPoints),
+    generalAirport: useColorStore(s => s.generalAirport),
+    destinationAirport: useColorStore(s => s.destinationAirport),
+    tripAirport: useColorStore(s => s.tripAirport),
+    tripRoute: useColorStore(s => s.tripRoute),
+    transferRoute: useColorStore(s => s.transferRoute),
+    tripAirportHover: useColorStore(s => s.tripAirportHover),
+    generalAirportHover: useColorStore(s => s.generalAirportHover),
+    destinationAirportHover: useColorStore(s => s.destinationAirportHover),
+    transferRouteHover: useColorStore(s => s.transferRouteHover),
+    generalLabelHoverColor: useColorStore(s => s.generalLabelHoverColor),
+    generalLabelColor: useColorStore(s => s.generalLabelColor),
+    destinationLabelColor: useColorStore(s => s.destinationLabelColor),
+    destinationLabelHoverColor: useColorStore(s => s.destinationLabelHoverColor),
+    tripLabelColor: useColorStore(s => s.tripLabelColor),
+    tripLabelHoverColor: useColorStore(s => s.tripLabelHoverColor),
+    routeLineWidthMin: useColorStore(s => s.routeLineWidthMin),
+    routeLineWidthMax: useColorStore(s => s.routeLineWidthMax),
+    routeLineHoverWidthMin: useColorStore(s => s.routeLineHoverWidthMin),
+    routeLineHoverWidthMax: useColorStore(s => s.routeLineHoverWidthMax),
+    highlightedAirportRadiusMin: useColorStore(s => s.highlightedAirportRadiusMin),
+    highlightedAirportRadiusMax: useColorStore(s => s.highlightedAirportRadiusMax),
+    highlightedAirportHoverRadiusMin: useColorStore(s => s.highlightedAirportHoverRadiusMin),
+    highlightedAirportHoverRadiusMax: useColorStore(s => s.highlightedAirportHoverRadiusMax),
+    generalAirportRadiusMin: useColorStore(s => s.generalAirportRadiusMin),
+    generalAirportRadiusMax: useColorStore(s => s.generalAirportRadiusMax),
+    generalAirportHoverRadiusMin: useColorStore(s => s.generalAirportHoverRadiusMin),
+    generalAirportHoverRadiusMax: useColorStore(s => s.generalAirportHoverRadiusMax),
+    tripRouteWidthMin: useColorStore(s => s.tripRouteWidthMin),
+    tripRouteWidthMax: useColorStore(s => s.tripRouteWidthMax),
+    tripRouteHoverWidthMin: useColorStore(s => s.tripRouteHoverWidthMin),
+    tripRouteHoverWidthMax: useColorStore(s => s.tripRouteHoverWidthMax),
+    highlightedCity: useColorStore(s => s.highlightedCity),
+    generalCity: useColorStore(s => s.generalCity),
+    highlightedCityRadius: useColorStore(s => s.highlightedCityRadius),
+    generalCityRadius: useColorStore(s => s.generalCityRadius),
+    generalAirportLabelSizeMin: useColorStore(s => s.generalAirportLabelSizeMin),
+    generalAirportLabelSizeMax: useColorStore(s => s.generalAirportLabelSizeMax),
+    generalLabelHoverSizeMin: useColorStore(s => s.generalLabelHoverSizeMin),
+    generalLabelHoverSizeMax: useColorStore(s => s.generalLabelHoverSizeMax),
+    highlightedLabelSizeMin: useColorStore(s => s.highlightedLabelSizeMin),
+    highlightedLabelSizeMax: useColorStore(s => s.highlightedLabelSizeMax),
+    highlightedLabelHoverSizeMin: useColorStore(s => s.highlightedLabelHoverSizeMin),
+    highlightedLabelHoverSizeMax: useColorStore(s => s.highlightedLabelHoverSizeMax),
+    zoomRangeMin: useColorStore(s => s.zoomRangeMin),
+    zoomRangeMax: useColorStore(s => s.zoomRangeMax),
   };
 }

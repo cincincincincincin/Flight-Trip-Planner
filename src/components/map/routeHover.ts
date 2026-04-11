@@ -42,49 +42,71 @@ export interface RouteHoverRefs {
   };
 }
 
+import { spatialIndex } from '../../utils/spatialIndex';
+
+const n = (v: any, fallback: number): number => {
+  const num = Number(v);
+  return isNaN(num) ? fallback : num;
+};
+
+/**
+ * SZKLANA TARCZA (v11.11)
+ * Sprawdza czy punkt (mysz) znajduje się wewnątrz wizualnego promienia dowolnej kropki lotniska.
+ */
 function isAirportNearPoint(
   m: maplibregl.Map,
-  projectedAirports: Array<{ code: string; x: number; y: number }>,
   point: { x: number; y: number },
-): boolean {
-  const {
-    highlightedAirportHoverRadiusMin,
-    highlightedAirportHoverRadiusMax,
-    generalAirportHoverRadiusMin,
-    generalAirportHoverRadiusMax,
-    zoomRangeMin,
-    zoomRangeMax,
-  } = useColorStore.getState();
-  const zMin = Math.min(zoomRangeMin, zoomRangeMax);
-  const zMax = Math.max(zoomRangeMin, zoomRangeMax);
-  const z = m.getZoom();
-  const interp = (min: number, max: number) => {
-    if (zMin === zMax) return max;
-    const clamped = Math.min(Math.max(z, zMin), zMax);
-    const t = (clamped - zMin) / (zMax - zMin);
-    return min + (max - min) * t;
-  };
-  const hoverRadius = Math.max(
-    CONFIG.HOVER_RADIUS_FALLBACK,
-    interp(highlightedAirportHoverRadiusMin, highlightedAirportHoverRadiusMax),
-    interp(generalAirportHoverRadiusMin, generalAirportHoverRadiusMax),
-  );
-  const threshold = hoverRadius + CONFIG.HOVER_KEEP_RADIUS_EXTRA;
-  const tSq = threshold * threshold;
-  for (const ap of projectedAirports) {
-    const dx = ap.x - point.x;
-    const dy = ap.y - point.y;
-    if (dx * dx + dy * dy <= tSq) return true;
+  refs: {
+    highlightedAirportsRef: React.MutableRefObject<string[]>,
+    selectedAirportCodesRef: React.MutableRefObject<string[]>,
+    tripVisibleAirportCodesRef: React.MutableRefObject<string[] | null>,
+    hoveredAirportCodeRef: React.MutableRefObject<string | null>
   }
+): boolean {
+  if (!spatialIndex) return false;
+
+  const SCAN_DIST = 45; // Zasięg skanowania tarczy
+  const candidates = spatialIndex.searchRadius(point.x, point.y, SCAN_DIST);
+  if (candidates.length === 0) return false;
+
+  const z = m.getZoom();
+  const cS = useColorStore.getState();
+  const ha = refs.highlightedAirportsRef.current;
+  const sac = refs.selectedAirportCodesRef.current;
+  const tvac = refs.tripVisibleAirportCodesRef.current ?? [];
+  const curHover = refs.hoveredAirportCodeRef.current;
+
+  const zMin = n(cS.zoomRangeMin, 1.3);
+  const zMax = n(cS.zoomRangeMax, 12);
+  const t = Math.max(0, Math.min(1, (z - zMin) / (zMax - zMin)));
+
+  for (const cand of candidates) {
+    const code = cand.code;
+    const isSpecial = ha.includes(code) || sac.includes(code) || tvac.includes(code);
+    const isActuallyHovered = curHover === code;
+
+    let minR, maxR;
+    if (isActuallyHovered) {
+      // Rozmiar HOVER (Tarcza powiększona)
+      minR = isSpecial ? n(cS.highlightedAirportHoverRadiusMin, 10) : n(cS.generalAirportHoverRadiusMin, 6);
+      maxR = isSpecial ? n(cS.highlightedAirportHoverRadiusMax, 22) : n(cS.generalAirportHoverRadiusMax, 14);
+    } else {
+      // Rozmiar NORMALNY (Tarcza standardowa)
+      minR = isSpecial ? n(cS.highlightedAirportRadiusMin, 6) : n(cS.generalAirportRadiusMin, 2);
+      maxR = isSpecial ? n(cS.highlightedAirportRadiusMax, 18) : n(cS.generalAirportRadiusMax, 10);
+    }
+
+    const visualR = minR + (maxR - minR) * t;
+    const HIT_MARGIN = 2; // Margines bezpieczeństwa
+
+    if (cand.distance <= visualR + HIT_MARGIN) {
+      return true; // TRAFIONY W TARCZĘ -> LOTY BLOKOWANE
+    }
+  }
+
   return false;
 }
 
-/**
- * Registers all route-hover event listeners on the map.
- * Called once per addLayers() invocation (after layers are set up).
- * Sets routeHoverAtPointRef and clearRouteHoverRef so other parts of the
- * component can trigger or clear route hover programmatically.
- */
 export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs): void {
   const {
     map,
@@ -122,11 +144,8 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
       map.current?.setFeatureState({ source: 'selected-routes', id: routeId }, { hover: false });
       hoveredRouteId.current = null;
     }
-    const hSrc = map.current?.getSource('airports-hover-single') as maplibregl.GeoJSONSource | undefined;
-    if (hSrc) hSrc.setData({ type: 'FeatureCollection', features: [] });
 
     if (!keepLabels) {
-      // Restore highlighted label filter when clearing route hover
       applyAirportFilters();
     }
     if (currentPopup.current) { currentPopup.current.remove(); currentPopup.current = null; }
@@ -135,10 +154,6 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
   const applyRouteHoverAtPoint = (point: { x: number; y: number }) => {
     if (!map.current) return;
 
-    // Immediately mark route hover as active to block any concurrent updates
-    isRouteHoveredRef.current = true;
-
-    // Searched route takes priority — clear any active trip/transfer route hover
     if (hoveredTripRouteId.current !== null) {
       m.setFeatureState({ source: 'trip-permanent-routes', id: hoveredTripRouteId.current }, { hover: false });
       hoveredTripRouteId.current = null;
@@ -148,14 +163,15 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
       hoveredTransferRouteId.current = null;
     }
 
-    if (hoveredAirportCodeRef.current) {
-      clearRouteHover({ keepLabels: true });
-      return;
-    }
-    if (isAirportNearPoint(m, projectedAirportsRef.current, point)) {
+    // SNIPERSKA TARCZA (v11.12): Najpierw sprawdzamy ochronę lotniska.
+    // Jeśli jesteśmy w obrębie kropki lotniska, przerywamy WSZELKĄ obsługę trasy.
+    if (isAirportNearPoint(m, point, { highlightedAirportsRef, selectedAirportCodesRef, tripVisibleAirportCodesRef, hoveredAirportCodeRef })) {
       clearRouteHover();
       return;
     }
+
+    // Dopiero teraz uznajemy trasę za potencjalnie aktywną
+    isRouteHoveredRef.current = true;
 
     const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
       [point.x - 4, point.y - 4],
@@ -186,10 +202,8 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
       m.setFeatureState({ source: 'selected-routes', id: prevRouteId }, { hover: false });
     }
     m.setFeatureState({ source: 'selected-routes', id: featureId }, { hover: true });
-    hoveredRouteId.current = featureId ?? null;
+    hoveredRouteId.current = (featureId as any);
 
-    // Hide the highlighted label for destCode FIRST to prevent a frame where both
-    // the highlighted label and the hover label are visible simultaneously.
     const tvac = tripVisibleAirportCodesRef.current ?? [];
     const ha = highlightedAirportsRef.current;
     const sac = selectedAirportCodeRef.current;
@@ -207,31 +221,22 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
     ])];
 
     const filterCodes = allHighlighted.filter(c => c !== destCode);
-    const hlFilter: maplibregl.FilterSpecification = filterCodes.length === 0
+    const hlFilter: any = filterCodes.length === 0
       ? ['==', 'code', '']
       : ['in', 'code', ...filterCodes];
+    
+    // Używamy bezpośredniego setFilter, ale w v9.3 trzymamy się legacy syntax: ['in', 'code', ...]
     if (m.getLayer('airports-labels-highlighted')) m.setFilter('airports-labels-highlighted', hlFilter);
 
-    // Also hide highlighted city label for destCode's city
     if (m.getLayer('airports-labels-highlighted-city')) {
       const hlCityCodes = highlightedCityLabelCodesRef.current;
       const destCityKey = airportCityKeyRef.current[destCode];
       const destCityCode = destCityKey ? cityLabelCodeByCityRef.current[destCityKey] : null;
       const filteredCityCodes = hlCityCodes.filter(c => c !== destCityCode);
-      const hlCityFilter: maplibregl.FilterSpecification = filteredCityCodes.length === 0
+      const hlCityFilter: any = filteredCityCodes.length === 0
         ? ['==', 'code', '']
         : ['in', 'code', ...filteredCityCodes];
       m.setFilter('airports-labels-highlighted-city', hlCityFilter);
-    }
-
-    // Now show hover label and dot — highlighted label for destCode is already hidden above
-    // Now show hover label and dot via Single-Feature source
-    const hSrc = m.getSource('airports-hover-single') as maplibregl.GeoJSONSource | undefined;
-    if (hSrc && refs.airportsDataRef.current) {
-      const feat = refs.airportsDataRef.current.features.find((f: any) => f.properties.code === destCode);
-      if (feat) {
-        hSrc.setData({ type: 'FeatureCollection', features: [JSON.parse(JSON.stringify(feat))] });
-      }
     }
 
     const srcIdx = (feature.properties as { srcIdx?: number })?.srcIdx ?? 0;
@@ -242,22 +247,18 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
         : (selectedAirportCodeRef.current ? [selectedAirportCodeRef.current] : [])).map(c => c.toUpperCase());
     const srcCode = startCodes[srcIdx] ?? startCodes[0] ?? '';
 
-    // INŻYNIERSKA OPTYMALIZACJA (O(1)): Pobieramy grupę lotów bezpośrednio z indeksu.
-    // Zamiast filtrować tysiące rekordów, robimy stały odczyt po kluczu origin-dest.
     const routeKey = `${srcCode}-${destCode}`;
     const displayFlights = (refs.flightsByRouteGroupMapRef.current.get(routeKey) || []);
 
     const shownFlights = displayFlights.slice(0, CONFIG.MAX_POPUP_FLIGHTS);
     const extraCount = displayFlights.length - shownFlights.length;
 
-    // Group shown flights by departure airport local date (for multi-day windows)
     const dateGroups = new Map<string, typeof shownFlights>();
     for (const f of shownFlights) {
       const key = f.scheduled_departure_local?.split('T')[0] ?? '';
       if (!dateGroups.has(key)) dateGroups.set(key, []);
       dateGroups.get(key)!.push(f);
     }
-    // Check if source airports have flights on different calendar days
     const sourceDates = new Set<string>();
     for (const src of startCodes) {
       for (const flights of Object.values(flightDetailsMap.current)) {
@@ -275,7 +276,6 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
     const srcCityName = srcAirportName;
     const destCityName = destAirportName;
 
-    // ── Route duration for header ──────────────────────────────────────────────
     const { durationStr: headerDurationStr, estimated: headerDurationEstimated } = buildHeaderDuration(
       displayFlights, srcCode, destCode, airportCoordsMapRef.current,
     );
@@ -285,7 +285,6 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
         : `<div class="mc-popup-duration-exact">${headerDurationStr}</div>`
       : `<div class="mc-popup-arrow">→</div>`;
 
-    // ── Per-flight rows ────────────────────────────────────────────────────────
     let destUTCOffset: number | null = null;
     let srcUTCOffset: number | null = null;
     for (const f of displayFlights) {
@@ -300,7 +299,6 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
       if (destUTCOffset !== null && srcUTCOffset !== null) break;
     }
 
-    // Get timezones from airportsDataRef to ensure correct local time formatting
     let destTimezone: string | undefined = undefined;
     let srcTimezone: string | undefined = undefined;
     if (airportsDataRef.current) {
@@ -340,9 +338,8 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
   routeHoverAtPointRef.current = applyRouteHoverAtPoint;
   clearRouteHoverRef.current = clearRouteHover;
 
-  // Click on animated route line → filter flights by destination
   m.on('click', 'selected-routes', (e) => {
-    if (isAirportNearPoint(m, projectedAirportsRef.current, e.point)) return;
+    if (isAirportNearPoint(m, e.point, { highlightedAirportsRef, selectedAirportCodesRef, tripVisibleAirportCodesRef, hoveredAirportCodeRef })) return;
     if (e.features && e.features.length > 0) {
       const destCode = e.features[0].properties?.destCode;
       if (destCode) {
@@ -351,7 +348,6 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
     }
   });
 
-  // Hover on animated route lines → popup with flight info
   m.on('mousemove', 'selected-routes', (e) => {
     routeHoverAtPointRef.current?.({ x: e.point.x, y: e.point.y });
   });
@@ -363,17 +359,13 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
   m.on('mouseenter', 'selected-routes', () => {
     m.getCanvas().style.cursor = 'pointer';
   });
-  m.on('mouseleave', 'selected-routes', () => {
-    m.getCanvas().style.cursor = '';
-  });
-
+  
   const bindLineHover = (
     layerId: string,
     sourceId: string,
-    hoverRef: { current: string | number | null },
+    hoverRef: React.MutableRefObject<string | number | null>,
   ) => {
     m.on('mousemove', layerId, (e) => {
-      // Searched flight route has priority — suppress trip/transfer hover
       if (isRouteHoveredRef.current) {
         if (hoverRef.current !== null) {
           m.setFeatureState({ source: sourceId, id: hoverRef.current }, { hover: false });
@@ -389,7 +381,7 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
         m.setFeatureState({ source: sourceId, id: prevId }, { hover: false });
       }
       m.setFeatureState({ source: sourceId, id: featureId }, { hover: true });
-      hoverRef.current = featureId ?? null;
+      hoverRef.current = (featureId as any);
     });
     m.on('mouseenter', layerId, () => {
       m.getCanvas().style.cursor = 'pointer';
@@ -403,6 +395,6 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
     });
   };
 
-  bindLineHover('trip-permanent-routes-line', 'trip-permanent-routes', hoveredTripRouteId);
-  bindLineHover('manual-transfer-preview-line', 'manual-transfer-preview', hoveredTransferRouteId);
+  bindLineHover('trip-permanent-routes-line', 'trip-permanent-routes', (hoveredTripRouteId as any));
+  bindLineHover('manual-transfer-preview-line', 'manual-transfer-preview', (hoveredTransferRouteId as any));
 }

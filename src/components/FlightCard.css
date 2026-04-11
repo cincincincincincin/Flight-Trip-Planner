@@ -211,6 +211,14 @@
   gap: 2px;
 }
 
+.utc-time {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-left: 6px;
+  opacity: 0.8;
+}
+
 .tz-diff {
   font-size: 10px;
   font-weight: 600;

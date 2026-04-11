@@ -93,6 +93,10 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
     return t.card.na;
   })();
 
+  const depTimeUTC = useMemo(() => {
+    return flight.scheduled_departure_utc ? formatTime(flight.scheduled_departure_utc, 'UTC') : null;
+  }, [flight.scheduled_departure_utc]);
+
   // Arrival time: always show in the destination airport's own local time.
   // scheduled_arrival_local is already stored in destination-local time.
   const { data: destAirportInfo } = useAirportInfoQuery(flight.destination_airport_code ?? null);
@@ -220,7 +224,10 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
         <div className="times-row">
           <div className="time departure">
             <div className="time-label">{t.card.departure}</div>
-            <div className="time-value">{depTimeStr}</div>
+            <div className="time-value">
+              {depTimeStr} 
+              {depTimeUTC && <span className="utc-time">({depTimeUTC} UTC)</span>}
+            </div>
             <div className="date-value">{depDateStr}</div>
           </div>
           {duration && <div className="time-duration">{duration}</div>}

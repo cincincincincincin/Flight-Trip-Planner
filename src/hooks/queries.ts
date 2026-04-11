@@ -262,6 +262,11 @@ export const useFlightOffersQuery = (origin: string | null, dest: string | null,
     },
     enabled: Boolean(enabled),
     staleTime: CONFIG.CACHE_AIRPORT_INFO_MS,
+    retry: (failureCount, error: any) => {
+      // Nie ponawiamy, jeśli backend jawnie mówi, że brak biletu (404/204)
+      if (error?.response?.status === 404 || error?.response?.status === 204) return false;
+      return failureCount < 2; 
+    }
   });
 
 export const useFlightFilter = () => {
