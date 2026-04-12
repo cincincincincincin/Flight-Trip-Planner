@@ -12,6 +12,7 @@ import { useSelectionStore } from '../stores/selectionStore';
 import { useTripStore } from '../stores/tripStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useFilterStore } from '../stores/filterStore';
+import { EMPTY_DESTINATION_FILTER } from '../constants/filters';
 import { 
   useAirportInfoQuery, 
   useAirportInfosQuery, 
@@ -85,18 +86,26 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
 
   // Reset transfer airports when we move to a new airport in trip mode
   const prevTripAirportRef = useRef<string | null>(null);
+  const { setDestinationFilter } = useFilterStore();
+  
   useEffect(() => {
     const currentCode = selectedItem?.type === 'airport' ? selectedItem.data.code : null;
     if (currentCode !== prevTripAirportRef.current) {
       prevTripAirportRef.current = currentCode;
       setTransferAirports([]);
+      setDestinationFilter(EMPTY_DESTINATION_FILTER); // RESET FILTRA PRZY ZMIANIE KONTEKSTU (v16.80.3/24.35)
     }
-  }, [selectedItem]);
+  }, [selectedItem, setDestinationFilter]);
 
-  // Sync transfer airports to store (for map preview lines)
+  // Sync transfer airports to store (for map preview lines and multi-start point logic)
   useEffect(() => {
     updateTripStore({ manualTransferAirportCodes: transferAirports });
-  }, [transferAirports, updateTripStore]);
+    
+    // SYNC DO SELEKCJI (v16.80: Multi-Start Points)
+    const currentCode = selectedItem?.type === 'airport' ? (selectedItem.data.code as string) : null;
+    const allCodes = currentCode ? [currentCode, ...transferAirports] : transferAirports;
+    setSelectedAirportCodes(allCodes);
+  }, [transferAirports, selectedItem, updateTripStore, setSelectedAirportCodes]);
 
   // Grupowanie w trybie eksploracji
   const [expandedCityGroups, setExpandedCityGroups] = useState<Set<string>>(new Set());
@@ -111,28 +120,17 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
   const cityCode = selectedItem?.type === 'city' ? selectedItem.data.code : null;
   const queriedCityAirports = useCityAirports(cityCode);
 
-  const tripCurrentArrivalTimeUTC = useMemo(() => getTripCurrentArrivalTimeUTC(tripState), [tripState]);
+  const effectiveArrivalTimeUTC = useMemo(() => 
+    getTripCurrentArrivalTimeUTC(tripState, airportCoordsMap), 
+  [tripState, airportCoordsMap]);
 
-  const tripEstimatedArrivalUTC = useMemo(() => {
-    if (tripCurrentArrivalTimeUTC || !tripState?.legs?.length) return null;
-    for (let i = tripState.legs.length - 1; i >= 0; i--) {
-      const leg = tripState.legs[i];
-      if ((leg as { type?: string }).type !== 'manual' && leg.flight?.scheduled_departure_utc) {
-        const from = airportCoordsMap[leg.fromAirportCode];
-        const to = airportCoordsMap[leg.toAirportCode];
-        if (!from || !to) return null;
-        const distKm = haversineKm(from[0], from[1], to[0], to[1]);
-        const blockHours = distKm / CONFIG.AVERAGE_AIRCRAFT_SPEED_KMH + CONFIG.ADDITIONAL_BLOCK_HOURS;
-        const depMs = new Date(leg.flight.scheduled_departure_utc).getTime();
-        if (isNaN(depMs)) return null;
-        return new Date(depMs + blockHours * 3600000).toISOString();
-      }
-    }
-    return null;
-  }, [tripCurrentArrivalTimeUTC, tripState, airportCoordsMap]);
-
-  const isArrivalEstimated = !tripCurrentArrivalTimeUTC && !!tripEstimatedArrivalUTC;
-  const effectiveArrivalTimeUTC = tripCurrentArrivalTimeUTC ?? tripEstimatedArrivalUTC;
+  const isArrivalEstimated = useMemo(() => {
+    if (!tripState?.legs?.length || !effectiveArrivalTimeUTC) return false;
+    const lastRealLeg = [...tripState.legs].reverse().find(l => l.type !== 'manual');
+    if (!lastRealLeg) return false;
+    // It's estimated if the final computed arrival is NOT equal to the scheduled arrival (or scheduled arrival is missing)
+    return lastRealLeg.flight?.scheduled_arrival_utc !== effectiveArrivalTimeUTC;
+  }, [tripState, effectiveArrivalTimeUTC]);
 
   const manualTransferCount = useMemo(() => {
     if (!tripState?.legs?.length) return 0;
@@ -249,6 +247,16 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
     if (selectedItem?.type !== 'country') return null;
     return countryActiveTZ ?? countryTzGroups.find(g => g.tz !== CONFIG.UNKNOWN_TIMEZONE)?.tz ?? BROWSER_TIMEZONE;
   }, [selectedItem?.type, countryActiveTZ, countryTzGroups]);
+
+  // [v24.99]: Precyzyjne ustalenie aktualnej lokalizacji podróży dla logiki podświetleń (Soon Window)
+  const tripLocationCode = useMemo(() => {
+    if (!tripState) return null;
+    if (tripState.legs && tripState.legs.length > 0) {
+      // Ostatni punkt przylotu w planie
+      return tripState.legs[tripState.legs.length - 1].toAirportCode;
+    }
+    return tripState.startAirport.code;
+  }, [tripState]);
 
   const timezone = selectedTimezoneOverride
     ?? (selectedItem?.type === 'country' ? countryDisplayTZ : null)
@@ -663,7 +671,7 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
                   {arrivalTwoTZ ? (
                     <div className="arrival-two-tz">
                       <div className="arrival-main">
-                        <span className="tz-label">{t.common?.localAtArrival || 'Arr'}:</span> {arrivalTwoTZ.originalTime}
+                        <span className="tz-label">{arrivalTwoTZ.originalCode}:</span> {arrivalTwoTZ.originalTime}
                         {arrivalTwoTZ.dayLabel && (
                           <span className={`arrival-different-day ${arrivalTwoTZ.dayDiff > 0 ? 'positive' : arrivalTwoTZ.dayDiff < 0 ? 'negative' : ''}`}>
                             ({arrivalTwoTZ.dayLabel})
@@ -671,7 +679,7 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
                         )}
                       </div>
                       <div className="arrival-alt">
-                        <span className="tz-label">{t.common?.localAtSelected || 'Sel'}:</span> {arrivalTwoTZ.selectedTime}
+                        <span className="tz-label">{arrivalTwoTZ.selectedCode}:</span> {arrivalTwoTZ.selectedTime}
                         {arrivalTwoTZ.diffH !== 0 && (
                           <span className={`arrival-tz-diff ${arrivalTwoTZ.diffH > 0 ? 'negative' : 'positive'}`}>
                             ({arrivalTwoTZ.invDiffStr}h)
@@ -681,7 +689,7 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
                     </div>
                   ) : (
                     <div className="arrival-single-tz">
-                      <span className="tz-label">{t.common?.localTime || 'Local'}:</span> {actualArrivalLocalTime}
+                      {actualArrivalLocalTime}
                     </div>
                   )}
                   {isArrivalEstimated && (
@@ -754,7 +762,7 @@ const RightPanel = forwardRef<RightPanelRef, RightPanelProps>(({ onClose, onAddT
                   timezone={stableTimezone}
                   initialFromDatetime={initialFromDatetime ?? undefined}
                   airportTimezones={airportTimezoneMap}
-                  originalAirportCode={tripState ? selectedItem.data.code : null}
+                  originalAirportCode={tripLocationCode}
                   tripArrivalTimeUTC={tripState ? effectiveArrivalTimeUTC : null}
                   travelDateOverride={effectiveTravelDate}
                   onAddToTrip={handleAddToTripWithReset}

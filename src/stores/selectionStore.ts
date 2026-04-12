@@ -32,13 +32,16 @@ interface SelectionState {
   displayedFlights: Flight[]; // Loty aktualnie renderowane w RightPanel
   explorationItems: ExplorationItem[];
 
+  isFlightsLoading: boolean; // Stan ładowania (v11.51)
   setSelectedItem: (v: SelectedItem | null) => void;
   setSelectedAirportCode: (v: string | null) => void;
   setSelectedAirportCodes: (v: string[]) => void;
+  addSelectedAirportCode: (code: string) => void;
   setHighlightedAirports: (v: string[]) => void;
   setHighlightedCities: (v: string[]) => void;
   setFlightsData: (v: Flight[]) => void;
   setDisplayedFlights: (v: Flight[]) => void;
+  setIsFlightsLoading: (v: boolean) => void;
   appendFlights: (newFlights: Flight[]) => void;
   clearSelection: () => void;
   addExplorationItem: (item: Omit<ExplorationItem, 'id'>) => void;
@@ -90,6 +93,8 @@ export const useSelectionStore = create<SelectionState>((set) => ({
     set({ flightsData: v, _dedupKeys: keys, flightsByRouteMap: routeMap, flightsByRouteGroupMap: groupMap });
   },
   setDisplayedFlights: v => set({ displayedFlights: v }),
+  setIsFlightsLoading: v => set({ isFlightsLoading: v }),
+  isFlightsLoading: false,
 
   // Przyrostowa agregacja danych ze strumieni NDJSON.
   // Gwarantuje spójność globalnego rejestru przy asynchronicznym dopompowywaniu 
@@ -114,17 +119,34 @@ export const useSelectionStore = create<SelectionState>((set) => ({
       nextGroupMap.get(groupKey)!.push(f);
     });
 
+    const newDestinations = Array.from(new Set(unique.map(f => f.destination_airport_code.toUpperCase())));
+    const currentHighlights = new Set(state.highlightedAirports.map(c => c.toUpperCase()));
+    const addedDestinations = newDestinations.filter(d => !currentHighlights.has(d));
+
+    // [CONTEXT-AWARE APPEND v11.93]: Nie podświetlamy nowych lotnisk, jeśli panel jest zamknięty.
+    const shouldUpdateHighlights = state.selectedItem !== null && addedDestinations.length > 0;
+
     return {
       flightsData: [...state.flightsData, ...unique],
       _dedupKeys: nextKeys,
       flightsByRouteMap: nextRouteMap,
-      flightsByRouteGroupMap: nextGroupMap
+      flightsByRouteGroupMap: nextGroupMap,
+      highlightedAirports: shouldUpdateHighlights
+        ? [...state.highlightedAirports, ...addedDestinations]
+        : state.highlightedAirports
     };
   }),
 
-  clearSelection: () => set({
-    selectedItem: null,
-    selectedAirportCode: null,
+  addSelectedAirportCode: (code: string) => set((state) => {
+    const nextCodes = state.selectedAirportCodes.includes(code)
+      ? state.selectedAirportCodes
+      : [...state.selectedAirportCodes, code];
+    return { selectedAirportCodes: nextCodes };
+  }),
+
+  clearSelection: () => set({ 
+    selectedItem: null, 
+    selectedAirportCode: null, 
     selectedAirportCodes: [],
     highlightedAirports: [],
     highlightedCities: [],
@@ -132,8 +154,8 @@ export const useSelectionStore = create<SelectionState>((set) => ({
     flightsByRouteMap: new Map(),
     flightsByRouteGroupMap: new Map(),
     _dedupKeys: new Set(),
-    displayedFlights: [],
-    explorationItems: [],
+    isFlightsLoading: false,
+    displayedFlights: []
   }),
 
   /**

@@ -1,6 +1,8 @@
 import React, { useState, useMemo, memo, forwardRef } from 'react';
 import type { Flight } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useSelectionStore } from '../stores/selectionStore';
+import { useFilterStore } from '../stores/filterStore';
 import { useAirportsQuery, useAirportInfoQuery, useFlightOffersQuery, useAirportCoordsMap, useAirportNamesMap } from '../hooks/queries';
 import './FlightCard.css';
 import { useTexts } from '../hooks/useTexts';
@@ -19,9 +21,10 @@ interface FlightCardProps {
   airportTimezone?: string;   // the departure airport's own timezone
   isExpanded?: boolean;       // controlled expansion from parent
   onToggleExpand?: () => void;
+  isAirportLoaded?: boolean;  // whether the airport schedule is fully loaded
 }
 
-const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHighlight, onAddToTrip, hideAddToTrip = false, displayTimezone, airportTimezone, isExpanded = false, onToggleExpand }, ref) => {
+const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHighlight, onAddToTrip, hideAddToTrip = false, displayTimezone, airportTimezone, isExpanded = false, onToggleExpand, isAirportLoaded = true }, ref) => {
   const t = useTexts();
   const { currency, travelDate, language } = useSettingsStore();
   const isDeparted = useMemo(() => {
@@ -190,8 +193,19 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
 
   const noPricesAvailable = showPrices && !priceLoading && !priceError && !priceData;
 
+  const { setDestinationFilter } = useFilterStore();
+
+  const handleCardClick = () => {
+    if (!flight.destination_airport_code) return;
+    setDestinationFilter({ airports: [flight.destination_airport_code.toUpperCase()], cities: [], countries: [] });
+  };
+
   return (
-    <div className={`flight-card${tripHighlight ? ` flight-card--trip-${tripHighlight}` : ''}`} ref={ref}>
+    <div 
+      className={`flight-card flight-card--clickable${tripHighlight ? ` flight-card--trip-${tripHighlight}` : ''}`} 
+      ref={ref}
+      onClick={handleCardClick}
+    >
       <div className="flight-header">
         <div className="flight-number">
           <span className="number">{flight.flight_number}</span>
@@ -289,8 +303,12 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
 
       <div className="flight-actions">
         {!hideAddToTrip && (
-          <button className="add-to-trip-button" onClick={() => onAddToTrip?.(flight)}>
-            {t.card.addTrip}
+          <button 
+            className={`add-to-trip-button${!isAirportLoaded ? ' loading' : ''}`} 
+            onClick={() => isAirportLoaded && onAddToTrip?.(flight)}
+            disabled={!isAirportLoaded}
+          >
+            {isAirportLoaded ? t.card.addTrip : t.flights.loading}
           </button>
         )}
         {!isDeparted && (

@@ -58,6 +58,29 @@ export interface AirportFeatureProps {
   country_name_en?: string;
   country_name_pl?: string;
   time_zone?: string | null;
+  // [STABLE OFFSETS v12.8.9]
+  la_off_n?: [number, number];
+  la_off_f?: [number, number];
+  // [MASTER LABEL PIPELINE v13.71]
+  is_high?: boolean;
+  is_selected?: boolean;
+  is_trip?: boolean;
+  is_dest?: boolean;
+  is_city_high?: boolean;
+  is_city_selected?: boolean;
+  is_city_dest?: boolean;
+  is_city_trip?: boolean;
+  is_city_primary?: boolean;
+  city_airport_count?: number;
+  la_is_high_num?: number;
+  // PRE-CALCULATED LABELS
+  cl_hl_low?: string;
+  cl_hl_high?: string;
+  cl_grouped?: string;
+  cl_search?: string;
+  cl_high?: string;
+  la_sel_idx?: number;
+  la_city_sel_idx?: number;
 }
 
 // Właściwości z cities.json

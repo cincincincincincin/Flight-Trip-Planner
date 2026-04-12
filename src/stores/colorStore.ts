@@ -78,8 +78,9 @@ export interface ColorState {
   setColor: (key: ColorKey, color: string) => void;
   setSize: (key: SizeKey, value: number) => void;
   setZoomRange: (min: number, max: number) => void;
-  resetColors: () => void;
+  resetColors: (styleId?: string) => void;
   resetSizes: () => void;
+  adaptToStyle: (styleId: string | undefined) => void;
 }
 
 export type ColorKey =
@@ -95,7 +96,7 @@ export type ColorKey =
   | 'fcHighlightSoonBg' | 'fcHighlightSoonBorder';
 
 // Typ SizeKey definiowany dynamicznie na podstawie struktury stanu (wykluczając kolory i metody)
-export type SizeKey = keyof Omit<ColorState, ColorKey | 'startPoints' | 'setStartPointColor' | 'setColor' | 'setSize' | 'setZoomRange' | 'resetColors' | 'resetSizes' | 'zoomRangeMin' | 'zoomRangeMax'>;
+export type SizeKey = keyof Omit<ColorState, ColorKey | 'startPoints' | 'setStartPointColor' | 'setColor' | 'setSize' | 'setZoomRange' | 'resetColors' | 'resetSizes' | 'zoomRangeMin' | 'zoomRangeMax' | 'adaptToStyle'>;
 
 /** Obraz stanu utrwalonego w localStorage */
 interface PersistedColorState extends Omit<Partial<ColorState>, 'startPoints'> {
@@ -133,29 +134,82 @@ export const useColorStore = create<ColorState>()(
           const startPoints = [...state.startPoints];
           if (startPoints[index]) {
             startPoints[index] = { ...startPoints[index], [key]: color };
-            if (key === 'airport') {
-              const contrast = getContrastColor(color);
-              startPoints[index].label = contrast;
-              startPoints[index].labelHover = contrast;
-            }
           }
           return { startPoints };
         }),
 
       setColor: (key, color) =>
         set(state => {
-          const updates: Partial<ColorState> = { [key]: color };
-          if (LABEL_PAIRS[key]) {
-            const contrast = getContrastColor(color);
-            updates[LABEL_PAIRS[key].main] = contrast;
-            updates[LABEL_PAIRS[key].hover] = contrast;
-          }
-          return updates;
+          return { [key]: color };
         }),
 
       setSize: (key, value) => set({ [key]: value } as Pick<ColorState, SizeKey>),
       setZoomRange: (min, max) => set({ zoomRangeMin: min, zoomRangeMax: max }),
-      resetColors: () => set(DEFAULT_MAP_SETTINGS),
+      resetColors: (styleId?: string) =>
+        set(state => {
+          // 1. Nakładamy domyślne ustawienia
+          const newState = { ...DEFAULT_MAP_SETTINGS };
+          
+          // 2. Jeśli podano styl, od razu adaptujemy kolory systemowe (v11.58)
+          const isImg = (styleId || '').toLowerCase().includes('imagery');
+          const targetDefault = isImg ? '#ffffff' : '#000000';
+
+          const labelKeys: ColorKey[] = [
+            'generalLabelColor', 'generalLabelHoverColor',
+            'destinationLabelColor', 'destinationLabelHoverColor',
+            'tripLabelColor', 'tripLabelHoverColor'
+          ];
+
+          labelKeys.forEach(k => {
+            (newState as any)[k] = targetDefault;
+          });
+
+          newState.startPoints = DEFAULT_START_POINTS.map(sp => ({
+            ...sp,
+            label: targetDefault,
+            labelHover: targetDefault
+          }));
+
+          return newState;
+        }),
+
+      /**
+       * SYNCHRONIZACJA STANU ZE STYLEM MAPY (v11.47)
+       */
+      adaptToStyle: (styleId) =>
+        set(state => {
+          const isImg = (styleId || '').toLowerCase().includes('imagery');
+          const targetDefault = isImg ? '#ffffff' : '#000000';
+          const otherDefault = isImg ? '#000000' : '#ffffff';
+
+          const isSystem = (c: string) => {
+            const low = (c || '').toLowerCase();
+            return low === '#000000' || low === '#ffffff';
+          };
+
+          const updates: Partial<ColorState> = {};
+          const labelKeys: ColorKey[] = [
+            'generalLabelColor', 'generalLabelHoverColor',
+            'destinationLabelColor', 'destinationLabelHoverColor',
+            'tripLabelColor', 'tripLabelHoverColor'
+          ];
+
+          labelKeys.forEach(k => {
+            const current = (state as any)[k];
+            if (isSystem(current)) {
+              (updates as any)[k] = targetDefault;
+            }
+          });
+
+          const startPoints = state.startPoints.map(sp => {
+            const next = { ...sp };
+            if (isSystem(next.label)) next.label = targetDefault;
+            if (isSystem(next.labelHover)) next.labelHover = targetDefault;
+            return next;
+          });
+
+          return { ...updates, startPoints };
+        }),
 
       resetSizes: () => set(state => {
         const sizeUpdates: Partial<ColorState> = {};

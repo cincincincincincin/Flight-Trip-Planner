@@ -25,6 +25,7 @@ export const formatDate = (str: string | null | undefined, tz?: string): string 
 
 // Przelicza milisekundy na czytelny format (np. 2d 5h 30m)
 export const formatDurationMs = (ms: number): string => {
+  if (ms <= 0) return "0m";
   const totalMinutes = Math.floor(ms / 60000);
   const mInDay = 24 * 60;
   
@@ -33,7 +34,8 @@ export const formatDurationMs = (ms: number): string => {
   const m = totalMinutes % 60;
 
   if (d > 0) return `${d}d ${h}h ${m}m`;
-  return `${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
 };
 
 // Czas trwania lotu między dwoma datami ISO
@@ -47,7 +49,7 @@ export const getDuration = (dep: string | undefined, arr: string | undefined): s
 export const getDurationMs = (from: string | undefined, to: string | undefined): number | null => {
   if (!from || !to) return null;
   const diff = dayjs(to).diff(dayjs(from));
-  return diff > 0 ? diff : null;
+  return diff >= 0 ? diff : null;
 };
 
 /** Zwraca datę w formacie YYYY-MM-DD w zadanej strefie czasowej. */
@@ -101,14 +103,36 @@ export const formatTzDiff = (diff: number): string => {
   return `${h}h${m > 0 ? `${m}m` : ''}`;
 };
 
-// Pobiera czas przylotu ostatniego "prawdziwego" (nie-manualnego) odcinka podróży
-export const getTripCurrentArrivalTimeUTC = (tripState: { legs: any[] } | null): string | null => {
+import { haversineKm } from './math';
+import { CONFIG } from '../constants/config';
+
+// Obliczanie czasu przylotu (faktyczny lub estymowany)
+export const getLegArrivalUTC = (leg: any, coordsMap: Record<string, [number, number]>): string | null => {
+  if (!leg || leg.type === 'manual') return null;
+  if (leg.flight?.scheduled_arrival_utc) return leg.flight.scheduled_arrival_utc;
+  
+  // Estymacja na podstawie dystansu
+  if (leg.flight?.scheduled_departure_utc) {
+    const from = coordsMap[leg.fromAirportCode];
+    const to = coordsMap[leg.toAirportCode];
+    if (!from || !to) return null;
+    
+    const distKm = haversineKm(from[0], from[1], to[0], to[1]);
+    const blockHours = distKm / CONFIG.AVERAGE_AIRCRAFT_SPEED_KMH + CONFIG.ADDITIONAL_BLOCK_HOURS;
+    const depMs = new Date(leg.flight.scheduled_departure_utc).getTime();
+    if (isNaN(depMs)) return null;
+    return new Date(depMs + blockHours * 3600000).toISOString();
+  }
+  return null;
+};
+
+// Pobiera czas przylotu ostatniego "prawdziwego" (nie-manualnego) odcinka podróży (z estymacją v24.70)
+export const getTripCurrentArrivalTimeUTC = (tripState: { legs: any[] } | null, coordsMap: Record<string, [number, number]> = {}): string | null => {
   if (!tripState?.legs?.length) return null;
   for (let i = tripState.legs.length - 1; i >= 0; i--) {
     const leg = tripState.legs[i];
-    if (leg.type !== 'manual' && leg.flight?.scheduled_arrival_utc) {
-      return leg.flight.scheduled_arrival_utc;
-    }
+    const arrival = getLegArrivalUTC(leg, coordsMap);
+    if (arrival) return arrival;
   }
   return null;
 };

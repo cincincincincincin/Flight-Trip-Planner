@@ -13,6 +13,7 @@ import { CONFIG } from '../../constants/config';
 
 
 export interface GCPath {
+  key: string; // [STABLE ID v12.1]: Unique SRC:DEST pair
   srcCoords: [number, number];
   destCode: string;
   srcCode: string;
@@ -20,10 +21,22 @@ export interface GCPath {
   gcCoords: [number, number][];
 }
 
+/** [STABLE ID v12.1]: Konwertuje string na deterministyczny numer 32-bit (dla MapLibre feature id) */
+export const hashString = (s: string): number => {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+};
+
+const toFeature = (d: GCPath, coords: [number, number][]) => ({
+  type: 'Feature' as const,
+  id: hashString(d.key), // Używamy stałego hasha zamiast indeksu 'i'
+  geometry: { type: 'LineString' as const, coordinates: coords },
+  properties: { destCode: d.destCode, srcIdx: d.srcIdx, key: d.key },
+});
+
 /**
  * Buduje ścieżki ortodromy dla zestawu NOWYCH lotnisk docelowych.
- * Wykorzystuje flightsData do poprawnego trasowania każdego celu do jego lotniska źródłowego,
- * co jest kluczowe w trybie Multi-start.
  */
 export function buildGCPaths(
   sourceCodes: string[],
@@ -36,11 +49,9 @@ export function buildGCPaths(
   let sourceToDestsMap: Map<string, Set<string>>;
 
   if (flightsData.length > 0) {
-    // Weryfikacja zgodności z danymi lotów – zapobiega rysowaniu tras do lotnisk,
-    // które nie są skomunikowane z aktualnym źródłem w danym oknie czasowym.
     sourceToDestsMap = new Map();
-    const destSet = new Set(newDestCodes);
-    const srcSet = new Set(sourceCodes);
+    const destSet = new Set(newDestCodes.map(d => d.toUpperCase()));
+    const srcSet = new Set(sourceCodes.map(s => s.toUpperCase()));
     flightsData.forEach(f => {
       const src = (f.origin_airport_code || '').toUpperCase();
       const dst = (f.destination_airport_code || '').toUpperCase();
@@ -49,14 +60,10 @@ export function buildGCPaths(
         sourceToDestsMap.get(src)!.add(dst);
       }
     });
-    // Jeśli nie znaleziono dopasowań, przerywamy – dane mogą być nieaktualne (stale data).
     if (sourceToDestsMap.size === 0) return [];
   } else if (sourceCodes.length === 1) {
-    // No flight data yet but only one source — optimistically assign all dests to it.
-    // Safe because highlightedAirports was derived from that single airport's flights.
     sourceToDestsMap = new Map([[sourceCodes[0], new Set(newDestCodes)]]);
   } else {
-    // Multiple sources, no flight data yet — can't determine routing safely.
     return [];
   }
 
@@ -69,6 +76,7 @@ export function buildGCPaths(
       const destCoords = coordsMap[destCode];
       if (!destCoords) return;
       paths.push({
+        key: `${srcCode}:${destCode}`,
         srcCoords,
         destCode,
         srcCode,
@@ -82,9 +90,7 @@ export function buildGCPaths(
 }
 
 /**
- * Dodaje nowe trasy do animacji w sposób addytywny (nałożenie na już ukończone).
- * Jeśli animacja jest w toku, zostaje przerwana, a trasy "w trakcie" są natychmiastowo
- * promowane do ukończonych przed startem nowej fazy animacji.
+ * Dodaje nowe trasy do animacji w sposób addytywny.
  */
 export function addRoutesToAnimation(
   map: MapLibreMap,
@@ -105,20 +111,20 @@ export function addRoutesToAnimation(
     if (currentAnimatingRef.current.length > 0) {
       completedPathsRef.current = [...completedPathsRef.current, ...currentAnimatingRef.current];
       currentAnimatingRef.current = [];
+      
+      // [ZERO-GAP PROMOTION v11.98]: Synchronize source immediately to avoid empty-frame flicker
+      const currentSnapshot = completedPathsRef.current;
+      source.setData({
+        type: 'FeatureCollection',
+        features: currentSnapshot.map((d) => toFeature(d, d.gcCoords)),
+      });
     }
   }
 
   currentAnimatingRef.current = newPaths;
-  const snapshotCompleted = completedPathsRef.current; // snapshot so closure is stable
+  const snapshotCompleted = [...completedPathsRef.current];
   const speed = CONFIG.ANIMATION_SPEED;
   let progress = 0;
-
-  const toFeature = (d: GCPath, i: number, coords: [number, number][]) => ({
-    type: 'Feature' as const,
-    id: i,
-    geometry: { type: 'LineString' as const, coordinates: coords },
-    properties: { destCode: d.destCode, srcIdx: d.srcIdx },
-  });
 
   const renderFrame = () => {
     progress += speed;
@@ -128,7 +134,7 @@ export function addRoutesToAnimation(
       currentAnimatingRef.current = [];
       source.setData({
         type: 'FeatureCollection',
-        features: completedPathsRef.current.map((d, i) => toFeature(d, i, d.gcCoords)),
+        features: completedPathsRef.current.map((d) => toFeature(d, d.gcCoords)),
       });
       animRef.current = null;
       return;
@@ -138,10 +144,8 @@ export function addRoutesToAnimation(
     source.setData({
       type: 'FeatureCollection',
       features: [
-        ...snapshotCompleted.map((d, i) => toFeature(d, i, d.gcCoords)),
-        ...newPaths.map((d, i) =>
-          toFeature(d, snapshotCompleted.length + i, d.gcCoords.slice(0, numVisible)),
-        ),
+        ...snapshotCompleted.map((d) => toFeature(d, d.gcCoords)),
+        ...newPaths.map((d) => toFeature(d, d.gcCoords.slice(0, numVisible))),
       ],
     });
     animRef.current = requestAnimationFrame(renderFrame);
@@ -183,7 +187,7 @@ export function startPreviewAnimation(
 
   if (!map || !coordsMap) return;
 
-  const source = map.getSource('transfer-preview-route') as GeoJSONSource | undefined;
+  const source = map.getSource('manual-transfer-preview') as GeoJSONSource | undefined;
   if (!source) return;
 
   if (!previewAirportCode || !selectedAirportCode) {
@@ -208,14 +212,14 @@ export function startPreviewAnimation(
     if (progress >= 1) {
       source.setData({
         type: 'FeatureCollection',
-        features: [{ type: 'Feature', id: 0, geometry: { type: 'LineString', coordinates: gcCoords }, properties: {} }],
+        features: [{ type: 'Feature', id: 888, geometry: { type: 'LineString', coordinates: gcCoords }, properties: { srcIdx: 0 } }],
       });
       return;
     }
     const numVisible = Math.max(2, Math.ceil(progress * CONFIG.GC_POINTS) + 1);
     source.setData({
       type: 'FeatureCollection',
-      features: [{ type: 'Feature', id: 0, geometry: { type: 'LineString', coordinates: gcCoords.slice(0, numVisible) }, properties: {} }],
+      features: [{ type: 'Feature', id: 888, geometry: { type: 'LineString', coordinates: gcCoords.slice(0, numVisible) }, properties: { srcIdx: 0 } }],
     });
     previewAnimRef.current = requestAnimationFrame(animate);
   };

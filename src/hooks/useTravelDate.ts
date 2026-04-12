@@ -58,10 +58,16 @@ export function useTravelDate({
       // [KLUCZOWY FIX]: Jeśli explorationItems rosło (użytkownik dodał lotnisko do eksploracji),
       // nie resetujemy travelDate — kontekst jest ten sam, zmieniamy tylko wybrany airport.
       // Reset robimy tylko gdy kontekst się zmienia (np. inne miasto/kraj).
+      // [v24.95-FIX]: Check previous state BEFORE updating refs
+      const isStartingFresh = prevExplorationItemsCountRef.current === 0;
       const isAddingToExploration = explorationItems.length > prevExplorationItemsCountRef.current;
+      
+      // Update ref AFTER capturing the above statuses
       prevExplorationItemsCountRef.current = explorationItems.length;
 
-      if (!isAddingToExploration) {
+      // Reset date only if we are starting fresh (panel was closed)
+      // OR if we are switching between top-level items (not growing the current exploration).
+      if (isStartingFresh || !isAddingToExploration) {
         if (effectiveArrivalTimeUTC) {
           updateSettings({ travelDate: getIsoDate(new Date(effectiveArrivalTimeUTC), timezone) });
         } else {

@@ -1,7 +1,7 @@
 import React, { useRef, memo, useEffect, useState, useMemo } from 'react';
 import MapComponent from './components/MapComponent';
 import ControlsPanel from './components/ControlsPanel';
-import { useSettingsEmergencySave } from './hooks/useSettingsEmergencySave';
+import { useSettingsSync } from './hooks/useSettingsSync';
 import Search from './components/Search';
 import RightPanel from './components/RightPanel';
 import TripItinerary from './components/TripItinerary';
@@ -130,7 +130,8 @@ function App() {
   }, []);
 
   // Emergency save on exit/tab switch
-  useSettingsEmergencySave();
+  // Session Sync Logic
+  useSettingsSync();
 
   const handleLanguageChange = (lang: string) => updateSettings({ language: lang as any });
   const handleCurrencyChange = (curr: string) => updateSettings({ currency: curr });

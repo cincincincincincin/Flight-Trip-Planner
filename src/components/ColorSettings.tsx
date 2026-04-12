@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useState, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { useColorStore, type ColorKey, type SizeKey } from '../stores/colorStore';
 import { useMapStore } from '../stores/mapStore';
@@ -80,10 +80,11 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
     >?</button>
   ), []);
 
+  const { viewport, mapStyle } = useMapStore();
+  const zoom = viewport.zoom;
+
   const sizes = colors as unknown as Record<string, number>;
   const colorValues = colors as unknown as Record<string, string>;
-  const { viewport } = useMapStore();
-  const zoom = viewport.zoom;
   const zoomRangeMin = useColorStore(s => s.zoomRangeMin);
   const zoomRangeMax = useColorStore(s => s.zoomRangeMax);
 
@@ -93,7 +94,7 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
         <>
           <div className="color-settings-header">
             <span className="color-settings-title">{t.colorSettings.colors}</span>
-            <button className="color-settings-reset" onClick={resetColors}>{t.controls.resetAll}</button>
+            <button className="color-settings-reset" onClick={() => resetColors(mapStyle)}>{t.controls.resetAll}</button>
           </div>
 
           <div className="color-section-label">{t.colorSettings.startingPoints}</div>

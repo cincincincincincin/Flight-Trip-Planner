@@ -3,10 +3,12 @@ import type React from 'react';
 import type { Flight } from '../../types';
 import { useColorStore } from '../../stores/colorStore';
 import { useFilterStore } from '../../stores/filterStore';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { CONFIG } from '../../constants/config';
 import { THEME_COLORS } from '../../constants/theme';
 import { getUTCOffH } from './popupHelpers';
 import { buildFlightRow, buildPopupHtml, formatGroupDateLabel, buildHeaderDuration } from './popupBuilder';
+import { getVisualRadius } from './utils';
 
 export interface RouteHoverRefs {
   map: React.MutableRefObject<maplibregl.Map | null>;
@@ -60,47 +62,42 @@ function isAirportNearPoint(
     highlightedAirportsRef: React.MutableRefObject<string[]>,
     selectedAirportCodesRef: React.MutableRefObject<string[]>,
     tripVisibleAirportCodesRef: React.MutableRefObject<string[] | null>,
+    explorationAirportCodesRef: React.MutableRefObject<string[]>,
+    manualTransferAirportCodesRef: React.MutableRefObject<string[]>,
     hoveredAirportCodeRef: React.MutableRefObject<string | null>
   }
 ): boolean {
   if (!spatialIndex) return false;
-
+ 
   const SCAN_DIST = 45; // Zasięg skanowania tarczy
   const candidates = spatialIndex.searchRadius(point.x, point.y, SCAN_DIST);
   if (candidates.length === 0) return false;
-
+ 
   const z = m.getZoom();
   const cS = useColorStore.getState();
   const ha = refs.highlightedAirportsRef.current;
   const sac = refs.selectedAirportCodesRef.current;
   const tvac = refs.tripVisibleAirportCodesRef.current ?? [];
+  const explorationCodes = refs.explorationAirportCodesRef.current ?? [];
+  const manualCodes = refs.manualTransferAirportCodesRef.current ?? [];
   const curHover = refs.hoveredAirportCodeRef.current;
+ 
+  const HIT_MARGIN = 1.0; 
 
-  const zMin = n(cS.zoomRangeMin, 1.3);
-  const zMax = n(cS.zoomRangeMax, 12);
-  const t = Math.max(0, Math.min(1, (z - zMin) / (zMax - zMin)));
-
+  // --- HIERARCHICZNA TARCZA v11.87 (Stateful-Synced) ---
+  
+  // 1. Sprawdzamy wszystkie trafienia NATURALNE (fizyczne krawędzie)
   for (const cand of candidates) {
-    const code = cand.code;
-    const isSpecial = ha.includes(code) || sac.includes(code) || tvac.includes(code);
-    const isActuallyHovered = curHover === code;
+    const naturalR = getVisualRadius(cand.code, z, cS, false, sac, ha, tvac, explorationCodes, manualCodes);
+    if (cand.distance <= naturalR + HIT_MARGIN) return true;
+  }
 
-    let minR, maxR;
-    if (isActuallyHovered) {
-      // Rozmiar HOVER (Tarcza powiększona)
-      minR = isSpecial ? n(cS.highlightedAirportHoverRadiusMin, 10) : n(cS.generalAirportHoverRadiusMin, 6);
-      maxR = isSpecial ? n(cS.highlightedAirportHoverRadiusMax, 22) : n(cS.generalAirportHoverRadiusMax, 14);
-    } else {
-      // Rozmiar NORMALNY (Tarcza standardowa)
-      minR = isSpecial ? n(cS.highlightedAirportRadiusMin, 6) : n(cS.generalAirportRadiusMin, 2);
-      maxR = isSpecial ? n(cS.highlightedAirportRadiusMax, 18) : n(cS.generalAirportRadiusMax, 10);
-    }
-
-    const visualR = minR + (maxR - minR) * t;
-    const HIT_MARGIN = 2; // Margines bezpieczeństwa
-
-    if (cand.distance <= visualR + HIT_MARGIN) {
-      return true; // TRAFIONY W TARCZĘ -> LOTY BLOKOWANE
+  // 2. Sprawdzamy trafienie LEPKE (Sticky) dla aktywnego hovera
+  if (curHover) {
+    const cand = candidates.find(c => c.code === curHover);
+    if (cand) {
+      const stickyR = getVisualRadius(curHover, z, cS, true, sac, ha, tvac, explorationCodes, manualCodes);
+      if (cand.distance <= stickyR + HIT_MARGIN) return true;
     }
   }
 
@@ -165,7 +162,7 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
 
     // SNIPERSKA TARCZA (v11.12): Najpierw sprawdzamy ochronę lotniska.
     // Jeśli jesteśmy w obrębie kropki lotniska, przerywamy WSZELKĄ obsługę trasy.
-    if (isAirportNearPoint(m, point, { highlightedAirportsRef, selectedAirportCodesRef, tripVisibleAirportCodesRef, hoveredAirportCodeRef })) {
+    if (isAirportNearPoint(m, point, { highlightedAirportsRef, selectedAirportCodesRef, tripVisibleAirportCodesRef, explorationAirportCodesRef, manualTransferAirportCodesRef, hoveredAirportCodeRef })) {
       clearRouteHover();
       return;
     }
@@ -240,11 +237,14 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
     }
 
     const srcIdx = (feature.properties as { srcIdx?: number })?.srcIdx ?? 0;
-    const startCodes = (selectedAirportCodesRef.current.length > 0
-      ? selectedAirportCodesRef.current
-      : explorationAirportCodesRef.current.length > 0
-        ? explorationAirportCodesRef.current
-        : (selectedAirportCodeRef.current ? [selectedAirportCodeRef.current] : [])).map(c => c.toUpperCase());
+    
+    // UNIFIED SOURCE LIST (v24.46): Must match useRouteAnimation.ts exactly
+    const sourceSet = new Set<string>(selectedAirportCodesRef.current);
+    manualTransferAirportCodesRef.current.forEach(c => sourceSet.add(c));
+    const sacCode = selectedAirportCodeRef.current;
+    if (sacCode) sourceSet.add(sacCode);
+    const startCodes = Array.from(sourceSet).map(c => c.toUpperCase());
+
     const srcCode = startCodes[srcIdx] ?? startCodes[0] ?? '';
 
     const routeKey = `${srcCode}-${destCode}`;
@@ -339,11 +339,31 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
   clearRouteHoverRef.current = clearRouteHover;
 
   m.on('click', 'selected-routes', (e) => {
-    if (isAirportNearPoint(m, e.point, { highlightedAirportsRef, selectedAirportCodesRef, tripVisibleAirportCodesRef, hoveredAirportCodeRef })) return;
+    if (isAirportNearPoint(m, e.point, { highlightedAirportsRef, selectedAirportCodesRef, tripVisibleAirportCodesRef, explorationAirportCodesRef, manualTransferAirportCodesRef, hoveredAirportCodeRef })) return;
     if (e.features && e.features.length > 0) {
       const destCode = e.features[0].properties?.destCode;
       if (destCode) {
-        useFilterStore.getState().setDestinationFilter({ airports: [destCode], cities: [], countries: [] });
+        const currentFilter = useFilterStore.getState().destinationFilter;
+        const airports = currentFilter.airports || [];
+        const isAlreadyFiltered = airports.includes(destCode);
+
+        let nextAirports: string[];
+        if (isAlreadyFiltered) {
+          nextAirports = airports.filter(a => a !== destCode);
+        } else {
+          nextAirports = [...airports, destCode];
+        }
+
+        const nextFilter = {
+          ...currentFilter,
+          airports: nextAirports
+        };
+
+        if (useSettingsStore.getState().showConsoleLogs) {
+           console.log(`[ARC-CLICK|MULTI] Toggling ${destCode}. New list: ${nextAirports.join(', ')}`);
+        }
+
+        useFilterStore.getState().setDestinationFilter(nextFilter);
       }
     }
   });
@@ -366,13 +386,17 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
     hoverRef: React.MutableRefObject<string | number | null>,
   ) => {
     m.on('mousemove', layerId, (e) => {
-      if (isRouteHoveredRef.current) {
+      // [SNIPER SHIELD v24.55]: Priority for Airports and Main Routes
+      if (isRouteHoveredRef.current || isAirportNearPoint(m, e.point, { 
+        highlightedAirportsRef, selectedAirportCodesRef, tripVisibleAirportCodesRef, explorationAirportCodesRef, manualTransferAirportCodesRef, hoveredAirportCodeRef 
+      })) {
         if (hoverRef.current !== null) {
           m.setFeatureState({ source: sourceId, id: hoverRef.current }, { hover: false });
           hoverRef.current = null;
         }
         return;
       }
+
       if (!e.features || e.features.length === 0) return;
       const featureId = e.features[0].id;
       if (featureId == null) return;
@@ -395,6 +419,6 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
     });
   };
 
-  bindLineHover('trip-permanent-routes-line', 'trip-permanent-routes', (hoveredTripRouteId as any));
-  bindLineHover('manual-transfer-preview-line', 'manual-transfer-preview', (hoveredTransferRouteId as any));
+  bindLineHover('trip-permanent-routes', 'trip-permanent-routes', (hoveredTripRouteId as any));
+  bindLineHover('manual-transfer-preview', 'manual-transfer-preview', (hoveredTransferRouteId as any));
 }

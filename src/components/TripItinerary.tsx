@@ -30,7 +30,7 @@ interface TripItineraryProps {
 const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTrip, onClose, showSaveButton }) => {
   const t = useTexts();
   const { tripState, undo, redo, pastTrips, futureTrips, isLoadedTrip, editMode } = useTripStore();
-  const { namesMap, coordsMap } = useAirportIndexes();
+  const { namesMap, coordsMap, cityNamesMap } = useAirportIndexes();
   const { language } = useSettingsStore();
 
   const allLegCodes = useMemo(() => {
@@ -203,24 +203,33 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
               ? getDuration(f?.scheduled_departure_utc, f?.scheduled_arrival_utc ?? estimatedArrUTC ?? undefined)
               : null;
 
-            // "time available in: city" between two consecutive flight legs (no manual between them)
+            // [BEST ARRIVAL LOGIC v24.60]: Use actual or estimated arrival for durations
+            const getBestArrivalUTC = (legItem: any) => {
+              if (!legItem || legItem.type === 'manual') return null;
+              if (legItem.flight?.scheduled_arrival_utc) return legItem.flight.scheduled_arrival_utc;
+              return estimateArrivalUTC(legItem.flight?.scheduled_departure_utc, legItem.fromAirportCode, legItem.toAirportCode);
+            };
+
+            // "time available in: city" between two consecutive flight legs
             let timeAvailableMs: number | null = null;
             let timeAvailableCity: string | null = null;
             if (!isManual && i > 0) {
               const prevLeg = legs[i - 1];
-              if ((prevLeg as { type?: string }).type !== 'manual' && prevLeg.flight?.scheduled_arrival_utc && f?.scheduled_departure_utc) {
-                timeAvailableMs = getDurationMs(prevLeg.flight.scheduled_arrival_utc, f.scheduled_departure_utc);
-                timeAvailableCity = namesMap[leg.fromAirportCode] ?? leg.fromAirportCode;
+              const prevArrUtc = getBestArrivalUTC(prevLeg);
+              if (prevLeg.type !== 'manual' && prevArrUtc && f?.scheduled_departure_utc) {
+                timeAvailableMs = getDurationMs(prevArrUtc, f.scheduled_departure_utc);
+                timeAvailableCity = cityNamesMap[leg.fromAirportCode] ?? namesMap[leg.fromAirportCode] ?? leg.fromAirportCode;
               }
             }
 
             // "time to transfer" for manual legs
             let timeToTransferMs: number | null = null;
             if (isManual) {
-              const lastRealLegBeforeManual = legs.slice(0, i).reverse().find(l => (l as { type?: string }).type !== 'manual');
-              const nextRealLeg = legs.slice(i + 1).find(l => (l as { type?: string }).type !== 'manual');
-              if (lastRealLegBeforeManual?.flight?.scheduled_arrival_utc && nextRealLeg?.flight?.scheduled_departure_utc) {
-                timeToTransferMs = getDurationMs(lastRealLegBeforeManual.flight.scheduled_arrival_utc, nextRealLeg.flight.scheduled_departure_utc);
+              const lastRealLeg = legs.slice(0, i).reverse().find(l => l.type !== 'manual');
+              const nextRealLeg = legs.slice(i + 1).find(l => l.type !== 'manual');
+              const lastArrUtc = getBestArrivalUTC(lastRealLeg);
+              if (lastArrUtc && nextRealLeg?.flight?.scheduled_departure_utc) {
+                timeToTransferMs = getDurationMs(lastArrUtc, nextRealLeg.flight.scheduled_departure_utc);
               }
             }
 

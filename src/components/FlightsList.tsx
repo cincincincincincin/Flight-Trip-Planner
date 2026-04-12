@@ -46,7 +46,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
     const { flightsData: globalFlightsData } = useSelectionStore();
 
     // ── Data loading ──────────────────────────────────────────────────────────
-    const { error, lastFetched, perAirportLoading, anyLoading, flightsByDate, handleRefresh } =
+    const { error, lastFetched, perAirportLoading, perAirportFullyLoaded, anyLoading, flightsByDate, handleRefresh } =
       useFlightLoader({ 
         airportCodes: stableAirportCodes, 
         timezone, 
@@ -111,6 +111,11 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
     }, []);
 
     // ── Unfiltered flights for the selected day only ───────────────────────────
+    const { setIsFlightsLoading } = useSelectionStore();
+    useEffect(() => {
+      setIsFlightsLoading(anyLoading);
+    }, [anyLoading, setIsFlightsLoading]);
+
     const todayFlights = useMemo(
       () => (flightsByDate[travelDate] || []),
       [flightsByDate, travelDate]
@@ -125,11 +130,21 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       const validOrigins = new Set(airportCodes.map((c: string) => c.toUpperCase()));
       let flights = todayFlights.filter(f => validOrigins.has((f.origin_airport_code || '').toUpperCase()));
       
-      // Następnie aplikujemy ręczne filtry użytkownika
+      // Następnie aplikujemy ręczne filtry użytkownika (zawiera destynację z mapy)
       flights = flights.filter(matchesFilter);
       
-      // Jeśli nie jesteśmy w trybie planowania trasy, ukrywamy loty, które odleciały dawno.
-      if (!tripArrivalTimeUTC) {
+      // [SMART ARRIVAL FILTERING v24.70]: 
+      // Jeśli jesteśmy w trybie planowania trasy, ukrywamy loty, które odlatują przed przylotem.
+      if (tripArrivalTimeUTC) {
+        const arrMs = new Date(tripArrivalTimeUTC).getTime();
+        
+        // [v24.99 FIX]: Show all flights from the moment of arrival onwards.
+        // Highlighting for 'soon' connections is handled by getTripHighlight.
+        flights = flights.filter(f => 
+          f.scheduled_departure_utc && dayjs.utc(f.scheduled_departure_utc).valueOf() >= arrMs
+        );
+      } else {
+        // Jeśli nie jesteśmy w trybie planowania trasy, ukrywamy loty, które już odleciały.
         const selectedTodayStr = timezone ? getTodayInTz(timezone) : getTodayInTz();
         console.log(`%c[ACTION-LOAD] %cFiltering Flights | Today: ${selectedTodayStr}, TravelDate: ${travelDate}, Before Grace: ${todayFlights.length}, Filtered: ${flights.length}`, 'color: #10b981; font-weight: bold', 'color: inherit');
 
@@ -157,17 +172,21 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
     // ── Synchronizacja podświetlenia na mapie (Phase 2: Ultra-Lean) ───────────
     // Wysyłamy dane tylko gdy faktycznie się zmieniły, żeby uniknąć thrashingu WebGL.
     useEffect(() => {
-      // Wybieramy źródło danych w zależności od stanu filtra (O(1) switch)
-      const sourceFlights = isFilterActive ? displayedFlatFlights : todayFlights;
+      // MASTER FIX (v17.55/19.25): Podświetlamy mapę na podstawie WSZYSTKICH dostępnych lotów (bez filtra destynacji)
+      // Dzięki temu kliknięcie w jedną kropkę nie chowa pozostałych.
+      const validOrigins = new Set(airportCodes.map((c: string) => c.toUpperCase()));
+      const mapSourceFlights = todayFlights.filter(f => validOrigins.has((f.origin_airport_code || '').toUpperCase()));
 
-      // Aktualizacja globalnego stanu widocznych lotów (używane przez MapComponent)
-      setDisplayedFlights(sourceFlights);
+      // MASTER FILTER SYNC (v19.25): Jeśli aktywny jest filtr destynacji z mapy, 
+      // musimy przefiltrować trasy (arcs) na mapie, ale zachować kropki destynacji.
+      const isAnyFilterActive = isFilterActive;
+      setDisplayedFlights(isAnyFilterActive ? displayedFlatFlights : mapSourceFlights);
 
-      // Budujemy zestawy unikalnych kodów (O(N))
+      // Budujemy zestawy unikalnych kodów (O(N)) dla całej mapy (kropki)
       const newAirports = new Set<string>();
       const newCities = new Set<string>();
       
-      sourceFlights.forEach(f => {
+      mapSourceFlights.forEach(f => {
         const rawCode = f.destination_airport_code;
         if (rawCode) {
           const code = rawCode.toUpperCase();
@@ -195,7 +214,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
         prevHighlightedCitiesRef.current = newCities;
         setHighlightedCities(Array.from(newCities));
       }
-    }, [displayedFlatFlights, todayFlights, isFilterActive, setHighlightedAirports, setHighlightedCities, setDisplayedFlights, cityMap]);
+    }, [displayedFlatFlights, todayFlights, isFilterActive, setHighlightedAirports, setHighlightedCities, setDisplayedFlights, cityMap, airportCodes]);
 
     // ── Imperative handle ─────────────────────────────────────────────────────
     useImperativeHandle(ref, () => ({
@@ -360,6 +379,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
                     airportTimezone={airportTimezones?.[flight.origin_airport_code]}
                     isExpanded={expandedFlightIds.includes(flightKey)}
                     onToggleExpand={() => handleToggleExpand(flightKey)}
+                    isAirportLoaded={perAirportFullyLoaded[flight.origin_airport_code]}
                   />
                 );
               }}

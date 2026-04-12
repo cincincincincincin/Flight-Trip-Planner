@@ -16,6 +16,23 @@
   border-color: var(--border-light);
 }
 
+.flight-card--clickable {
+  cursor: pointer;
+}
+
+.flight-card--clickable:hover {
+  transform: translateY(-1px);
+  background: var(--bg-hover);
+}
+
+/* Ensure buttons and links inside the card still capture events correctly */
+.flight-card--clickable button,
+.flight-card--clickable a {
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
+}
+
 /* ── Trip highlight states ───────────────────────────────────── */
 .flight-card--trip-airport {
   border-color: var(--fc-highlight-airport-border, var(--c-teal-b));
@@ -35,7 +52,6 @@
 .flight-card--trip-soon {
   border-color: var(--fc-highlight-soon-border, var(--red-b));
   background: var(--fc-highlight-soon-bg, var(--red-dim));
-  opacity: 0.75;
 }
 
 /* ── Header: flight number + airline ─────────────────────────── */

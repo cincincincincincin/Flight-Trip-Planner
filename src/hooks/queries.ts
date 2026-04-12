@@ -68,6 +68,7 @@ export const useAirportIndexes = () => {
       cityMap: {} as Record<string, string>,
       countryMap: {} as Record<string, string>,
       namesMap: {} as Record<string, string>,
+      cityNamesMap: {} as Record<string, string>,
       cityAirportsMap: {} as Record<string, string[]>,
       countryAirportsMap: {} as Record<string, string[]>,
       cityLabelCodes: [] as string[],
@@ -81,6 +82,12 @@ export const useAirportIndexes = () => {
       cityMap: meta.cityMap, 
       countryMap: meta.countryMap, 
       namesMap: search.names, 
+      cityNamesMap: Object.fromEntries(
+        Object.entries(meta.cityMap).map(([apCode, cityCode]) => [
+          apCode, 
+          search.cityInfo[cityCode]?.name || apCode
+        ])
+      ),
       cityAirportsMap: meta.airportCityMap,
       countryAirportsMap: meta.countryAirportsMap,
       cityLabelCodes: meta.cityLabelCodes,

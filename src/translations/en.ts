@@ -61,7 +61,8 @@ export const TEXTS_EN = {
     tryAdjustFilters: "Try adjusting or clearing filters",
     tryDifferentDate: "Try selecting a different date",
     lastUpdated: "Last updated: ",
-    scheduleDataBy: "Schedule data thanks to:"
+    scheduleDataBy: "Schedule data thanks to:",
+    loading: "Loading..."
   },
   date: { // DateInput.tsx
     placeholder: "DD/MM/YYYY",

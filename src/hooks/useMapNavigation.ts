@@ -20,10 +20,10 @@ export function useMapNavigation(mapRef: React.RefObject<MapComponentRef | null>
     highlightedAirportsRef.current = highlightedAirports; 
   }, [highlightedAirports]);
 
-  const flyToLocation = useCallback((lon: number, lat: number, zoom: number) => {
+  const flyToLocation = useCallback((lon: number, lat: number, zoom?: number) => {
     mapRef.current?.flyTo({ 
       center: [lon, lat], 
-      zoom, 
+      ...(zoom !== undefined ? { zoom } : {}),
       essential: true, 
       duration: CONFIG.FLY_DURATION 
     });

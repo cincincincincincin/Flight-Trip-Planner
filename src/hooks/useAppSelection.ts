@@ -11,7 +11,7 @@ import type { MapComponentRef } from '../components/MapComponent';
 
 interface UseAppSelectionProps {
   mapNav: {
-    flyToLocation: (lon: number, lat: number, zoom: number) => void;
+    flyToLocation: (lon: number, lat: number, zoom?: number) => void;
     fitBoundsToAirportCodes: (codes: string[]) => void;
     fitToCountry: (countryCode: string) => void;
   };
@@ -46,10 +46,7 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
 
   const setDisplayMode = useCallback(() => {
     setShowAirports(true);
-    if (viewport.zoom < CONFIG.AIRPORT_ZOOM_THRESHOLD) {
-      mapRef.current?.flyTo({ zoom: CONFIG.AIRPORT_ZOOM_THRESHOLD, duration: CONFIG.FLY_DURATION, essential: true });
-    }
-  }, [viewport.zoom, setShowAirports, mapRef]);
+  }, [setShowAirports]);
 
   const getExplorationAirportCodes = useCallback((type: 'airport' | 'city', code: string): string[] => {
     if (type === 'airport') return [code.toUpperCase()];
@@ -96,125 +93,117 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
         }
       }
 
-
-
       if ('fromMap' in item) {
         fitCameraOnFlightsRef.current = !item.fromMap;
+      }
+
+      // Pre-calculate target coordinates for "Pure Pan" navigation (no zoom change)
+      let targetCenter: { lon: number, lat: number } | null = null;
+      if (!item.fromMap) {
+        if (item.type === 'airport') {
+          const feature = airportFeaturesMap[itemCode];
+          if (feature) {
+            targetCenter = {
+              lon: feature.geometry.coordinates[0],
+              lat: feature.geometry.coordinates[1]
+            };
+          }
+        } else if (item.type === 'city') {
+          const codes = getExplorationAirportCodes('city', itemCode);
+          const points = codes.map(c => airportFeaturesMap[c]?.geometry?.coordinates as [number, number]).filter(Boolean);
+          if (points.length > 0) {
+            targetCenter = {
+              lon: points.reduce((acc, p) => acc + p[0], 0) / points.length,
+              lat: points.reduce((acc, p) => acc + p[1], 0) / points.length
+            };
+          }
+        } else if (item.type === 'country') {
+          const center = countryInfoMap[itemCode];
+          if (center) targetCenter = { lon: center.lon, lat: center.lat };
+        }
       }
 
       // 3. Exploration Item Management
       const currentState = useSelectionStore.getState();
       const currentExplorationItems = currentState.explorationItems;
+      const updates: any = {
+        selectedItem: item,
+        selectedAirportCode: (item.type === 'airport' || item.type === 'route') ? itemCode : null
+      };
+
       if (currentSelectedItem && !currentTripState && (item.type === 'airport' || item.type === 'city')) {
-        const itemCodeUpper = (item.data as any).code?.toUpperCase();
-        const updates: any = {
-          selectedItem: item,
-          selectedAirportCode: item.type === 'airport' ? itemCodeUpper : null
-        };
-        
         if (item.type === 'airport') {
           const isAlreadyCovered = currentExplorationItems.some(existing => 
-            (existing.type === 'city' || existing.type === 'country') && existing.airportCodes.includes(itemCodeUpper)
+            (existing.type === 'city' || existing.type === 'country') && existing.airportCodes.includes(itemCode)
           );
           
           if (!isAlreadyCovered) {
-            const newCodes = getExplorationAirportCodes(item.type, itemCodeUpper);
-            const allCodes = [...new Set([...currentExplorationItems.flatMap((i: any) => i.airportCodes), ...newCodes])];
-            const id = `airport-${itemCodeUpper}`;
-            
+            const newCodes = getExplorationAirportCodes(item.type, itemCode);
+            const id = `airport-${itemCode}`;
             if (!currentExplorationItems.some(i => i.id === id)) {
               updates.explorationItems = [
                 ...currentExplorationItems,
-                { type: item.type, code: itemCodeUpper, name: (item.data as any).name || (item.data as any).code, airportCodes: newCodes, id }
+                { type: item.type, code: itemCode, name: (item.data as any).name || (item.data as any).code, airportCodes: newCodes, id }
               ];
             }
-
-            if (!item.fromMap) mapNav.fitBoundsToAirportCodes(allCodes);
           }
         } else if (item.type === 'city') {
-          const newCodes = getExplorationAirportCodes(item.type, itemCodeUpper);
-          const allCodes = [...new Set([...currentExplorationItems.flatMap((i: any) => i.airportCodes), ...newCodes])];
-          const id = `city-${itemCodeUpper}`;
-          
+          const newCodes = getExplorationAirportCodes(item.type, itemCode);
+          const id = `city-${itemCode}`;
           if (!currentExplorationItems.some(i => i.id === id)) {
             updates.explorationItems = [
               ...currentExplorationItems,
-              { type: item.type, code: itemCodeUpper, name: (item.data as any).name || (item.data as any).code, airportCodes: newCodes, id }
+              { type: item.type, code: itemCode, name: (item.data as any).name || (item.data as any).code, airportCodes: newCodes, id }
             ];
           }
-
-          if (!item.fromMap) mapNav.fitBoundsToAirportCodes(allCodes);
         }
-        
-        // Atomic selection update
-        useSelectionStore.setState(updates);
-        return;
-      }
-
-      // 4. Country Mode
-      if (item.type === 'country') {
+      } else if (item.type === 'country') {
         if (currentSelectedItem !== null && currentSelectedItem.type !== 'country') {
           setPendingCountryPicker({ code: (item.data as any).code, name: (item.data as any).name });
-          if (!item.fromMap) mapNav.fitToCountry((item.data as any).code);
-          return;
+        } else {
+          updates.selectedAirportCode = null;
         }
-        useSelectionStore.setState({ selectedItem: item, selectedAirportCode: null });
-        if (!item.fromMap) mapNav.fitToCountry((item.data as any).code);
-        return;
-      }
-
-      // 5. Standard Mode (Atomic)
-      const baseState = useSelectionStore.getState();
-      const updates: any = { 
-        selectedItem: item, 
-        selectedAirportCode: item.type === 'airport' ? (item.data as any).code : null 
-      };
-
-      if (item.type === 'airport') {
-        updates.highlightedAirports = [];
-        const code = (item.data as any).code;
-        const id = `airport-${code}`;
-        if (!baseState.explorationItems.some(i => i.id === id)) {
-          updates.explorationItems = [
-            ...baseState.explorationItems,
-            { type: 'airport', code, name: (item.data as any).name || code, airportCodes: [code], id }
-          ];
-        }
-      } else if (item.type === 'city') {
-        const cityCode = (item.data as any).code;
-        const cityAirportCodes = getExplorationAirportCodes('city', cityCode);
-        const id = `city-${cityCode.toUpperCase()}`;
-        if (!baseState.explorationItems.some(i => i.id === id)) {
-          updates.explorationItems = [
-            ...baseState.explorationItems,
-            { type: 'city', code: cityCode.toUpperCase(), name: (item.data as any).name || cityCode, airportCodes: cityAirportCodes, id }
-          ];
-        }
-
-        if (cityAirportCodes.length > 0) {
-          mapNav.fitBoundsToAirportCodes(cityAirportCodes);
+      } else {
+        // Standard non-exploration mode
+        if (item.type === 'airport') {
+          updates.highlightedAirports = [];
+          const id = `airport-${itemCode}`;
+          if (!currentState.explorationItems.some(i => i.id === id)) {
+            updates.explorationItems = [
+              ...currentState.explorationItems,
+              { type: 'airport', code: itemCode, name: (item.data as any).name || itemCode, airportCodes: [itemCode], id }
+            ];
+          }
+        } else if (item.type === 'city') {
+          const cityAirportCodes = getExplorationAirportCodes('city', itemCode);
+          const id = `city-${itemCode}`;
+          if (!currentState.explorationItems.some(i => i.id === id)) {
+            updates.explorationItems = [
+              ...currentState.explorationItems,
+              { type: 'city', code: itemCode, name: (item.data as any).name || itemCode, airportCodes: cityAirportCodes, id }
+            ];
+          }
         }
       }
 
+      // Execute atomic store updates
       useSelectionStore.setState(updates);
 
-      if (item.type === 'airport') {
-        setDisplayMode();
+      // Map aesthetics trigger
+      if (item.type === 'airport') setDisplayMode();
+
+      // EXECUTE NAVIGATION (v11.60.2 - "Pure Pan" / No Bounds fitting)
+      if (targetCenter && !item.fromMap && item.type !== 'route') {
+        mapNav.flyToLocation(targetCenter.lon, targetCenter.lat);
       }
 
-      if (item.fromMap || item.type === 'route') return;
-
-      const coords = extractCoords(item);
-      if (coords) {
-        mapNav.flyToLocation(coords.lon, coords.lat, CONFIG.FALLBACK_ZOOM.AIRPORT);
-      }
     } finally {
       setTimeout(() => {
         selectionLockRef.current = false;
         if (showLogs) console.log(`%c[ACTION-SELECTION] %c[${sequenceId}] FINISH | Lock released`, 'color: #10b981; font-weight: bold', 'color: inherit');
       }, 50);
     }
-  }, [setDisplayMode, mapNav, addExplorationItem, getExplorationAirportCodes, setSelectedAirportCode, setHighlightedAirports, handleAddToTripRef, travelDate]);
+  }, [setDisplayMode, mapNav, airportFeaturesMap, countryInfoMap, extractCoords, cityAirportsMap, getExplorationAirportCodes, handleAddToTripRef, travelDate]);
 
   const handleSwitchToCountryView = useCallback((code: string, name: string) => {
     clearExploration();
