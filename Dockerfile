@@ -9,7 +9,6 @@ RUN npm ci
 
 COPY . .
 
-# Pass build variables inline to avoid SecretsUsedInArgOrEnv warnings
 ARG VITE_API_URL
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
