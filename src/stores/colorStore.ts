@@ -5,6 +5,7 @@ import {
   DEFAULT_START_POINTS, 
   DEFAULT_MAP_SETTINGS 
 } from '../constants/mapDefaults';
+import { logger } from '../utils/logger';
 
 export interface ColorState {
   startPoints: StartPointColors[];
@@ -144,13 +145,18 @@ export const useColorStore = create<ColorState>()(
         }),
 
       setSize: (key, value) => set({ [key]: value } as Pick<ColorState, SizeKey>),
-      setZoomRange: (min, max) => set({ zoomRangeMin: min, zoomRangeMax: max }),
+      setZoomRange: (min, max) => set(state => {
+        // Zabezpieczenie: Pozwalamy na min === max (stały zoom), automatycznie sortujemy zakres
+        const sortedMin = Math.min(min, max);
+        const sortedMax = Math.max(min, max);
+        return { zoomRangeMin: sortedMin, zoomRangeMax: sortedMax };
+      }),
       resetColors: (styleId?: string) =>
         set(state => {
           // 1. Nakładamy domyślne ustawienia
           const newState = { ...DEFAULT_MAP_SETTINGS };
           
-          // 2. Jeśli podano styl, od razu adaptujemy kolory systemowe (v11.58)
+          // 2. Jeśli podano styl, od razu adaptujemy kolory systemowe (czarny/biały)
           const isImg = (styleId || '').toLowerCase().includes('imagery');
           const targetDefault = isImg ? '#ffffff' : '#000000';
 
@@ -174,7 +180,7 @@ export const useColorStore = create<ColorState>()(
         }),
 
       /**
-       * SYNCHRONIZACJA STANU ZE STYLEM MAPY (v11.47)
+       * Synchronizacja stanu kolorów ze stylem mapy
        */
       adaptToStyle: (styleId) =>
         set(state => {
@@ -227,6 +233,18 @@ export const useColorStore = create<ColorState>()(
       merge: (persisted, current) => {
         const p = persisted as PersistedColorState;
         const merged = { ...current, ...p };
+        
+        // Zabezpieczenie: Pozwalamy na min === max, naprawiamy jeśli wartości są zamienione kolejnością
+        if (typeof merged.zoomRangeMin === 'number' && typeof merged.zoomRangeMax === 'number') {
+          if (merged.zoomRangeMin > merged.zoomRangeMax) {
+            logger.warn("[PERSIST] Wykryto zamieniony zakres zoomu w localStorage. Naprawiam...");
+            const sMin = Math.min(merged.zoomRangeMin, merged.zoomRangeMax);
+            const sMax = Math.max(merged.zoomRangeMin, merged.zoomRangeMax);
+            merged.zoomRangeMin = sMin;
+            merged.zoomRangeMax = sMax;
+          }
+        }
+
         merged.startPoints = (p.startPoints ?? DEFAULT_START_POINTS).map((sp, i) => ({
           ...DEFAULT_START_POINTS[i],
           ...sp,

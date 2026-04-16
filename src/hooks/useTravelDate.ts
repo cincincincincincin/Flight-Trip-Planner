@@ -16,9 +16,10 @@ interface UseTravelDateParams {
 }
 
 /**
- * Manages all travelDate synchronisation side-effects.
- * Keeps the per-effect refs (`prevSelectedItemKeyRef`, `prevTimezoneRef`, etc.)
- * internal so they don't clutter the parent component.
+ * HOOK ZARZĄDZANIA CZASEM PODRÓŻY (Travel Date Orchestrator)
+ * Zarządza wszystkimi efektami ubocznymi synchronizacji daty podróży.
+ * Dba o to, by data wyszukiwania lotów (travelDate) odpowiadała aktualnemu kontekstowi 
+ * (wybrane lotnisko, miasto lub czas przylotu z poprzedniego etapu podróży).
  */
 export function useTravelDate({
   selectedItem,
@@ -41,9 +42,9 @@ export function useTravelDate({
   // Keep travelDateForTZRef in sync (used in closure of the resolvedTimezone effect)
   useEffect(() => { travelDateForTZRef.current = travelDate; }, [travelDate]);
 
-  // ── Main travelDate effect ─────────────────────────────────────────────────────────
+  // ── GŁÓWNY EFEKT SYNCHRONIZACJI DATY (Main travelDate effect) ──────────────────────
   // Gdy użytkownik ręcznie nadpisuje strefę, zachowujemy aktualną datę.
-  // Reset tylko gdy selectedItem lub czas przylotu się zmienia (nowy kontekst eksploracji).
+  // Reset następuje tylko gdy wybrany element (selectedItem) lub czas przylotu się zmienia (nowy kontekst).
   useEffect(() => {
     if (!timezone) return;
     if (selectedTimezoneOverride) return;
@@ -55,22 +56,22 @@ export function useTravelDate({
     if (key !== prevSelectedItemKeyRef.current) {
       prevSelectedItemKeyRef.current = key;
 
-      // [KLUCZOWY FIX]: Jeśli explorationItems rosło (użytkownik dodał lotnisko do eksploracji),
-      // nie resetujemy travelDate — kontekst jest ten sam, zmieniamy tylko wybrany airport.
-      // Reset robimy tylko gdy kontekst się zmienia (np. inne miasto/kraj).
-      // [v24.95-FIX]: Check previous state BEFORE updating refs
+      // [KLUCZOWY MECHANIZM]: Jeśli użytkownik dodaje kolejne lotniska do eksploracji
+      // (np. przegląda całe miasto), nie resetujemy travelDate, aby nie przerywać procesu planowania.
+      // Reset robimy tylko gdy kontekst zmienia się całkowicie (isStartingFresh).
       const isStartingFresh = prevExplorationItemsCountRef.current === 0;
       const isAddingToExploration = explorationItems.length > prevExplorationItemsCountRef.current;
       
-      // Update ref AFTER capturing the above statuses
       prevExplorationItemsCountRef.current = explorationItems.length;
 
-      // Reset date only if we are starting fresh (panel was closed)
-      // OR if we are switching between top-level items (not growing the current exploration).
+      // Resetuj datę tylko jeśli zaczynamy nową eksplorację (panel był zamknięty)
+      // LUB jeśli przełączamy się między elementami głównymi (nie rozszerzamy obecnej listy).
       if (isStartingFresh || !isAddingToExploration) {
         if (effectiveArrivalTimeUTC) {
+          // Jeśli mamy czas przylotu z poprzedniego lotu -> ustaw datę na dzień przylotu.
           updateSettings({ travelDate: getIsoDate(new Date(effectiveArrivalTimeUTC), timezone) });
         } else {
+          // W przeciwnym razie ustaw "Dzisiaj" w lokalnej strefie czasowej celu.
           updateSettings({ travelDate: getTodayInTz(timezone) });
         }
       }
@@ -102,7 +103,9 @@ export function useTravelDate({
     prevExplorationItemsCountRef.current = explorationItems.length;
   }, [selectedItem, timezone, explorationItems.length, updateSettings, effectiveArrivalTimeUTC, selectedTimezoneOverride, travelDate]);
 
-  // ── Sync travelDate when resolvedTimezone auto-switches (e.g. Melbourne added) ──
+  // ── SYNCHRONIZACJA PRZY AUTOMATYCZNEJ ZMIANIE STREFY (resolvedTimezone) ───────────
+  // Reaguje na sytuację, gdy strefa czasowa widoku zmienia się automatycznie 
+  // (np. po dodaniu lotniska z innej strefy do bieżącej eksploracji).
   useEffect(() => {
     if (selectedItem?.type === 'country') return;
     if (selectedTimezoneOverride) return;
@@ -110,6 +113,8 @@ export function useTravelDate({
     prevResolvedTZRef.current = resolvedTimezone;
     if (prevTZ === undefined || resolvedTimezone === prevTZ || !resolvedTimezone) return;
     const todayInPrevTZ = prevTZ ? getTodayInTz(prevTZ) : null;
+    
+    // Jeśli użytkownik był na "Dzisiaj" w starej strefie, przeskakujemy na "Dzisiaj" w nowej.
     if (!todayInPrevTZ || travelDateForTZRef.current === todayInPrevTZ) {
       updateSettings({ travelDate: getTodayInTz(resolvedTimezone) });
     }

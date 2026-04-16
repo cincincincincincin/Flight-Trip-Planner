@@ -19,12 +19,12 @@ interface SelectionState {
   highlightedCities: string[];
   flightsData: Flight[]; // Globalny rejestr lotów (Single Source of Truth)
   /** 
-   * INDEKS PODRĘCZNY (Faza 2): Map<"DEPARTURE_CODE-ARRIVAL_CODE-TIME", Flight> 
+   * INDEKS PODRĘCZNY: Map<"DEPARTURE_CODE-ARRIVAL_CODE-TIME", Flight> 
    * Umożliwia wyszukiwanie lotów w czasie O(1) podczas interakcji z mapą.
    */
   flightsByRouteMap: Map<string, Flight>;
   /**
-   * INDEKS GRUPOWY (Faza 2: Ultra-Lean Popups): Map<"ORIGIN-DEST", Flight[]>
+   * INDEKS GRUPOWY: Map<"ORIGIN-DEST", Flight[]>
    * Umożliwia natychmiastowe pobranie wszystkich lotów dla danej trasy (np. klastrowanie w popupach).
    */
   flightsByRouteGroupMap: Map<string, Flight[]>;
@@ -32,7 +32,7 @@ interface SelectionState {
   displayedFlights: Flight[]; // Loty aktualnie renderowane w RightPanel
   explorationItems: ExplorationItem[];
 
-  isFlightsLoading: boolean; // Stan ładowania (v11.51)
+  isFlightsLoading: boolean; // Stan ładowania danych o lotach
   setSelectedItem: (v: SelectedItem | null) => void;
   setSelectedAirportCode: (v: string | null) => void;
   setSelectedAirportCodes: (v: string[]) => void;
@@ -58,6 +58,7 @@ interface SelectionState {
     highlightedAirports: string[];
     explorationItems: ExplorationItem[];
   }) => void;
+  removeAirportsData: (codes: string[]) => void;
 }
 
 export const useSelectionStore = create<SelectionState>((set) => ({
@@ -85,7 +86,7 @@ export const useSelectionStore = create<SelectionState>((set) => ({
     v.forEach(f => {
       const key = `${f.origin_airport_code}-${f.destination_airport_code}-${f.scheduled_departure_utc}`;
       routeMap.set(key, f);
-      
+
       const groupKey = `${f.origin_airport_code}-${f.destination_airport_code}`;
       if (!groupMap.has(groupKey)) groupMap.set(groupKey, []);
       groupMap.get(groupKey)!.push(f);
@@ -102,14 +103,14 @@ export const useSelectionStore = create<SelectionState>((set) => ({
   appendFlights: newFlights => set(state => {
     const getKey = (f: Flight) => `${f.flight_number}-${f.scheduled_departure_utc}`;
     const getRouteKey = (f: Flight) => `${f.origin_airport_code}-${f.destination_airport_code}-${f.scheduled_departure_utc}`;
-    
+
     const unique = newFlights.filter(f => !state._dedupKeys.has(getKey(f)));
     if (unique.length === 0) return state;
 
     const nextKeys = new Set(state._dedupKeys);
     const nextRouteMap = new Map(state.flightsByRouteMap);
     const nextGroupMap = new Map(state.flightsByRouteGroupMap);
-    
+
     unique.forEach(f => {
       nextKeys.add(getKey(f));
       nextRouteMap.set(getRouteKey(f), f);
@@ -123,7 +124,7 @@ export const useSelectionStore = create<SelectionState>((set) => ({
     const currentHighlights = new Set(state.highlightedAirports.map(c => c.toUpperCase()));
     const addedDestinations = newDestinations.filter(d => !currentHighlights.has(d));
 
-    // [CONTEXT-AWARE APPEND v11.93]: Nie podświetlamy nowych lotnisk, jeśli panel jest zamknięty.
+    // [PODŚWIETLANIE KONTROLOWANE KONTEKSTEM]: Nie podświetlamy nowych lotnisk, jeśli panel jest zamknięty.
     const shouldUpdateHighlights = state.selectedItem !== null && addedDestinations.length > 0;
 
     return {
@@ -144,9 +145,9 @@ export const useSelectionStore = create<SelectionState>((set) => ({
     return { selectedAirportCodes: nextCodes };
   }),
 
-  clearSelection: () => set({ 
-    selectedItem: null, 
-    selectedAirportCode: null, 
+  clearSelection: () => set({
+    selectedItem: null,
+    selectedAirportCode: null,
     selectedAirportCodes: [],
     highlightedAirports: [],
     highlightedCities: [],
@@ -156,6 +157,55 @@ export const useSelectionStore = create<SelectionState>((set) => ({
     _dedupKeys: new Set(),
     isFlightsLoading: false,
     displayedFlights: []
+  }),
+
+  /**
+   * GRANULOWANE USUWANIE DANYCH
+   * Czyści dane lotów i podświetlenia dla konkretnych lotnisk źródłowych.
+   * Zapobiega pełnemu przeładowaniu widoku przy usuwaniu pojedynczego elementu.
+   */
+  removeAirportsData: (codes: string[]) => set(state => {
+    const codesToRemove = new Set(codes.map(c => c.toUpperCase()));
+    if (codesToRemove.size === 0) return state;
+
+    // 1. Filtrowanie bazy lotów
+    const nextFlightsData = state.flightsData.filter(f =>
+      !codesToRemove.has(f.origin_airport_code.toUpperCase())
+    );
+
+    // 2. Atomowa rekonstrukcja indeksów O(N)
+    const nextDedupKeys = new Set<string>();
+    const nextRouteMap = new Map<string, Flight>();
+    const nextGroupMap = new Map<string, Flight[]>();
+
+    nextFlightsData.forEach(f => {
+      const key = `${f.flight_number}-${f.scheduled_departure_utc}`;
+      const routeKey = `${f.origin_airport_code}-${f.destination_airport_code}-${f.scheduled_departure_utc}`;
+      const groupKey = `${f.origin_airport_code}-${f.destination_airport_code}`;
+
+      nextDedupKeys.add(key);
+      nextRouteMap.set(routeKey, f);
+      if (!nextGroupMap.has(groupKey)) nextGroupMap.set(groupKey, []);
+      nextGroupMap.get(groupKey)!.push(f);
+    });
+
+    // 3. Garbage Collection dla podświetleń (Destinations)
+    // Czyścimy tylko te lotniska docelowe, które NIE są już osiągalne z żadnego z pozostałych źródeł.
+    const remainingDestinations = new Set(nextFlightsData.map(f => f.destination_airport_code.toUpperCase()));
+    const nextHighlights = state.highlightedAirports.filter(h =>
+      remainingDestinations.has(h.toUpperCase())
+    );
+
+    return {
+      flightsData: nextFlightsData,
+      _dedupKeys: nextDedupKeys,
+      flightsByRouteMap: nextRouteMap,
+      flightsByRouteGroupMap: nextGroupMap,
+      highlightedAirports: nextHighlights,
+      displayedFlights: state.displayedFlights.filter(f =>
+        !codesToRemove.has(f.origin_airport_code.toUpperCase())
+      )
+    };
   }),
 
   /**
@@ -178,26 +228,26 @@ export const useSelectionStore = create<SelectionState>((set) => ({
     // "Jeżeli zostało dodane miasto, a potem lotnisko z tego miasta, to nic nie robimy"
     if (item.type === 'airport') {
       const code = item.code.toUpperCase();
-      const isAlreadyCovered = state.explorationItems.some(existing => 
+      const isAlreadyCovered = state.explorationItems.some(existing =>
         (existing.type === 'city' || existing.type === 'country') && existing.airportCodes.includes(code)
       );
       if (isAlreadyCovered) return state;
     }
 
     const newItem: ExplorationItem = { ...item, id };
-    
+
     // Funkcja pomocnicza do zliczania unikalnych lotnisk w kolekcjach
-    const getUniqueAirportCount = (itms: ExplorationItem[]) => 
+    const getUniqueAirportCount = (itms: ExplorationItem[]) =>
       new Set(itms.flatMap(i => i.airportCodes)).size;
 
     // 3. Konsolidacja lotnisk: jeśli nowy kafelek (np. Miasto) zawiera lotniska, które są już
     // wyświetlane jako osobne kafelki, usuwamy te mniejsze kafelki (Up-promotion).
     let items = state.explorationItems.filter(i => i.id !== id);
     const newCodes = new Set(newItem.airportCodes.map(c => c.toUpperCase()));
-    
-    items = items.map(i => ({ 
-      ...i, 
-      airportCodes: i.airportCodes.filter(c => !newCodes.has(c.toUpperCase())) 
+
+    items = items.map(i => ({
+      ...i,
+      airportCodes: i.airportCodes.filter(c => !newCodes.has(c.toUpperCase()))
     })).filter(i => i.airportCodes.length > 0);
 
     // Dynamiczne zwalnianie miejsca (FIFO).

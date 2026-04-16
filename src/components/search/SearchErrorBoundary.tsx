@@ -1,4 +1,5 @@
 import React from 'react';
+import { logger } from '../../utils/logger';
 
 interface SearchErrorBoundaryState {
   hasError: boolean;
@@ -17,7 +18,7 @@ class SearchErrorBoundary extends React.Component<React.PropsWithChildren, Searc
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('Search component error:', error, errorInfo);
+    logger.error('Błąd komponentu wyszukiwarki:', error, errorInfo);
     this.setState({ error, errorInfo });
   }
 
@@ -25,7 +26,7 @@ class SearchErrorBoundary extends React.Component<React.PropsWithChildren, Searc
     if (this.state.hasError) {
       return (
         <div className="error-boundary">
-          <h3>Search error</h3>
+          <h3>Błąd wyszukiwania</h3>
           <p>{this.state.error?.toString()}</p>
         </div>
       );

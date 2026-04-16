@@ -1,13 +1,12 @@
 /**
- * APLIKACJA KOLORÓW I ROZMIARÓW (colorApplier.ts - ATOMYCZNA SYNCHRONIZACJA v9.2)
- * 
+ * APLIKACJA KOLORÓW I ROZMIARÓW
  * Zarządza statycznymi stanami priorytetowymi (Selected > Dest > Trip > General).
- * Wykorzystuje Guarded Filters, aby nie nadpisywać okluzji wstrzykiwanych przez Heartbeata.
  */
 
 import maplibregl from 'maplibre-gl';
 import type { Map as MapLibreMap } from 'maplibre-gl';
-import { getLabelPaint, isSystemColor, mergeFilterConditions } from './utils';
+import { getLabelPaint, isSystemColor, mergeFilterConditions, safeSetZoomLimits } from './utils';
+import { logger } from '../../utils/logger';
 
 export function applyMapColors(
   map: MapLibreMap,
@@ -19,9 +18,9 @@ export function applyMapColors(
     explorationAirportCodes: string[];
     selectedAirportCode: string | null;
     highlightedLabelCodes: string[];
-    colorState: any; // Dynamiczny stan ze store'a
+    colorState: any; // Dynamiczny stan ze sklepu
     hoveredAirportCode: string | null;
-    styleId: string; // JAWNY STYL (v11.46)
+    styleId: string; // Identyfikator stylu
   }
 ) {
   if (!map || !(map as any).getStyle()) return;
@@ -29,7 +28,7 @@ export function applyMapColors(
   const { colorState, hoveredAirportCode, styleId } = extra;
   const labelPaint = getLabelPaint(styleId);
 
-  // 1. POMOCNIK OKLUZJI (v11.7): Każdy filtr jest automatycznie rozszerzany o wykluczenie hovera
+  // POMOCNIK OKLUZJI: Każdy filtr jest automatycznie rozszerzany o wykluczenie hovera
   const wrapOcclusion = (filter: any) => {
     if (!hoveredAirportCode) return filter;
     return ['all', ['!=', ['get', 'code'], hoveredAirportCode], filter];
@@ -39,27 +38,23 @@ export function applyMapColors(
     try {
       if (!map.getLayer(id)) return;
       map.setFilter(id, wrapOcclusion(filter));
-    } catch (err) { console.error(`Layer ERROR (Filter): ${id}`, err); }
+    } catch (err) { logger.error(`BŁĄD warstwy (Filtr): ${id}`, err); }
   };
 
-  // Helper dla bezpiecznych liczb (v10.6+)
+  // Helper dla bezpiecznych liczb
   const n = (v: any, fallback: number): number => {
     const num = Number(v);
     return isNaN(num) ? fallback : num;
   };
 
-  // 1. ZASIĘG ZOOM (TWARDE LIMITY) - v11.8
-  let zMin = n(colorState?.zoomRangeMin, 1.3);
-  let zMax = n(colorState?.zoomRangeMax, 12);
-  if (zMin >= zMax) zMax = zMin + 1;
+  const rawMin = n(colorState?.zoomRangeMin, 1.3);
+  const rawMax = n(colorState?.zoomRangeMax, 12.0);
+  // ZABEZPIECZENIE: Zawsze rosnące dla interpolate
+  const zMin = Math.min(rawMin, rawMax);
+  let zMax = Math.max(zMin + 0.001, rawMax);
 
   // Aplikujemy hard-limits do obiektu mapy
-  try {
-    map.setMinZoom(zMin);
-    map.setMaxZoom(zMax);
-  } catch (e) {
-    console.warn("[GPU_SYNC] Failed to set hard zoom limits", e);
-  }
+  safeSetZoomLimits(map, zMin, zMax);
 
   const cDest = colorState?.destinationAirport || '#4CAF50';
   const cTrip = colorState?.tripAirport || '#000000';
@@ -74,15 +69,15 @@ export function applyMapColors(
     }
   });
 
-  // 2. PARAMETRY ROZMIARÓW (DYN.)
+  // PARAMETRY ROZMIARÓW (DYN.)
   const rGen = ['interpolate', ['linear'], ['zoom'], zMin, n(colorState?.generalAirportRadiusMin, 2), zMax, n(colorState?.generalAirportRadiusMax, 8)];
   const rHigh = ['interpolate', ['linear'], ['zoom'], zMin, n(colorState?.highlightedAirportRadiusMin, 4), zMax, n(colorState?.highlightedAirportRadiusMax, 16)];
   
-  // Etykiety (v13.71)
+  // Etykiety
   const fGen = ['interpolate', ['linear'], ['zoom'], zMin, n(colorState?.generalAirportLabelSizeMin, 10), zMax, n(colorState?.generalAirportLabelSizeMax, 14)];
   const fHigh = ['interpolate', ['linear'], ['zoom'], zMin, n(colorState?.highlightedLabelSizeMin, 12), zMax, n(colorState?.highlightedLabelSizeMax, 18)];
 
-  // 3. KOLORY WYBRANYCH (v13.76: Precyzyjne rozdzielenie Dot vs Label)
+  // KOLORY WYBRANYCH: Precyzyjne rozdzielenie kropki i etykiety
   const buildSelectedExpr = (type: 'airport' | 'label', propName: 'la_sel_idx' | 'la_city_sel_idx', fallback: string) => {
     const pairs: any[] = [];
     (colorState?.startPoints || []).forEach((sp: any, i: number) => {
@@ -98,7 +93,7 @@ export function applyMapColors(
   const cCitySelCircle = buildSelectedExpr('airport', 'la_city_sel_idx', '#000000');
   const cCitySelLabel = buildSelectedExpr('label', 'la_city_sel_idx', labelPaint.textColor);
 
-  // --- 4. APLIKACJA STYLU KROPEK ---
+  // APLIKACJA STYLU KROPEK
   const isImg = (styleId || '').toLowerCase().includes('imagery');
   const strokeColor = isImg ? '#000000' : '#ffffff';
 
@@ -117,7 +112,7 @@ export function applyMapColors(
   applyPointStyle('airports-highlighted', rHigh, cDest);
   applyPointStyle('airports-selected', rHigh, cSelCircle);
 
-  // --- 5. APLIKACJA STYLU ETYKIET (MASTER LABEL PIPELINE v13.76: Pixel-Perfect Priority) ---
+  // APLIKACJA STYLU ETYKIET
   const destLabelC = colorState?.destinationLabelColor || labelPaint.textColor;
   const tripLabelC = colorState?.tripLabelColor || labelPaint.textColor;
   const genLabelC = colorState?.generalLabelColor || labelPaint.textColor;
@@ -151,7 +146,7 @@ export function applyMapColors(
   ];
 
   if (map.getLayer('airports-labels')) {
-    // Rozmiar: Wyróżnione (Selected/Dest/Trip) zawsze używają Highlighted (v13.76)
+    // Rozmiar: Wyróżnione (Wybrane/Cel/Trasa) zawsze korzystają z wysokiego detalu
     const textSizeExpr: any = [
       'interpolate', ['linear'], ['zoom'],
       zMin, ['case', ['get', 'is_city_high'], n(colorState?.highlightedLabelSizeMin, 12), n(colorState?.generalAirportLabelSizeMin, 10)],
@@ -165,7 +160,7 @@ export function applyMapColors(
     map.setLayoutProperty('airports-labels', 'visibility', 'visible');
   }
 
-  // --- 6. AKTUALIZACJA TRAS (v11.57/58: Multi-source & Hover Fix) ---
+  // AKTUALIZACJA TRAS
   const getLineStyles = (pref: string, isSelection = false) => {
     // 1. Definicja par Kolor -> srcIdx dla trybu Multi-start
     const routeColors: any[] = [];
@@ -212,7 +207,7 @@ export function applyMapColors(
     map.setPaintProperty('selected-routes', 'line-width', globalStyles.width);
   }
 
-  // --- 7. SYNC FILTRÓW (STABILNY v11.8 - Grupownie Miast) ---
+  // SYNC FILTRÓW: Grupowanie miast
   const sac = Array.from(new Set((extra.selectedAirportCodes || []).map(c => c.toUpperCase())));
   const mtac = Array.from(new Set((extra.manualTransferAirportCodes || []).map(c => c.toUpperCase())));
   const eac = Array.from(new Set((extra.explorationAirportCodes || []).map(c => c.toUpperCase())));
@@ -221,7 +216,7 @@ export function applyMapColors(
   
   const hCodes = Array.from(new Set([...sac, ...ha, ...tvac, ...mtac, ...eac]));
   
-  // Filtr grupowania dla labeli: poniżej zooma 7 tylko is_city_primary (v24.20: Flat Logic)
+  // Filtr grupowania dla labeli: poniżej zooma 7 tylko główny port miasta
   const labelGroupFilter = [
     'case',
     ['<', ['zoom'], 7.0],
@@ -240,8 +235,8 @@ export function applyMapColors(
   safeSetFilter('airports-trip', ['match', ['get', 'code'], tripCodes.length > 0 ? tripCodes : ['_NONE_'], true, false]);
   safeSetFilter('airports-circles', ['match', ['get', 'code'], hCodes.length > 0 ? hCodes : ['_NONE_'], false, true]);
   
-  // APLIKACJA FILTRÓW DLA LABELI (MASTER LABEL PIPELINE v13.42 / v21.65)
-  // [ROBUST OCCLUSION]: Rozdzielamy na dwie warstwy, aby Selected (wymuszone nakładanie) 
+  // APLIKACJA FILTRÓW DLA ETYKIET
+  // [SOLIDNA OKLUZJA]: Rozdzielamy na dwie warstwy, aby Wybrane (wymuszone nakładanie) 
   // nie dublowało się z warstwą ogólną.
   const isSelectedFilter = ['==', ['get', 'is_selected'], true];
   const notSelectedFilter = ['!=', ['get', 'is_selected'], true];
@@ -252,7 +247,7 @@ export function applyMapColors(
   // 2. Warstwa wybrana (Selected Only - Zawsze widoczna)
   safeSetFilter('airports-labels-selected', isSelectedFilter);
 
-  // Synchronizacja stylów dla OBU warstw etykiet (v21.65)
+  // Synchronizacja stylów dla OBU warstw etykiet
   const labelIds = ['airports-labels', 'airports-labels-selected'];
   labelIds.forEach(id => {
     if (map.getLayer(id)) {

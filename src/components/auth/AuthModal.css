@@ -1,6 +1,4 @@
-/* ═══════════════════════════════════════════════════════════════
-   AUTH MODAL
-   ═══════════════════════════════════════════════════════════════ */
+/* Modal autoryzacji */
 
 .auth-modal-overlay {
   position: fixed;
@@ -21,7 +19,6 @@
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-xl);
   padding: clamp(22px, 3vh, 34px) clamp(22px, 3vw, 34px);
-  width: clamp(300px, 38vw, 420px);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -62,7 +59,7 @@
   color: var(--red);
 }
 
-/* ── Form ────────────────────────────────────────────────────── */
+/* Formularz */
 .auth-modal__form {
   display: flex;
   flex-direction: column;
@@ -133,7 +130,7 @@
 
 .auth-modal__submit:disabled { opacity: 0.55; cursor: not-allowed; }
 
-/* ── Google ───────────────────────────────────────────────────── */
+/* Logowanie Google */
 .auth-modal__google {
   width: 100%;
   padding: 10px 16px;
@@ -156,7 +153,7 @@
 
 .auth-modal__google:disabled { opacity: 0.55; cursor: not-allowed; }
 
-/* ── Mode switch ─────────────────────────────────────────────── */
+/* Przełączanie trybu */
 .auth-modal__switch {
   margin: 0;
   text-align: center;

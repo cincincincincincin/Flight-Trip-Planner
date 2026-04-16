@@ -1,6 +1,4 @@
-/* ═══════════════════════════════════════════════════════════════
-   SAVED TRIPS PANEL
-   ═══════════════════════════════════════════════════════════════ */
+/* Panel zapisanych podróży */
 
 .saved-trips-panel {
   position: fixed;
@@ -18,7 +16,7 @@
   overflow: hidden;
 }
 
-/* ── Header ──────────────────────────────────────────────────── */
+/* Nagłówek */
 .saved-trips-panel__header {
   display: flex;
   align-items: center;
@@ -60,7 +58,7 @@
   color: var(--red);
 }
 
-/* ── Body ────────────────────────────────────────────────────── */
+/* Zawartość */
 .saved-trips-panel__body {
   flex: 1;
   overflow-y: auto;
@@ -84,7 +82,7 @@
   color: var(--text-muted);
 }
 
-/* ── List ────────────────────────────────────────────────────── */
+/* Lista */
 .saved-trips-panel__list {
   list-style: none;
   margin: 0;
@@ -137,7 +135,7 @@
   text-overflow: ellipsis;
 }
 
-/* ── Actions ─────────────────────────────────────────────────── */
+/* Akcje */
 .saved-trips-panel__actions {
   display: flex;
   gap: 4px;
@@ -194,7 +192,7 @@
   box-shadow: 0 0 8px var(--red-b);
 }
 
-/* ── Mobile ──────────────────────────────────────────────────── */
+/* Widok mobilny */
 @media (max-width: 768px) {
   .saved-trips-panel {
     top: auto;

@@ -47,12 +47,12 @@ export const getSingleAirportLabel = (cityName: string, airportName: string, rev
     return aName;
   }
 
-  // If the airport name contains the city name (case-insensitive and ignoring diacritics), just use the airport name.
+  // Jeśli nazwa lotniska zawiera nazwę miasta, używamy tylko nazwy lotniska.
   if (aNorm.includes(cNorm)) {
     return aName;
   }
   
-  // Otherwise, combine them to show both without redundancy
+  // W przeciwnym razie łączymy obie nazwy
   if (reverseOrder) {
     return `${aName} – ${cName}`;
   }

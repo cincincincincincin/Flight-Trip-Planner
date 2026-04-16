@@ -1,8 +1,6 @@
 /**
- * HOOK INTERAKCJI MAPY (useMapHover.ts - WERSJA ATOMYCZNA v18.40)
- * 
- * Implementuje logikę "Snajperskiej Precyzji" - hit-testing idealnie zgrany z rozmiarem GPU.
- * Przygotowuje dane (Feature) dla Heartbeata w MapComponent.
+ * HOOK INTERAKCJI MAPY
+ * Implementuje logikę precyzyjnego wykrywania obiektów pod kursorem.
  */
 
 import { useEffect } from 'react';
@@ -18,6 +16,7 @@ import { EMPTY_DESTINATION_FILTER } from '../../constants/filters';
 import { spatialIndex } from '../../utils/spatialIndex';
 import { getLocalizedProp } from '../../utils/i18n';
 import { getLabelPaint, isSystemColor, mergeFilterConditions, getVisualRadius } from './utils';
+import { logger } from '../../utils/logger';
 
 interface AirportFeature {
   properties: AirportFeatureProps;
@@ -34,33 +33,33 @@ const n = (v: any, fallback: number): number => {
 };
 
 export interface MapHoverRefs {
-  map: React.MutableRefObject<maplibregl.Map | null>;
-  projectedAirportsRef: React.MutableRefObject<Array<{ code: string; x: number; y: number }>>;
-  hoveredAirportCodeRef: React.MutableRefObject<string | null>;
-  lastDetectedCodeRef: React.MutableRefObject<string | null>;
-  hoverSampleCountRef: React.MutableRefObject<number>;
-  mouseStopTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
-  hoverClearTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
-  hoverLockUntilRef: React.MutableRefObject<number>;
-  isRouteHoveredRef: React.MutableRefObject<boolean>;
-  hoveredRouteId: React.MutableRefObject<string | number | null>;
-  airportCityKeyRef: React.MutableRefObject<Record<string, string>>;
-  cityLabelCodeByCityRef: React.MutableRefObject<Record<string, string>>;
-  cityLabelCodesRef: React.MutableRefObject<string[]>;
-  highlightedLabelCodesRef: React.MutableRefObject<string[]>;
-  highlightedCityLabelCodesRef: React.MutableRefObject<string[]>;
-  highlightedAirportsRef: React.MutableRefObject<string[]>;
-  selectedAirportCodesRef: React.MutableRefObject<string[]>;
-  explorationAirportCodesRef: React.MutableRefObject<string[]>;
-  tripVisibleAirportCodesRef: React.MutableRefObject<string[] | null>;
-  airportsDataRef: React.MutableRefObject<AirportsGeoJSON | undefined>;
-  onSelectItemRef: React.MutableRefObject<(item: SelectedItem) => void>;
-  hoverFeatureDataRef: React.MutableRefObject<any | null>;
+  map: React.RefObject<maplibregl.Map | null>;
+  projectedAirportsRef: React.RefObject<Array<{ code: string; x: number; y: number }>>;
+  hoveredAirportCodeRef: React.RefObject<string | null>;
+  lastDetectedCodeRef: React.RefObject<string | null>;
+  hoverSampleCountRef: React.RefObject<number>;
+  mouseStopTimerRef: React.RefObject<ReturnType<typeof setTimeout> | null>;
+  hoverClearTimerRef: React.RefObject<ReturnType<typeof setTimeout> | null>;
+  hoverLockUntilRef: React.RefObject<number>;
+  isRouteHoveredRef: React.RefObject<boolean>;
+  hoveredRouteId: React.RefObject<string | number | null>;
+  airportCityKeyRef: React.RefObject<Record<string, string>>;
+  cityLabelCodeByCityRef: React.RefObject<Record<string, string>>;
+  cityLabelCodesRef: React.RefObject<string[]>;
+  highlightedLabelCodesRef: React.RefObject<string[]>;
+  highlightedCityLabelCodesRef: React.RefObject<string[]>;
+  highlightedAirportsRef: React.RefObject<string[]>;
+  selectedAirportCodesRef: React.RefObject<string[]>;
+  explorationAirportCodesRef: React.RefObject<string[]>;
+  tripVisibleAirportCodesRef: React.RefObject<string[] | null>;
+  airportsDataRef: React.RefObject<AirportsGeoJSON | undefined>;
+  onSelectItemRef: React.RefObject<(item: SelectedItem) => void>;
+  hoverFeatureDataRef: React.RefObject<any | null>;
   applyColors: (mode: 'all' | 'hover-only') => void;
-  applyHoverRef: React.MutableRefObject<((code: string | null) => void) | null>;
+  applyHoverRef: React.RefObject<((code: string | null) => void) | null>;
   mapStyle: string;
   selectedAirportCode: string | null;
-  // TRYB PODRÓŻY (v16.15/80)
+  // Tryb podróży
   isTripActive: boolean;
 }
 
@@ -72,7 +71,7 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
     const m = refs.map.current;
     const canvas = m.getCanvas();
 
-    // 1. DYNAMICZNE KESZOWANIE CECH (v15.80: Reactive Features)
+    // 1. Dynamiczne buforowanie cech
     let cachedAirportsMap = new Map<string, AirportFeature>();
     let lastDataRef: any = null;
 
@@ -103,10 +102,13 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
 
       refreshFeatureMap();
       const feat = cachedAirportsMap.get(code.toUpperCase());
-      if (!feat) return;
+      if (!feat) {
+        // Jeśli kod istnieje w SpatialIndex, ale nie w danych, czyścimy hover.
+        applyHover(null);
+        return;
+      }
 
-      // RDZEŃ BLOKADY INTERAKCJI (v16.80: Selective Interaction)
-      // W trybie podróży ignorujemy wszystko, co nie jest Selected/Dest/Trip
+      // W trybie podróży ignorujemy wszystko, co nie jest wyróżnione
       if (refs.isTripActive && !feat.properties.is_high) {
         applyHover(null);
         return;
@@ -118,18 +120,20 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       const isImg = (refs.mapStyle || '').toLowerCase().includes('imagery');
 
       let type: 'selected' | 'destination' | 'trip' | 'general' = 'general';
-      const currentZoom = m.getZoom();
+      const currentZoom = refs.map.current?.getZoom() || 0;
       const isGroupingPhase = currentZoom < 7.0;
       let activeIdx = -1;
 
-      if (isGroupingPhase && feat.properties.is_city_primary) {
-        if (feat.properties.is_city_selected) {
+      if (isGroupingPhase) {
+        if (feat.properties.is_selected || feat.properties.is_city_selected_primary) {
           type = 'selected';
           activeIdx = n(feat.properties.la_city_sel_idx, -1);
-        } else if (feat.properties.is_city_dest) {
+        } else if (feat.properties.is_dest || feat.properties.is_city_dest_primary) {
           type = 'destination';
-        } else if (feat.properties.is_city_trip) {
+        } else if (feat.properties.is_trip || feat.properties.is_city_trip_primary) {
           type = 'trip';
+        } else {
+          type = 'general';
         }
       } else {
         if (feat.properties.is_selected) {
@@ -139,6 +143,8 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
           type = 'destination';
         } else if (feat.properties.is_trip) {
           type = 'trip';
+        } else {
+          type = 'general';
         }
       }
 
@@ -205,12 +211,10 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       const eac = refs.explorationAirportCodesRef.current || [];
       const mtac = (window as any).manualTransferAirportCodes || [];
 
-      // 1. Wyznaczamy Trafienia Naturalne
       const currentNaturalHits = new Map<string, { dist: number }>();
       const HIT_MARGIN = 1.0;
 
       candidates.forEach(cand => {
-        // RDZEŃ BLOKADY (Interaction Guard v16.80)
         if (refs.isTripActive) {
           const feat = cachedAirportsMap.get(cand.code.toUpperCase());
           if (!feat || !feat.properties.is_high) return;
@@ -294,7 +298,6 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       nearby.forEach(cand => {
         const feat = cachedAirportsMap.get(cand.code.toUpperCase());
         if (feat && !seen.has(cand.code)) {
-          // RDZEŃ BLOKADY (Interaction Guard v16.80)
           if (refs.isTripActive && !feat.properties.is_high) return;
 
           const p = m.project(feat.geometry.coordinates as [number, number]);
@@ -321,12 +324,9 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
     m.on('movestart', onMoveStart); m.on('move', onMove); m.on('moveend', onMoveEnd);
     canvas.addEventListener('mousemove', handleMouseMove);
 
-    // --- SNIPER CLICK HANDLING (v24.30: Hover-Perfect Interaction) ---
     const handleClick = (e: MouseEvent) => {
       refreshFeatureMap();
       
-      // [PRIORITY]: Kliknięcie odbywa się na tym, co jest aktualnie HOVEROWANE
-      // Gwarantuje to trafienie w powiększoną kropkę (Sniper Precision)
       const code = refs.hoveredAirportCodeRef.current;
       if (!code) return;
 
@@ -336,17 +336,13 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       const tripState = useTripStore.getState().tripState;
       const currentTripActive = !!(tripState && tripState.legs && tripState.legs.length > 0);
       
-      // [PROTECTIVE GUARDS v24.50]: 
-      // 1. Nigdy nie filtrujemy "Selected" (punktów startowych)
       if (fullFeat.properties.is_selected) return;
 
       if (currentTripActive) {
-        // 2. W trybie podróży filtrujemy TYLKO aktualne cele (destinations)
         if (!fullFeat.properties.is_high && !fullFeat.properties.is_dest) {
           return;
         }
 
-        // [MULTI-SELECT SYNC v24.40]: Dodawanie/usuwanie z tablicy zamiast zastępowania
         const currentFilter = useFilterStore.getState().destinationFilter;
         const airports = currentFilter.airports || [];
         const isAlreadyFiltered = airports.includes(code);
@@ -363,15 +359,13 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
           airports: nextAirports 
         };
 
-        if (useSettingsStore.getState().showConsoleLogs) {
-           console.log(`[MAP-CLICK|MULTI] Toggling ${code}. New list: ${nextAirports.join(', ')}`);
-        }
+        logger.log(`[MAP-CLICK|MULTI] Przełączanie ${code}. Nowa lista: ${nextAirports.join(', ')}`);
         
         useFilterStore.getState().setDestinationFilter(nextFilter);
         return;
       }
 
-      // TRYB ZWYKŁY (Wybór lotniska)
+      // TRYB STANDARDOWY (Wybór lotniska)
       const data = {
         code: fullFeat.properties.code,
         name: getLocalizedProp(fullFeat.properties, 'name', language),

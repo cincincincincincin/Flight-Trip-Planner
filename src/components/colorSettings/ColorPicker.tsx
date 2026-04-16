@@ -41,7 +41,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ color, onChange, title }) => 
 
   const [r, g, b] = hsvToRgb(hue, sat, val);
 
-  // ── Draw SV canvas ──────────────────────────────────────────────────────────
+  // Rysowanie nasycenia (SV)
   useEffect(() => {
     if (!open) return;
     const canvas = svRef.current;
@@ -68,7 +68,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ color, onChange, title }) => 
     ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1; ctx.stroke();
   }, [open, hue, sat, val]);
 
-  // ── Draw hue strip ──────────────────────────────────────────────────────────
+  // Rysowanie paska odcienia (Hue)
   useEffect(() => {
     if (!open) return;
     const canvas = hueRef.current;
@@ -89,7 +89,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ color, onChange, title }) => 
     ctx.strokeRect(0, cy - 2, W, 4);
   }, [open, hue]);
 
-  // ── Position popover ────────────────────────────────────────────────────────
+  // Pozycjonowanie popovera
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({ position: 'fixed', left: 0, top: 0 });
 
   const calcPopoverPos = () => {
@@ -105,7 +105,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ color, onChange, title }) => 
     setPopoverStyle({ position: 'fixed', left, top, transform: 'none', bottom: 'auto' });
   };
 
-  // ── Close on outside click ──────────────────────────────────────────────────
+  // Zamykanie przy kliknięciu poza
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -116,7 +116,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ color, onChange, title }) => 
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  // ── Global mouse drag ───────────────────────────────────────────────────────
+  // Przeciąganie myszą
   const commitSv = useCallback((s: number, v: number, h: number, a: number) => {
     const [rr, gg, bb] = hsvToRgb(h, s, v);
     onChange(colorToString(rr, gg, bb, a));
@@ -159,7 +159,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ color, onChange, title }) => 
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, [hue, sat, val, alpha, commitSv, onChange]);
 
-  // ── RGBA input handlers ─────────────────────────────────────────────────────
+  // Obsługa wejścia RGBA
   const handleRgbaInput = (channel: 'r'|'g'|'b'|'a', raw: string) => {
     const n = Math.max(0, Math.min(255, parseInt(raw) || 0));
     const nr = channel === 'r' ? n : r;
@@ -175,7 +175,7 @@ const ColorPicker: React.FC<ColorPickerProps> = ({ color, onChange, title }) => 
     onChange(colorToString(nr, ng, nb, na));
   };
 
-  // ── Eyedropper ──────────────────────────────────────────────────────────────
+  // Kroplomierz (Eyedropper)
   const applyPickedColor = (hex: string) => {
     const [rr, gg, bb, aa] = parseColorString(hex);
     const [nh, ns, nv] = rgbToHsv(rr, gg, bb);

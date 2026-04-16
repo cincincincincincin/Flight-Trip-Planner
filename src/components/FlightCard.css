@@ -1,6 +1,4 @@
-/* ═══════════════════════════════════════════════════════════════
-   FLIGHT CARD
-   ═══════════════════════════════════════════════════════════════ */
+/* Karta lotu (Flight Card) */
 
 .flight-card {
   background: var(--bg-raised);
@@ -25,7 +23,7 @@
   background: var(--bg-hover);
 }
 
-/* Ensure buttons and links inside the card still capture events correctly */
+/* Interakcje wewnątrz klikalnej karty */
 .flight-card--clickable button,
 .flight-card--clickable a {
   cursor: pointer;
@@ -33,7 +31,7 @@
   z-index: 2;
 }
 
-/* ── Trip highlight states ───────────────────────────────────── */
+/* Stany wyróżnienia podróży (Trip highlights) */
 .flight-card--trip-airport {
   border-color: var(--fc-highlight-airport-border, var(--c-teal-b));
   background: var(--fc-highlight-airport-bg, var(--c-teal-dim));
@@ -54,7 +52,7 @@
   background: var(--fc-highlight-soon-bg, var(--red-dim));
 }
 
-/* ── Header: flight number + airline ─────────────────────────── */
+/* Nagłówek: numer lotu + linia lotnicza */
 .flight-header {
   display: flex;
   align-items: center;
@@ -96,7 +94,7 @@
   white-space: nowrap;
 }
 
-/* ── Route: origin → destination ─────────────────────────────── */
+/* Trasa: wylot → przylot */
 .flight-route {
   display: flex;
   align-items: center;
@@ -177,7 +175,7 @@
   white-space: nowrap;
 }
 
-/* ── Times: departure / arrival ──────────────────────────────── */
+/* Czasy: wylot / przylot */
 .flight-times {
   margin-bottom: 8px;
 }
@@ -256,7 +254,7 @@
   font-weight: 600;
 }
 
-/* ── Estimated arrival ───────────────────────────────────────── */
+/* Szacowany przylot (Estimated arrival) */
 .arr-estimated-wrapper {
   position: relative;
   display: inline-flex;
@@ -301,7 +299,7 @@
   display: block;
 }
 
-/* ── Details: terminal / gate ────────────────────────────────── */
+/* Szczegóły: terminal / bramka */
 .flight-details {
   display: flex;
   gap: 8px;
@@ -319,7 +317,7 @@
   padding: 2px 8px;
 }
 
-/* ── Actions ─────────────────────────────────────────────────── */
+/* Akcje karty */
 .flight-actions {
   display: flex;
   flex-direction: column;
@@ -399,7 +397,7 @@
   cursor: not-allowed;
 }
 
-/* ── Price section ───────────────────────────────────────────── */
+/* Sekcja cenowa */
 .price-section {
   margin-top: 8px;
   padding: 10px;

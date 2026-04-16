@@ -12,6 +12,11 @@ import { useTexts } from '../hooks/useTexts';
 import { UI_SYMBOLS } from '../constants/ui';
 import { getLocalizedName } from '../utils/i18n';
 
+/**
+ * GŁÓWNY KOMPONENT WYSZUKIWARKI
+ * Odpowiada za orkiestrację trzech faz wyszukiwania (Kraje -> Miasta -> Lotniska).
+ */
+
 interface SearchProps {
   onSelectItem: (item: SelectedItem) => void;
 }
@@ -90,9 +95,9 @@ const Search = ({ onSelectItem }: SearchProps) => {
     if (query.trim() === '' && phaseData[1].length === 0 && !loading.search) {
       triggerSearchImmediate('', 0, false);
     } else if (query.trim() !== '' &&
-               phaseData[1].length === 0 &&
-               phaseData[2].length === 0 &&
-               phaseData[3].length === 0) {
+      phaseData[1].length === 0 &&
+      phaseData[2].length === 0 &&
+      phaseData[3].length === 0) {
       triggerSearchImmediate(query, 0, false);
     }
   };
@@ -114,7 +119,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
     }
   };
 
-  // Restore scroll position when search opens with same query
+  // Przywracanie pozycji przewijania
   useEffect(() => {
     if (isSearchOpen && containerRef.current && savedScrollForQueryRef.current.query === query) {
       const savedPosition = savedScrollForQueryRef.current.position;
@@ -127,7 +132,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
     }
   }, [isSearchOpen, query]);
 
-  // Restore scroll position after expand actions (runs every render)
+  // Przywracanie scrolla po akcji rozwijania
   useEffect(() => {
     if (shouldRestoreScrollRef.current && containerRef.current && scrollBeforeActionRef.current > 0) {
       requestAnimationFrame(() => {
@@ -141,7 +146,10 @@ const Search = ({ onSelectItem }: SearchProps) => {
     }
   });
 
-  // Main infinite scroll observer
+  /**
+   * NIESKOŃCZONE PRZEWIJANIE
+   * Wykrywa dotarcie do końca listy i ładuje dane.
+   */
   useEffect(() => {
     if (!isSearchOpen || isMainScrollPaused || loading.search) {
       if (mainObserverRef.current) {
@@ -181,7 +189,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
     };
   }, [isSearchOpen, loading.search, loadMoreMain, isMainScrollPaused, currentPhase, offset, hasMore, phaseInfo, phaseData, query]);
 
-  // Nested observer for cities infinite scroll (phase 1)
+  // Obserwator zagnieżdżony dla miast
   useEffect(() => {
     if (!isSearchOpen || !containerRef.current) return;
 
@@ -218,11 +226,14 @@ const Search = ({ onSelectItem }: SearchProps) => {
     };
   }, [isSearchOpen, phaseData[1], countriesCache, handleLoadMoreCities]);
 
-  // Keep refs in sync to avoid stale closures in observer callbacks
+  // Synchronizacja referencji
   visibleCountryRef.current = visibleCountry;
   visibleCityRef.current = visibleCity;
 
-  // Unified scroll spy: tracks visible section, country, and city by position
+  /**
+   * INTELIGENTNY NAGŁÓWEK
+   * Śledzi sekcję znajdującą się na górze widoku.
+   */
   useEffect(() => {
     const container = containerRef.current;
     if (!isSearchOpen || !container) return;
@@ -231,7 +242,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
       const header = container.querySelector<HTMLElement>('.results-header');
       const refY = cTop + (header?.offsetHeight ?? 0);
 
-      // Section tracking (which phase is at the top)
+      // Śledzenie sekcji
       let section: number | null = null;
       container.querySelectorAll<HTMLElement>('.search-section[data-phase]').forEach(s => {
         if (s.getBoundingClientRect().top <= refY + 10) {
@@ -240,7 +251,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
       });
       setVisibleSection(section);
 
-      // Country: active when top ≤ refY AND the last visible text (nested-list bottom) > refY
+      // Śledzenie kraju
       let country: string | null = null;
       container.querySelectorAll<HTMLElement>('[data-country-code]').forEach(el => {
         const nestedList = el.querySelector<HTMLElement>(':scope > .nested-list');
@@ -252,7 +263,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
       });
       setVisibleCountry(prev => prev === country ? prev : country);
 
-      // City: active when top ≤ refY AND the last visible text (nested-list bottom) > refY
+      // Śledzenie miasta
       let city: string | null = null;
       container.querySelectorAll<HTMLElement>('[data-city-code]').forEach(el => {
         const nestedList = el.querySelector<HTMLElement>(':scope > .nested-list');
@@ -315,18 +326,18 @@ const Search = ({ onSelectItem }: SearchProps) => {
     if (!showSection) return null;
 
     const isCurrentPhase = currentPhase === phaseNumber;
-    
-    // Determine if this is the first visible section
+
+    // Określanie pierwszej widocznej sekcji
     const hasExactAirport = !!exactAirport;
     const hasP1 = phaseData[1].length > 0;
     const hasP2 = phaseData[2].length > 0;
     const isFirst = phaseNumber === 1 ? !hasExactAirport :
-                    phaseNumber === 2 ? (!hasExactAirport && !hasP1) :
-                    (!hasExactAirport && !hasP1 && !hasP2);
+      phaseNumber === 2 ? (!hasExactAirport && !hasP1) :
+        (!hasExactAirport && !hasP1 && !hasP2);
 
     const sectionTitle = phaseNumber === 1 ? t.search.countries :
-                         phaseNumber === 2 ? t.search.cities :
-                         t.search.airports;
+      phaseNumber === 2 ? t.search.cities :
+        t.search.airports;
 
     return (
       <div className="search-section" data-phase={phaseNumber}>
@@ -368,8 +379,12 @@ const Search = ({ onSelectItem }: SearchProps) => {
     return isSearchOpen && (hasResults || loading.search || query.trim() !== '');
   }, [isSearchOpen, hasResults, loading.search, query]);
 
+  /**
+   * DYNAMICZNA ETYKIETA NAGŁÓWKA
+   * Przelicza tekst wyświetlany na górze wyszukiwarki.
+   */
   const dynamicLabel = useMemo(() => {
-    // Inside large city (>1 airport) — show city name
+    // Obszar dużego miasta
     if (visibleCity) {
       const airports = citiesCache[visibleCity]?.airports;
       if (airports && airports.length > 1) {
@@ -383,7 +398,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
       }
     }
 
-    // Inside large country (>1 city) — show country name
+    // Wewnątrz dużego kraju
     if (visibleCountry) {
       const countryCache = countriesCache[visibleCountry] || phase2Cache[visibleCountry] || phase3Cache[visibleCountry];
       const cityCount = countryCache?.cities?.length ?? 0;
@@ -394,14 +409,14 @@ const Search = ({ onSelectItem }: SearchProps) => {
       }
     }
 
-    // Section-based fallback
+    // Fallback sekcji
     if (visibleSection === 3) return t.search.airports;
     if (visibleSection === 2) return t.search.cities;
     if (visibleSection === 1) return t.search.countries;
     if (visibleSection === 0) return t.search.airportCode;
     return t.search.searchResults;
   }, [query, exactAirport, visibleCity, visibleCountry, visibleSection,
-      citiesCache, countriesCache, phase2Cache, phase3Cache, phaseData, language, t]);
+    citiesCache, countriesCache, phase2Cache, phase3Cache, phaseData, language, t]);
 
   return (
     <SearchErrorBoundary>
@@ -477,7 +492,7 @@ const Search = ({ onSelectItem }: SearchProps) => {
                       fontSize: '12px',
                       marginTop: '10px'
                     }}>
-                      Showing results containing "{query}" (prefix search returned no results)
+                      Pokazywanie wyników zawierających "{query}" (brak wyników prefiksowych)
                     </div>
                   )}
                 </>

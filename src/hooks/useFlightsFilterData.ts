@@ -7,10 +7,19 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { getLocalizedProp } from '../utils/i18n';
 import type { Language } from '../constants/text';
 
+/**
+ * INTERFEJSY DANYCH DOCELOWYCH
+ * Definiują strukturę hierarchiczną używaną w panelu filtrów.
+ */
 export interface DestAirport { code: string; name: string; cityCode?: string; countryCode?: string; }
 export interface DestCity { code: string; name: string; countryCode?: string; airports: DestAirport[]; }
 export interface DestCountry { code: string; name: string; cities: DestCity[]; }
 
+/**
+ * HOOK PRZETWARZANIA DANYCH FILTROWANIA (Flight Filter Logic)
+ * Agreguje surowe dane o lotach w ustrukturyzowaną hierarchię geograficzną (Kraje -> Miasta -> Lotniska).
+ * Obsługuje logikę wyszukiwarki filtrów oraz zaawansowane zarządzanie stanem zaznaczeń.
+ */
 export interface UseFlightsFilterDataResult {
   language: Language;
   destQuery: string;
@@ -68,9 +77,9 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
   }, [allFlights, destinationFilter, airportCityMap, airportCountryMap]);
 
   /** 
-   * AGREGACJA DANYCH DOCELOWYCH (O(Flights))
-   * Inżynierska Optymalizacja: Używamy zagnieżdżonych map do budowy struktury w czasie liniowym,
-   * eliminując kosztowne operacje .find() i .some() wewnątrz głównej pętli.
+   * AGREGACJA DANYCH DOCELOWYCH (Hierarchical Aggregation O(N))
+   * Buduje strukturę Kraje -> Miasta -> Lotniska na podstawie aktualnie dostępnych lotów.
+   * Wykorzystuje Map (HashMaps) do budowy indeksów w czasie liniowym, eliminując kosztowne przeszukiwanie tablic.
    */
   const destData = useMemo<DestCountry[]>(() => {
     const countriesMap = new Map<string, { 
@@ -86,7 +95,7 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
       const countryCode = airportCountryMap[aC];
       if (!countryCode) return;
 
-      // 1. Zapewnienie istnienia kraju
+      // 1. Zapewnienie istnienia kraju w mapie
       if (!countriesMap.has(countryCode)) {
         countriesMap.set(countryCode, { 
           data: { code: countryCode, name: getCountryName(countryCode), cities: [] },
@@ -95,7 +104,7 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
       }
       const countryEntry = countriesMap.get(countryCode)!;
 
-      // 2. Zapewnienie istnienia miasta (lub placeholderu)
+      // 2. Zapewnienie istnienia miasta (obsługuje lotniska bez przypisanego miasta przez placeholder)
       const effectiveCityCode = cityCode || CONFIG.NO_CITY_PLACEHOLDER;
       if (!countryEntry.citiesMap.has(effectiveCityCode)) {
         countryEntry.citiesMap.set(effectiveCityCode, {
@@ -110,7 +119,7 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
       }
       const cityEntry = countryEntry.citiesMap.get(effectiveCityCode)!;
 
-      // 3. Dodanie lotniska (O(1) dzięki Set)
+      // 3. Dodanie unikalnego lotniska do miasta (O(1) dzięki Set)
       if (!cityEntry.airportsSet.has(aC)) {
         cityEntry.airportsSet.add(aC);
         cityEntry.data.airports.push({ 
@@ -122,7 +131,7 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
       }
     });
 
-    // Konwersja map na wynikową strukturę tablicową
+    // Konwersja map pomocniczych na wynikową strukturę tablicową (posortowaną)
     return Array.from(countriesMap.values())
       .map(entry => ({
         ...entry.data,
@@ -199,17 +208,26 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
       (!!countryCode && destinationFilter.countries.includes(countryCode));
   }, [destinationFilter]);
 
+  /**
+   * ZARZĄDZANIE WYBOREM ELEMENTÓW (Selection Logic)
+   * Najbardziej złożona część hooka. Implementuje inteligentną politykę zaznaczania:
+   * 1. Obsługuje zaznaczanie hierarchiczne (np. zaznaczenie kraju odznacza miasta wewnątrz).
+   * 2. Wykrywa "pełne zestawy" (np. jeśli zaznaczysz wszystkie miasta w kraju, system zamienia je na jeden filtr kraju).
+   * 3. Zapobiega redundancji danych w filterStore.
+   */
   const selectItem = useCallback((type: 'airport' | 'city' | 'country', code: string, cityCode?: string, countryCode?: string) => {
     const selected = isEffectivelySelected(type, code, cityCode, countryCode);
     const { airports, cities, countries } = destinationFilter;
 
     if (selected) {
+      // LOGIKA ODZNACZANIA (Deselect)
       if (type === 'country') {
         setDestinationFilter({ airports, cities, countries: countries.filter(c => c !== code) });
       } else if (type === 'city') {
         if (cities.includes(code)) {
           setDestinationFilter({ airports, cities: cities.filter(c => c !== code), countries });
         } else if (countryCode && countries.includes(countryCode)) {
+          // Jeśli odznaczamy miasto, które było częścią zaznaczonego kraju -> zamieniamy kraj na listę pozostałych miast.
           const country = destData.find(c => c.code === countryCode);
           const otherCities = (country?.cities || []).filter(ci => ci.code !== code && ci.code !== CONFIG.NO_CITY_PLACEHOLDER).map(ci => ci.code);
           setDestinationFilter({ airports, cities: [...cities, ...otherCities.filter(c => !cities.includes(c))], countries: countries.filter(c => c !== countryCode) });
@@ -218,10 +236,12 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
         if (airports.includes(code)) {
           setDestinationFilter({ airports: airports.filter(a => a !== code), cities, countries });
         } else if (cityCode && cities.includes(cityCode)) {
+          // Jeśli odznaczamy lotnisko będące częścią zaznaczonego miasta -> zamieniamy miasto na listę pozostałych lotnisk.
           const city = destData.flatMap(c => c.cities).find(ci => ci.code === cityCode);
           const otherAirports = (city?.airports || []).filter(a => a.code !== code).map(a => a.code);
           setDestinationFilter({ airports: [...airports, ...otherAirports.filter(a => !airports.includes(a))], cities: cities.filter(c => c !== cityCode), countries });
         } else if (countryCode && countries.includes(countryCode)) {
+          // Analogiczna logika dla dekompozycji kraju na miasta i lotniska przy odznaczaniu pojedynczego punktu.
           const country = destData.find(c => c.code === countryCode);
           const otherCities = (country?.cities || []).filter(ci => ci.code !== cityCode && ci.code !== CONFIG.NO_CITY_PLACEHOLDER).map(ci => ci.code);
           const parentCity = country?.cities.find(ci => ci.code === cityCode);
@@ -234,20 +254,23 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
         }
       }
     } else {
+      // LOGIKA ZAZNACZANIA (Select)
       if (type === 'country') {
         const country = destData.find(c => c.code === code);
         const cityCodes = new Set((country?.cities || []).map(ci => ci.code));
         const airportCodes = new Set((country?.cities || []).flatMap(ci => ci.airports.map(a => a.code)));
         setDestinationFilter({
           countries: [...countries, code],
-          cities: cities.filter(c => !cityCodes.has(c)),
-          airports: airports.filter(a => !airportCodes.has(a)),
+          cities: cities.filter(c => !cityCodes.has(c)), // Czyścimy redundantne miasta
+          airports: airports.filter(a => !airportCodes.has(a)), // Czyścimy redundantne lotniska
         });
       } else if (type === 'city') {
         const city = destData.flatMap(c => c.cities).find(ci => ci.code === code);
         const airportCodes = new Set((city?.airports || []).map(a => a.code));
         const newCities = [...cities, code];
         const newAirports = airports.filter(a => !airportCodes.has(a));
+        
+        // [AUTO-CONSOLIDATION]: Jeśli zaznaczyliśmy wszystkie dostępne miasta w kraju -> zamień na filtr kraju.
         if (countryCode) {
           const country = destData.find(c => c.code === countryCode);
           const validCities = (country?.cities || []).filter(ci => ci.code !== CONFIG.NO_CITY_PLACEHOLDER);
@@ -264,6 +287,7 @@ export function useFlightsFilterData(allFlights: Flight[]): UseFlightsFilterData
         setDestinationFilter({ airports: newAirports, cities: newCities, countries });
       } else {
         const newAirports = [...airports, code];
+        // Podobna auto-konsolidacja dla lotnisk awansujących do poziomu miasta.
         if (cityCode) {
           const city = destData.flatMap(c => c.cities).find(ci => ci.code === cityCode);
           if (city && city.airports.length > 0 && city.airports.every(a => newAirports.includes(a.code))) {

@@ -18,14 +18,14 @@ export interface FilterApplierContext {
   tripRoutes: TripRoute[];
   tripState: any;
   coordsMap: Record<string, [number, number]>;
-  // HOVER STATE (Faza 2: Unified Filtering)
+  // Stan najechania (Hover)
   excludeCodes?: string[];
   isHoverFocused?: boolean;
 }
 
 export interface FilterApplierWritableRefs {
-  highlightedLabelCodesRef: React.MutableRefObject<string[]>;
-  highlightedCityLabelCodesRef: React.MutableRefObject<string[]>;
+  highlightedLabelCodesRef: React.RefObject<string[]>;
+  highlightedCityLabelCodesRef: React.RefObject<string[]>;
 }
 
 export function applyMapAirportFilters(
@@ -40,7 +40,7 @@ export function applyMapAirportFilters(
   const explorationCodes = ctx.explorationAirportCodes;
   const inTripMode = tvac && tvac.length > 0;
 
-  // INŻYNIERSKA NAPRAWA: MapLibre nie obsługuje poprawnie ['!in', 'code'] (pusta tablica).
+  // Naprawa: MapLibre wymaga jawnej tablicy lub null dla filtrów.
   // Musimy jawnie sprawdzić obecność elementów lub ustawić filtr na null.
   const highlightedCodes = [...new Set([
     ...ha.map(c => c.toUpperCase()),
@@ -137,11 +137,10 @@ export function applyMapAirportFilters(
       }
     }
 
-    // TYLKO DLA PODŚWIETLONYCH ETYKIET (jeśli nie ma hovera na trasie)
+    // Tylko dla podświetlonych etykiet
     if (!ctx.isRouteHovered) {
       if (map.getLayer('airports-labels-highlighted') || map.getLayer('airports-labels-highlighted-city')) {
-        // INŻYNIERSKA OPTYMALIZACJA (O(N)): Używamy Set zamiast wielokrotnych .includes w pętli.
-        // Zapobiega to wydajnościowej degradacji O(N^2) przy dużej liczbie zaznaczonych punktów.
+        // Optymalizacja: Używamy Set dla wydajności przy dużej liczbie punktów.
         const haUpper = ha.map(c => c.toUpperCase());
         const codesSet = new Set<string>(haUpper);
 
@@ -166,7 +165,7 @@ export function applyMapAirportFilters(
           ? ['==', 'code', '']
           : ['in', 'code', ...filterCodes];
 
-        // Wyznaczanie reprezentatywnych kodów miast dla podświetlonych lotnisk
+        // Reprezentatywne kody miast
         const highlightedCityCodesSet = new Set<string>();
         for (const code of filterCodes) {
           const cityKey = cityCodeByAirport[code];
@@ -219,9 +218,9 @@ export function applyMapAirportFilters(
   // Wyłączamy stare filtry hover - teraz są obsługiwane przez airports-hover-single
   // (Warstwy te zostały usunięte w airportsLayer.ts, więc m.getLayer zwróci false)
 
-  // --- SOURCE UPDATES (Zero-Waste Route Sync) ---
+  // Aktualizacja źródeł tras
 
-  // 1. Permanent trip routes (Itinerary)
+  // 1. Stałe trasy podróży (Planer)
   const tripSrc = map.getSource('trip-permanent-routes') as maplibregl.GeoJSONSource | undefined;
   if (tripSrc) {
     const features = (ctx.tripRoutes || [])

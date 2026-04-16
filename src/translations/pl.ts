@@ -186,7 +186,7 @@ export const TEXTS_PL = {
     undoWarning: "Tej akcji nie można cofnąć.",
     namePlaceholder: "Puste dla autogeneracji",
     deleteTrip: "Usunąć podróż?",
-    sureDelete: "Czy na pewno chcesz usunąć",
+    sureDelete: "Czy na pewno chcesz usunąć ",
   },
   controls: { // ControlsPanel.tsx
     layersTitle: "Warstwy mapy",

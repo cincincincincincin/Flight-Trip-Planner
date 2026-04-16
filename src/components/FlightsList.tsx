@@ -13,39 +13,38 @@ import './FlightsList.css';
 import { useTexts } from '../hooks/useTexts';
 import { CONFIG } from '../constants/config';
 import dayjs from '../lib/dayjs';
+import { logger } from '../utils/logger';
 
 
 interface FlightsListProps {
-  airportCodes: string[];          // 1-6 airport codes
-  timezone?: string;               // selected/display timezone
-  initialFromDatetime?: string;    // start datetime (single-airport mode)
-  airportTimezones?: Record<string, string>; // per-airport IANA timezone
-  originalAirportCode?: string | null; // the "arrival" airport in trip mode (others are transfer airports)
-  tripArrivalTimeUTC?: string | null;  // UTC arrival time in trip mode — used as start time for all airports
-  travelDateOverride?: string;     // synchronous travel date to avoid stale store value on timezone change
+  airportCodes: string[];          // kody lotnisk (1-6)
+  timezone?: string;               // wybrana strefa czasowa wyświetlania
+  initialFromDatetime?: string;    // data/godzina początkowa (tryb pojedynczego lotniska)
+  airportTimezones?: Record<string, string>; // strefy czasowe IANA dla poszczególnych lotnisk
+  originalAirportCode?: string | null; // "docelowe" lotnisko w trybie podróży
+  tripArrivalTimeUTC?: string | null;  // czas przylotu UTC w trybie podróży (używany jako start dla transferów)
+  travelDateOverride?: string;     // synchroniczna data podróży dla stabilności stref czasowych
   onAddToTrip: (flight: Flight) => void;
 }
 
 const FlightsList = forwardRef<unknown, FlightsListProps>(
   ({ airportCodes, timezone, initialFromDatetime, airportTimezones, originalAirportCode, tripArrivalTimeUTC, travelDateOverride, onAddToTrip }, ref) => {
     const t = useTexts();
-    // ── STABILITY SHIELD (Phase 10) ──────────────────────────────────────────
-    // Aby uniknąć "Pętli Przerywania" (Abort Loop), zamrażamy referencje tablic i obiektów.
-    // Dzięki temu useFlightLoader nie restartuje się, jeśli dane są takie same.
+    // TARCZA STABILNOŚCI: Zamrażamy referencje tablic i obiektów, aby uniknąć zbędnych restartów ładowania.
     const stableAirportCodesJson = JSON.stringify(airportCodes);
     const stableAirportCodes = useMemo(() => JSON.parse(stableAirportCodesJson), [stableAirportCodesJson]);
     
     const stableAirportTimezonesJson = JSON.stringify(airportTimezones);
     const stableAirportTimezones = useMemo(() => JSON.parse(stableAirportTimezonesJson), [stableAirportTimezonesJson]);
 
-    // ── Stores ────────────────────────────────────────────────────────────────
+    // Kontenery stanu (Stores)
     const { travelDate, minTransferHours, minManualTransferHours, showRefreshButton } = useSettingsStore();
     const { setHighlightedAirports, setHighlightedCities, setDisplayedFlights } = useSelectionStore();
     const { tripState } = useTripStore();
     const { airportFeaturesMap, cityMap, countryMap } = useAirportIndexes();
     const { flightsData: globalFlightsData } = useSelectionStore();
 
-    // ── Data loading ──────────────────────────────────────────────────────────
+    // Ładowanie danych
     const { error, lastFetched, perAirportLoading, perAirportFullyLoaded, anyLoading, flightsByDate, handleRefresh } =
       useFlightLoader({ 
         airportCodes: stableAirportCodes, 
@@ -56,21 +55,20 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
         travelDateOverride 
       });
 
-    // ── Derived from tripState ────────────────────────────────────────────────
+    // Dane pochodne z tripState
     const tripStartAirport = tripState?.startAirport ?? null;
 
     const tripCurrentArrivalTimeUTC = useMemo(() => getTripCurrentArrivalTimeUTC(tripState), [tripState]);
 
 
-    // ── Misc refs ─────────────────────────────────────────────────────────────
+    // Referencje pomocnicze
     const prevHighlightedAirportsRef = useRef<Set<string>>(new Set());
     const prevHighlightedCitiesRef = useRef<Set<string>>(new Set());
-    // const isManualJumpRef = useRef(false); // [DISABLED] date-jump navigation
+    // const isManualJumpRef = useRef(false); // nawigacja po datach
     const virtuosoRef = useRef<VirtuosoHandle | null>(null);
     const flightRefsMap = useRef(new Map());
 
-    // ── Synchronized minute timer for real-time past-flight filtering ──────────
-    // Starts at this moment (for isToday check), then locks on to the full-minute boundary.
+    // Timer synchronizujący odfiltrowywanie przeszłych lotów w czasie rzeczywistym
     const [nowMs, setNowMs] = useState(() => Date.now());
     useEffect(() => {
       let intervalId: ReturnType<typeof setInterval>;
@@ -84,13 +82,13 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
     }, []);
 
     useEffect(() => {
-      console.log("%c[ACTION-LOAD] %cFlightsList MOUNT", 'color: #3b82f6; font-weight: bold', 'color: inherit');
+      logger.log("%c[ACTION-LOAD] %cFlightsList ZAMONTOWANO", 'color: #3b82f6; font-weight: bold', 'color: inherit');
       return () => {
-        console.log("%c[ACTION-LOAD] %cFlightsList UNMOUNT", 'color: #ef4444; font-weight: bold', 'color: inherit');
+        logger.log("%c[ACTION-LOAD] %cFlightsList ODDAWNA", 'color: #ef4444; font-weight: bold', 'color: inherit');
       };
     }, []);
 
-    // ── Expansion state (Smart Collapse) ──────────────────────────────────────
+    // Stan rozwijania kart lotów
     const [expandedFlightIds, setExpandedFlightIds] = useState<string[]>([]);
     const { currency } = useSettingsStore();
 
@@ -110,7 +108,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       );
     }, []);
 
-    // ── Unfiltered flights for the selected day only ───────────────────────────
+    // Loty nieprzefiltrowane tylko dla wybranego dnia
     const { setIsFlightsLoading } = useSelectionStore();
     useEffect(() => {
       setIsFlightsLoading(anyLoading);
@@ -124,29 +122,28 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
     // Wykorzystujemy współdzieloną logikę filtrowania (DRY).
     const { matchesFilter, isFilterActive } = useFlightFilter();
 
-    /** Przefiltrowana lista lotów na wybrany dzień. */
     const displayedFlatFlights = useMemo(() => {
-      // Optymalizacja: filtrujemy najpierw po źródłowych lotniskach wg aktualnej selekcji
+      // Optymalizacja: filtrujemy najpierw po źródłowych lotniskach
       const validOrigins = new Set(airportCodes.map((c: string) => c.toUpperCase()));
       let flights = todayFlights.filter(f => validOrigins.has((f.origin_airport_code || '').toUpperCase()));
       
       // Następnie aplikujemy ręczne filtry użytkownika (zawiera destynację z mapy)
       flights = flights.filter(matchesFilter);
       
-      // [SMART ARRIVAL FILTERING v24.70]: 
+      // FILTROWANIE DLA TRANSFERÓW: 
       // Jeśli jesteśmy w trybie planowania trasy, ukrywamy loty, które odlatują przed przylotem.
       if (tripArrivalTimeUTC) {
         const arrMs = new Date(tripArrivalTimeUTC).getTime();
         
-        // [v24.99 FIX]: Show all flights from the moment of arrival onwards.
-        // Highlighting for 'soon' connections is handled by getTripHighlight.
+        // Pokazuj wszystkie loty od momentu przylotu. 
+        // Wyróżnienie połączeń "soon" (zbyt szybkich) obsługuje getTripHighlight.
         flights = flights.filter(f => 
           f.scheduled_departure_utc && dayjs.utc(f.scheduled_departure_utc).valueOf() >= arrMs
         );
       } else {
         // Jeśli nie jesteśmy w trybie planowania trasy, ukrywamy loty, które już odleciały.
         const selectedTodayStr = timezone ? getTodayInTz(timezone) : getTodayInTz();
-        console.log(`%c[ACTION-LOAD] %cFiltering Flights | Today: ${selectedTodayStr}, TravelDate: ${travelDate}, Before Grace: ${todayFlights.length}, Filtered: ${flights.length}`, 'color: #10b981; font-weight: bold', 'color: inherit');
+        logger.log(`%c[ACTION-LOAD] %cFiltrowanie lotów | Dzisiaj: ${selectedTodayStr}, DataPodróży: ${travelDate}, Przed filtrem: ${todayFlights.length}, Po filtrze: ${flights.length}`, 'color: #10b981; font-weight: bold', 'color: inherit');
 
         if (travelDate === selectedTodayStr) {
           // Ukrywamy wszystkie loty, które już odleciały.
@@ -158,10 +155,10 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       }
       const finalCount = flights.length;
       if (finalCount === 0 && todayFlights.length > 0) {
-        console.warn(`%c[ACTION-LOAD] %cREBOUND DETECTED | todayFlights: ${todayFlights.length}, finalCount: 0. Keys in flightsByDate: ${Object.keys(flightsByDate).join(',')}, travelDate: ${travelDate}, timezone: ${timezone}`, 'color: #f59e0b; font-weight: bold', 'color: inherit');
+        logger.warn(`%c[ACTION-LOAD] %cWYKRYTO REBOUND | todayFlights: ${todayFlights.length}, finalCount: 0. Klucze w flightsByDate: ${Object.keys(flightsByDate).join(',')}, travelDate: ${travelDate}, timezone: ${timezone}`, 'color: #f59e0b; font-weight: bold', 'color: inherit');
       }
-      console.log(`%c[ACTION-LOAD] %cFiltering Flights | Final Count: ${finalCount}`, 'color: #10b981; font-weight: bold', 'color: inherit');
-      // Wymuszamy ścisłą chronologię UTC (Przywrócenie logiki LEGACY)
+      logger.log(`%c[ACTION-LOAD] %cFiltrowanie lotów | Ostateczna liczba: ${finalCount}`, 'color: #10b981; font-weight: bold', 'color: inherit');
+      // Wymuszamy ścisłą chronologię UTC (Przywrócenie logiki stabilnej)
       flights.sort((a, b) => 
         dayjs.utc(a.scheduled_departure_utc).valueOf() - dayjs.utc(b.scheduled_departure_utc).valueOf()
       );
@@ -169,20 +166,19 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       return flights;
     }, [todayFlights, matchesFilter, tripArrivalTimeUTC, nowMs, travelDate, timezone, flightsByDate]);
 
-    // ── Synchronizacja podświetlenia na mapie (Phase 2: Ultra-Lean) ───────────
+    // Synchronizacja podświetlenia na mapie
     // Wysyłamy dane tylko gdy faktycznie się zmieniły, żeby uniknąć thrashingu WebGL.
     useEffect(() => {
-      // MASTER FIX (v17.55/19.25): Podświetlamy mapę na podstawie WSZYSTKICH dostępnych lotów (bez filtra destynacji)
-      // Dzięki temu kliknięcie w jedną kropkę nie chowa pozostałych.
+      // MASTER FIX: Podświetlamy mapę na podstawie WSZYSTKICH dostępnych lotów (bez filtra destynacji).
+      // Dzięki temu kliknięcie w jedną kropkę nie chowa pozostałych opcji.
       const validOrigins = new Set(airportCodes.map((c: string) => c.toUpperCase()));
       const mapSourceFlights = todayFlights.filter(f => validOrigins.has((f.origin_airport_code || '').toUpperCase()));
 
-      // MASTER FILTER SYNC (v19.25): Jeśli aktywny jest filtr destynacji z mapy, 
-      // musimy przefiltrować trasy (arcs) na mapie, ale zachować kropki destynacji.
+      // MASTER FILTER SYNC: Jeśli aktywny jest filtr destynacji, filtrujemy trasy (arcs), ale zachowujemy kropki.
       const isAnyFilterActive = isFilterActive;
       setDisplayedFlights(isAnyFilterActive ? displayedFlatFlights : mapSourceFlights);
 
-      // Budujemy zestawy unikalnych kodów (O(N)) dla całej mapy (kropki)
+      // Budujemy zestawy unikalnych kodów dla całej mapy (kropki)
       const newAirports = new Set<string>();
       const newCities = new Set<string>();
       
@@ -196,7 +192,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
         }
       });
 
-      // Sprawdzanie różnic (Dirty Checking) przed aktualizacją store'a
+      // Sprawdzanie różnic (Dirty Checking) przed aktualizacją stanu
       const prevA = prevHighlightedAirportsRef.current;
       const airportsChanged = newAirports.size !== prevA.size || 
                              Array.from(newAirports).some(c => !prevA.has(c));
@@ -216,29 +212,14 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       }
     }, [displayedFlatFlights, todayFlights, isFilterActive, setHighlightedAirports, setHighlightedCities, setDisplayedFlights, cityMap, airportCodes]);
 
-    // ── Imperative handle ─────────────────────────────────────────────────────
+    // Interfejs imperatywny (Imperative handle)
     useImperativeHandle(ref, () => ({
-      // jumpToDate: [DISABLED] date-jump navigation
-      // jumpToDate: (dateStr: string) => {
-      //   if (dateOrderRef.current.includes(dateStr)) return;
-      //   isManualJumpRef.current = true;
-      //   setRawFlights([]);
-      //   perAirportHasMoreRef.current = new Map(airportCodes.map(c => [c, true]));
-      //   perAirportNextWindowRef.current = new Map(airportCodes.map(c => [c, null]));
-      //   loadedWindowsRef.current = new Set();
-      //   setError(null);
-      //   dateOrderRef.current = [];
-      //   airportCodes.forEach(code => {
-      //     const fromDatetime = getFromDatetimeForAirport(dateStr, code);
-      //     loadFlightsFromDatetime(code, fromDatetime);
-      //   });
-      //   setTimeout(() => { isManualJumpRef.current = false; }, CONFIG.MANUAL_JUMP_TIMEOUT_MS);
-      // },
-      jumpToDate: (_dateStr: string) => { /* [DISABLED] date-jump navigation */ },
-      scrollToFlight: (_destCode: string) => { /* scroll removed */ },
+      // jumpToDate: nawigacja skokowa po datach
+      jumpToDate: (_dateStr: string) => { /* nawigacja skokowa po datach */ },
+      scrollToFlight: (_destCode: string) => { /* przewijanie usunięte */ },
     }));
 
-    // ── getTripHighlight ──────────────────────────────────────────────────────
+    // Pobieranie wyróżnienia dla trybu planowania trasy
     const getTripHighlight = useCallback(
       (flight: Flight) => {
         if (!tripStartAirport) return null;
@@ -252,8 +233,8 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
         if (tripCurrentArrivalTimeUTC) {
           const arrMs = new Date(tripCurrentArrivalTimeUTC).getTime();
           const depMs = new Date(flight.scheduled_departure_utc ?? '').getTime();
-          // Flights from original airport use only minTransferHours;
-          // flights from transfer airports also need minManualTransferHours
+          // Loty z lotniska początkowego używają tylko minTransferHours;
+          // loty z lotnisk przesiadkowych wymagają dodatkowo minManualTransferHours
           const isFromOriginal = !originalAirportCode || flight.origin_airport_code === originalAirportCode;
           const thresholdMs = isFromOriginal
             ? arrMs + minTransferHours * CONFIG.HOUR_IN_MS
@@ -265,7 +246,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       [tripStartAirport, airportFeaturesMap, tripCurrentArrivalTimeUTC, originalAirportCode, minTransferHours, minManualTransferHours]
     );
 
-    // ── [DISABLED] handleEndReached — scroll-triggered infinite loading ────────
+    // Automatyczne ładowanie przy przewijaniu (obecnie wyłączone)
     // const handleEndReached = useCallback(() => {
     //   for (const [code, hasMoreCode] of perAirportHasMoreRef.current.entries()) {
     //     if (hasMoreCode) {
@@ -277,7 +258,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
     //   }
     // }, [loadFlightsFromDatetime]);
 
-    // ── Formatters ────────────────────────────────────────────────────────────
+    // Formattery
     const formatLastFetched = (timestamp: string | null) => {
       if (!timestamp) return t.flights.never;
       const d = dayjs(timestamp);
@@ -290,7 +271,6 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       return d.format('DD MMM, HH:mm');
     };
 
-// ── Footer component ──────────────────────────────────────────────────────
     const Footer = useCallback(() => {
       const loadingCodes = airportCodes.filter(c => perAirportLoading[c]);
       const multiAirport = airportCodes.length > 1;
@@ -314,7 +294,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       );
     }, [airportCodes, perAirportLoading, anyLoading]);
 
-    // ── Early return on hard error ────────────────────────────────────────────
+    // Wczesny powrót w przypadku krytycznego błędu
     if (error && displayedFlatFlights.length === 0 && todayFlights.length === 0) {
       return (
         <div className="flights-list">
@@ -327,7 +307,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       );
     }
 
-    // ── Render ────────────────────────────────────────────────────────────────
+    // Renderowanie komponentu
     return (
       <div className="flights-list">
         <div className="flights-header">
@@ -383,7 +363,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
                   />
                 );
               }}
-              // endReached={handleEndReached} // [DISABLED] scroll-triggered infinite loading
+              // endReached={handleEndReached} // nieskończone ładowanie wyzwalane przewijaniem
               overscan={CONFIG.VIRTUOSO_OVERSCAN}
               components={{ Footer }}
             />

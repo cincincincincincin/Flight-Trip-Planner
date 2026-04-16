@@ -3,8 +3,7 @@
  * Zarządza mapowaniem symbolicznych nazw stylów na konkretne URL-e oraz
  * implementuje logikę transformacji zapytań dla usług ArcGIS.
  * 
- * Mechanizm ten pozwala na bezpieczne użycie statycznych plików JSON stylu,
- * dynamicznie wstrzykując klucze API podczas żądań sieciowych (Zero-Waste).
+ * Mechanizm ten pozwala na bezpieczne użycie statycznych plików JSON stylu.
  */
 
 import maplibregl from 'maplibre-gl';
@@ -26,15 +25,11 @@ export function getLocalStyleUrl(styleId: string, globeMode: boolean): string {
   return `/data/styles/${styleId}${suffix}.json`;
 }
 
-/**
- * Transformacja zapytań ArcGIS (Zero-Waste API Key Injection).
- * Obsługuje wstrzykiwanie klucza API do URL-i kafelków oraz transformację
- * statycznych definicji stylu, które zawierają placeholder {{ARCGIS_API_KEY}}.
- */
+/** Transformacja zapytań ArcGIS. */
 export function arcGISTransformRequest(url: string, _resourceType?: string): { url: string } {
   if (!url || typeof url !== 'string') return { url: url || '' };
 
-  // 1. Obsługa placeholderów w statycznych definicjach stylu wygenerowanych przez skrypt Python
+  // 1. Obsługa placeholderów
   if (url.includes('{{ARCGIS_API_KEY}}')) {
     return { url: url.replace(/{{ARCGIS_API_KEY}}/g, ARCGIS_API_KEY) };
   }
@@ -65,7 +60,7 @@ export const BLANK_STYLE: maplibregl.StyleSpecification = {
 };
 
 /**
- * RESOLVER MODULARNY (Zero-Transformation):
+ * ROZWIĄZYWANIE MODULARNE (Bez transformacji):
  * Zwraca URL do lokalnego pliku JSON zamiast budować obiekt w pamięci.
  */
 export function resolveMapStyle(style: string, globeMode: boolean): string | maplibregl.StyleSpecification {

@@ -8,6 +8,7 @@ import { extractCoords } from '../utils/geoUtils';
 import { useAirportIndexes, useCityAirportsMap, useCountryInfoMap, useCityInfoMap } from './queries';
 import type { SelectedItem, Flight, Airport, City } from '../types';
 import type { MapComponentRef } from '../components/MapComponent';
+import { logger } from '../utils/logger';
 
 interface UseAppSelectionProps {
   mapNav: {
@@ -16,11 +17,13 @@ interface UseAppSelectionProps {
     fitToCountry: (countryCode: string) => void;
   };
   mapRef: React.RefObject<MapComponentRef | null>;
-  handleAddToTripRef: React.MutableRefObject<((flight: Flight) => Promise<void>) | null>;
+  handleAddToTripRef: React.RefObject<((flight: Flight) => Promise<void>) | null>;
 }
 
 /**
- * Główny hook orkiestrujący logikę wyboru na mapie i w wyszukiwarce.
+ * GŁÓWNY HOOK ORKIESTRUJĄCY (User Interaction Controller)
+ * Zarządza logiką wyboru obiektów na mapie (lotniska, trasy) oraz w wyszukiwarce (miasta, kraje).
+ * Jest to centralny punkt łączący system nawigacji mapy z magazynami stanu podróży i selekcji.
  */
 export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSelectionProps) {
   const { airportFeaturesMap, namesMap, cityMap, countryMap } = useAirportIndexes();
@@ -53,19 +56,22 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
     return cityAirportsMap[code.toUpperCase()] || [];
   }, [cityAirportsMap]);
 
+  /**
+   * CENTRALNY OBSŁUGIWACZ WYBORU (handleSelectItem)
+   * Wywoływany przy każdej interakcji użytkownika z punktem na mapie lub elementem wyszukiwania.
+   */
   const handleSelectItem = useCallback(async (item: SelectedItem) => {
     const sequenceId = Math.random().toString(36).substring(7);
     const showLogs = useSettingsStore.getState().showConsoleLogs;
-    
+
+    // Blokada: Zabezpieczenie przed jednoczesnym przetwarzaniem wielu zaznaczeń (Race Condition).
     if (selectionLockRef.current) {
-      if (showLogs) console.log(`%c[ACTION-SELECTION] %c[${sequenceId}] Blocked: Selection in progress`, 'color: #f59e0b; font-weight: bold', 'color: inherit');
+      logger.log(`%c[ACTION-SELECTION] %c[${sequenceId}] Zablokowane: Trwa proces zaznaczania`, 'color: #f59e0b; font-weight: bold', 'color: inherit');
       return;
     }
 
     const itemCode = ((item.data as any).code || '').toUpperCase();
-    if (showLogs) {
-      console.log(`%c[ACTION-SELECTION] %c[${sequenceId}] START | Type: ${item.type}, Code: ${itemCode}`, 'color: #10b981; font-weight: bold', 'color: inherit');
-    }
+    logger.log(`%c[ACTION-SELECTION] %c[${sequenceId}] START | Typ: ${item.type}, Kod: ${itemCode}`, 'color: #10b981; font-weight: bold', 'color: inherit');
 
     selectionLockRef.current = true;
 
@@ -73,17 +79,19 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
       const currentTripState = useTripStore.getState().tripState;
       const currentSelectedItem = useSelectionStore.getState().selectedItem;
 
-      // 1. Fast Add to Trip
+      // 1. SZYBKIE DODAWANIE DO TRASY (Fast Add)
+      // Jeśli użytkownik kliknie w lotnisko, które jest aktualnie "podświetlone" (czyli jest dostępnym celem lotu),
+      // system automatycznie wybiera najlepszy lot na daną datę i dodaje go do podróży bez otwierania szczegółów.
       if (item.type === 'airport' && item.isHighlighted && currentTripState) {
-        const currentOrigin = (currentTripState.legs.length > 0 
-          ? currentTripState.legs[currentTripState.legs.length - 1].toAirportCode 
+        const currentOrigin = (currentTripState.legs.length > 0
+          ? currentTripState.legs[currentTripState.legs.length - 1].toAirportCode
           : currentTripState.startAirport.code).toUpperCase();
-          
+
         const groupKey = `${currentOrigin}-${itemCode}`;
         const group = useSelectionStore.getState().flightsByRouteGroupMap.get(groupKey) || [];
-        
+
         const flight = (
-          group.find((f: Flight) => f.scheduled_departure_local?.startsWith(travelDate)) ?? 
+          group.find((f: Flight) => f.scheduled_departure_local?.startsWith(travelDate)) ??
           group[0]
         );
 
@@ -97,7 +105,8 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
         fitCameraOnFlightsRef.current = !item.fromMap;
       }
 
-      // Pre-calculate target coordinates for "Pure Pan" navigation (no zoom change)
+      // 2. OBLICZANIE DOCELOWYCH WSPÓŁRZĘDNYCH (Navigation Target)
+      // Jeśli element wybrano spoza mapy (np. z kafelka wyszukiwania), musimy wyliczyć punkt, na który kamera ma się przesunąć.
       let targetCenter: { lon: number, lat: number } | null = null;
       if (!item.fromMap) {
         if (item.type === 'airport') {
@@ -109,6 +118,7 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
             };
           }
         } else if (item.type === 'city') {
+          // Dla miasta centrujemy widok na średniej geograficznej wszystkich jego lotnisk.
           const codes = getExplorationAirportCodes('city', itemCode);
           const points = codes.map(c => airportFeaturesMap[c]?.geometry?.coordinates as [number, number]).filter(Boolean);
           if (points.length > 0) {
@@ -123,7 +133,9 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
         }
       }
 
-      // 3. Exploration Item Management
+      // 3. ZARZĄDZANIE KAFELKAMI EKSPLORACJI (Exploration Item Management)
+      // Ten fragment decyduje, jakie elementy pojawią się w lewym panelu jako "aktywne sloty".
+      // Automatycznie promuje lotniska/miasta do kafelków, jeśli nie są objęte nadrzędną strukturą (np. krajem).
       const currentState = useSelectionStore.getState();
       const currentExplorationItems = currentState.explorationItems;
       const updates: any = {
@@ -133,10 +145,10 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
 
       if (currentSelectedItem && !currentTripState && (item.type === 'airport' || item.type === 'city')) {
         if (item.type === 'airport') {
-          const isAlreadyCovered = currentExplorationItems.some(existing => 
+          const isAlreadyCovered = currentExplorationItems.some(existing =>
             (existing.type === 'city' || existing.type === 'country') && existing.airportCodes.includes(itemCode)
           );
-          
+
           if (!isAlreadyCovered) {
             const newCodes = getExplorationAirportCodes(item.type, itemCode);
             const id = `airport-${itemCode}`;
@@ -158,13 +170,14 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
           }
         }
       } else if (item.type === 'country') {
+        // Specyficzna obsługa dla kraju - jeśli coś było wcześniej wybrane, pokazujemy modal potwierdzenia (Picker).
         if (currentSelectedItem !== null && currentSelectedItem.type !== 'country') {
           setPendingCountryPicker({ code: (item.data as any).code, name: (item.data as any).name });
         } else {
           updates.selectedAirportCode = null;
         }
       } else {
-        // Standard non-exploration mode
+        // Standardowy tryb bez eksploracji (dodawanie kafelka na sztywno).
         if (item.type === 'airport') {
           updates.highlightedAirports = [];
           const id = `airport-${itemCode}`;
@@ -192,7 +205,7 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
       // Map aesthetics trigger
       if (item.type === 'airport') setDisplayMode();
 
-      // EXECUTE NAVIGATION (v11.60.2 - "Pure Pan" / No Bounds fitting)
+      // Wykonaj nawigację (płynne przesunięcie kamery)
       if (targetCenter && !item.fromMap && item.type !== 'route') {
         mapNav.flyToLocation(targetCenter.lon, targetCenter.lat);
       }
@@ -200,7 +213,7 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
     } finally {
       setTimeout(() => {
         selectionLockRef.current = false;
-        if (showLogs) console.log(`%c[ACTION-SELECTION] %c[${sequenceId}] FINISH | Lock released`, 'color: #10b981; font-weight: bold', 'color: inherit');
+        logger.log(`%c[ACTION-SELECTION] %c[${sequenceId}] KONIEC | Blokada zwolniona`, 'color: #10b981; font-weight: bold', 'color: inherit');
       }, 50);
     }
   }, [setDisplayMode, mapNav, airportFeaturesMap, countryInfoMap, extractCoords, cityAirportsMap, getExplorationAirportCodes, handleAddToTripRef, travelDate]);
@@ -211,29 +224,36 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
     setPendingCountryPicker(null);
   }, [clearExploration, setSelectedItem]);
 
+  /**
+   * OBSŁUGA ZATWIERDZENIA KRAJU (Region Confirmation)
+   * Wywoływana gdy użytkownik wybierze konkretne lotniska w danym kraju/regionie.
+   * Czyści poprzednią eksplorację i skupia widok na wybranym obszarze.
+   */
   const handleCountryAirportsConfirmed = useCallback((codes: string[], countryCode: string, countryName: string) => {
     if (codes.length === 0 || selectionLockRef.current) return;
-    
+
     const sequenceId = Math.random().toString(36).substring(7);
     const showLogs = useSettingsStore.getState().showConsoleLogs;
-    
+
     selectionLockRef.current = true;
     try {
       const resolvedName = (countryName && countryName !== countryCode)
         ? countryName
         : (countryInfoMap[countryCode]?.name || countryCode);
 
+      // Czyścimy wszystko przed wejściem w widok kraju, aby zachować limity slotów.
       clearExploration();
       addExplorationItem({ type: 'country', code: countryCode, name: resolvedName, airportCodes: codes });
-      
+
       const firstCode = codes[0]?.toUpperCase();
       if (firstCode) {
+        // Automatycznie zaznaczamy pierwsze lotnisko z listy jako punkt skupienia.
         const cityCodeMap = cityMap[firstCode];
         const countryCodeData = countryMap[firstCode];
 
-        setSelectedItem({ 
-          type: 'airport', 
-          data: { 
+        setSelectedItem({
+          type: 'airport',
+          data: {
             type: 'airport',
             code: firstCode,
             name: namesMap[firstCode] || firstCode,
@@ -241,15 +261,16 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
             city_name: cityCodeMap ? cityInfoMap[cityCodeMap]?.name : '',
             country_code: countryCodeData,
             country_name: countryCodeData ? countryInfoMap[countryCodeData]?.name : '',
-          } as Airport 
+          } as Airport
         });
       }
-      
+
+      // Automatyczne dopasowanie widoku mapy do wszystkich lotnisk w kraju.
       mapNav.fitBoundsToAirportCodes(codes);
     } finally {
       setTimeout(() => {
         selectionLockRef.current = false;
-        if (showLogs) console.log(`%c[ACTION-SELECTION] %c[${sequenceId}] FINISH | Confirm Lock released`, 'color: #10b981; font-weight: bold', 'color: inherit');
+        logger.log(`%c[ACTION-SELECTION] %c[${sequenceId}] KONIEC | Blokada potwierdzenia zwolniona`, 'color: #10b981; font-weight: bold', 'color: inherit');
       }, 100);
     }
   }, [namesMap, cityMap, countryMap, cityInfoMap, countryInfoMap, clearExploration, addExplorationItem, setSelectedItem, mapNav]);
@@ -263,9 +284,9 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
     fitCameraOnFlightsRef,
     extractCoordinates: extractCoords,
   }), [
-    handleSelectItem, 
-    handleSwitchToCountryView, 
-    handleCountryAirportsConfirmed, 
+    handleSelectItem,
+    handleSwitchToCountryView,
+    handleCountryAirportsConfirmed,
     pendingCountryPicker,
   ]);
 }

@@ -1,6 +1,4 @@
-/* ═══════════════════════════════════════════════════════════════
-   TRIP NAME MODAL
-   ═══════════════════════════════════════════════════════════════ */
+/* Modal nazwy podróży */
 
 .trip-name-modal-overlay {
   position: fixed;
@@ -43,6 +41,7 @@
   letter-spacing: 0.06em;
 }
 
+/* Pole tekstowe */
 .trip-name-modal__input {
   width: 100%;
   padding: 9px 12px;
@@ -58,13 +57,16 @@
   box-sizing: border-box;
 }
 
-.trip-name-modal__input::placeholder { color: var(--text-muted); }
+.trip-name-modal__input::placeholder {
+  color: var(--text-muted);
+}
 
 .trip-name-modal__input:focus {
   border-color: var(--accent);
   box-shadow: var(--accent-glow);
 }
 
+/* Przyciski */
 .trip-name-modal__actions {
   display: flex;
   justify-content: flex-end;

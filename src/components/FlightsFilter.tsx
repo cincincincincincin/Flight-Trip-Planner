@@ -27,6 +27,7 @@ const FlightsFilter: React.FC<FlightsFilterProps> = ({ allFlights, isOpen, onTog
     const el = chipsRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
+      // Przewijanie poziome za pomocą kółka myszy
       if (e.deltaY === 0) return;
       e.preventDefault();
       el.scrollLeft += e.deltaY;

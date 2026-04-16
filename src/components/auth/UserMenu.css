@@ -1,6 +1,4 @@
-/* ═══════════════════════════════════════════════════════════════
-   USER MENU
-   ═══════════════════════════════════════════════════════════════ */
+/* Menu użytkownika */
 
 .user-menu {
   position: relative;
@@ -29,7 +27,7 @@
   color: var(--accent);
 }
 
-/* ── Dropdown ────────────────────────────────────────────────── */
+/* Menu rozwijane */
 .user-menu__dropdown {
   position: absolute;
   top: calc(100% + 5px);

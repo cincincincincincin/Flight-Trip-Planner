@@ -7,7 +7,8 @@ import { useCountryCentersQuery, useAirportsMap } from './queries';
 import type { MapComponentRef } from '../components/MapComponent';
 
 /**
- * Hook orkiestrujący nawigację kamery na mapie.
+ * HOOK NAWIGACJI KAMERY (Map Camera Controller)
+ * Odpowiada za płynne przemieszczanie widoku między lotniskami i krajami.
  * Zoptymalizowany pod kątem Zero-Waste: wykorzystuje pre-kalkulowane dane o krajach oraz szybki indeks lotnisk.
  */
 export function useMapNavigation(mapRef: React.RefObject<MapComponentRef | null>) {
@@ -20,6 +21,10 @@ export function useMapNavigation(mapRef: React.RefObject<MapComponentRef | null>
     highlightedAirportsRef.current = highlightedAirports; 
   }, [highlightedAirports]);
 
+  /**
+   * PRZELOT DO LOKALIZACJI (flyToLocation)
+   * Prosty wrapper dla metody flyTo z Mapboxa, zapewniający spójne animacje przelotu.
+   */
   const flyToLocation = useCallback((lon: number, lat: number, zoom?: number) => {
     mapRef.current?.flyTo({ 
       center: [lon, lat], 
@@ -30,7 +35,10 @@ export function useMapNavigation(mapRef: React.RefObject<MapComponentRef | null>
   }, [mapRef]);
 
   /**
-   * Dopasowuje widok do zestawu lotnisk (np. wyniki wyszukiwania).
+   * DOPASOWANIE WIDOKU DO ZESTAWU LOTNISK (fitBoundsToAirportCodes)
+   * Oblicza optymalny obszar (Bounding Box), aby pokazać wszystkie wskazane kody lotnisk.
+   * Funkcja wykorzystuje algorytm usuwania wartości odstających (Outlier Filter),
+   * dzięki czemu lotniska na drugim końcu świata nie psują przybliżenia dla głównego klastra.
    */
   const fitBoundsToAirportCodes = useCallback((codes: string[]) => {
     if (Object.keys(airportsMap).length === 0 || codes.length === 0) return;
@@ -48,7 +56,7 @@ export function useMapNavigation(mapRef: React.RefObject<MapComponentRef | null>
       return; 
     }
     
-    // Zapobiegaj "rozciąganiu" mapy przez lotniska na drugim końcu świata
+    // [ANTI-OUTLIER]: Zapobiega "rozciąganiu" mapy przez lotniska na drugim końcu świata.
     const filteredPoints = filterOutliers(points);
     const lons = filteredPoints.map(p => p[0]);
     const lats = filteredPoints.map(p => p[1]);
@@ -60,15 +68,15 @@ export function useMapNavigation(mapRef: React.RefObject<MapComponentRef | null>
   }, [airportsMap, flyToLocation, mapRef]);
 
   /**
-   * Inteligentne dopasowanie widoku do państwa.
-   * Wykorzystuje pre-kalkulowany bbox (bounding box) wygenerowany przez skrypt Pythona,
-   * co eliminuje potrzebę liczenia outliersów po stronie klienta.
+   * DOPASOWANIE WIDOKU DO KRAJU (fitToCountry)
+   * Inteligentne przybliżenie na państwo. Wykorzystuje pre-kalkulowany bbox (bounding box)
+   * wygenerowany przez zewnętrzny skrypt tła, co zapewnia stałą i wysoką wydajność.
    */
   const fitToCountry = useCallback((countryCode: string) => {
     const center = countryCenters?.[countryCode];
     if (!center) return;
 
-    // Jeśli skrypt dostarczył pre-kalkulowaną ramkę kontynentalną (bbox), używamy fitBounds
+    // Jeśli skrypt dostarczył gotową ramkę brzegową (bbox), używamy precyzyjnego fitBounds.
     if (center.bbox) {
       const [minLon, minLat, maxLon, maxLat] = center.bbox;
       mapRef.current?.fitBounds(
@@ -76,11 +84,12 @@ export function useMapNavigation(mapRef: React.RefObject<MapComponentRef | null>
         { 
           padding: CONFIG.FIT_BOUNDS_PADDING, 
           duration: CONFIG.FLY_DURATION, 
+          // Dynamiczny Zoom: dobierany na podstawie zagęszczenia lotnisk w kraju.
           maxZoom: Math.max(CONFIG.MAX_ZOOM_FOR_COUNTRY, calculateZoomByAirportCount(center.airportCount)) 
         }
       );
     } else {
-      // Fallback: prosty przelot do środka ciężkości
+      // Fallback: prosty przelot do środka ciężkości kraju.
       flyToLocation(center.lon, center.lat, calculateZoomByAirportCount(center.airportCount));
     }
   }, [countryCenters, flyToLocation, mapRef]);

@@ -1,13 +1,11 @@
-/* ═══════════════════════════════════════════════════════════════
-   AIRPORT TRANSFER PICKER
-   ═══════════════════════════════════════════════════════════════ */
+/* Wybór lotniska przesiadkowego */
 
 .airport-transfer-picker {
   position: relative;
   width: 100%;
 }
 
-/* ── Display trigger ─────────────────────────────────────────── */
+/* Wyzwalacz listy */
 .atp-display {
   display: flex;
   align-items: center;
@@ -40,7 +38,7 @@
   flex-shrink: 0;
 }
 
-/* ── Input ───────────────────────────────────────────────────── */
+/* Pole wejściowe */
 .atp-input {
   width: 100%;
   padding: 7px 10px;
@@ -65,7 +63,7 @@
   box-shadow: var(--accent-glow);
 }
 
-/* ── Dropdown ────────────────────────────────────────────────── */
+/* Lista rozwijana */
 .atp-dropdown {
   position: absolute;
   top: calc(100% + 3px);
@@ -85,7 +83,7 @@
   z-index: 700;
 }
 
-/* ── Option ──────────────────────────────────────────────────── */
+/* Opcja na liście */
 .atp-option {
   display: flex;
   align-items: center;
@@ -162,7 +160,7 @@
   white-space: nowrap;
 }
 
-/* ── Header with counter ─────────────────────────────────────── */
+/* Nagłówek z licznikiem */
 .atp-header {
   display: flex;
   align-items: center;
@@ -184,7 +182,7 @@
   font-size: 11px;
 }
 
-/* ── Confirm button ──────────────────────────────────────────── */
+/* Przycisk potwierdzenia */
 .atp-confirm-btn {
   display: block;
   width: 100%;

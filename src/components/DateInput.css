@@ -1,12 +1,10 @@
-/* ═══════════════════════════════════════════════════════════════
-   DATE INPUT
-   ═══════════════════════════════════════════════════════════════ */
+/* Pole wyboru daty (Date Input) */
 
 .date-input-container {
   position: relative;
 }
 
-/* ── Display button ──────────────────────────────────────────── */
+/* Przycisk wyświatlania (Display button) */
 .date-input-display {
   display: flex;
   align-items: center;
@@ -47,7 +45,7 @@
 
 .date-text-input::placeholder { color: var(--text-muted); }
 
-/* ── Calendar popup ──────────────────────────────────────────── */
+/* Okno kalendarza (Calendar popup) */
 .calendar-popup {
   position: absolute;
   top: calc(100% + 6px);
@@ -61,7 +59,7 @@
   min-width: 258px;
 }
 
-/* ── Calendar header ─────────────────────────────────────────── */
+/* Nagłówek kalendarza */
 .calendar-header {
   display: flex;
   justify-content: space-between;
@@ -96,7 +94,7 @@
   letter-spacing: 0.08em;
 }
 
-/* ── Weekdays row ────────────────────────────────────────────── */
+/* Wiersz dni tygodnia */
 .calendar-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -115,7 +113,7 @@
   letter-spacing: 0.05em;
 }
 
-/* ── Days grid ───────────────────────────────────────────────── */
+/* Siatka dni */
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);

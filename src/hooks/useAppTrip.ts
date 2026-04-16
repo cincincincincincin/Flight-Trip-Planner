@@ -6,21 +6,19 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { CONFIG } from '../constants/config';
 import { useAirportIndexes, useCityInfoMap, useCountryInfoMap } from './queries';
 import type { Airport } from '../types';
+import { logger } from '../utils/logger';
 
 interface UseAppTripProps {
-  mapNav: {
-    flyToLocation: (lon: number, lat: number, zoom: number) => void;
-  };
-  selection: {
-    setFullSelection: (v: any) => void;
-    setSelectedAirportCode: (code: string | null) => void;
-    setSelectedItem: (item: any) => void;
-    clearExploration: () => void;
-    extractCoordinates: (item: any) => { lon: number; lat: number } | null;
-  };
+  mapNav: any;
+  selection: any;
   rightPanelRef: React.RefObject<any>;
 }
 
+/**
+ * GŁÓWNY HOOK ZARZĄDZANIA PODRÓŻĄ (Trip Orchestrator)
+ * Odpowiada za logikę budowania trasy, obsługę przesiadek (w tym manualnych) 
+ * oraz synchronizację stanu podróży z historią (Undo/Redo).
+ */
 export function useAppTrip({ mapNav, selection, rightPanelRef }: UseAppTripProps) {
   const { airportFeaturesMap, namesMap, cityMap, countryMap } = useAirportIndexes();
   const cityInfoMap = useCityInfoMap();
@@ -61,23 +59,23 @@ export function useAppTrip({ mapNav, selection, rightPanelRef }: UseAppTripProps
   }, [tripState]);
 
   /**
-   * DODAWANIE LOTU DO TRASY (Async Controller)
-   * Implementuje mechanizm blokady Mutex dla eliminacji Race Conditions.
+   * DODAWANIE LOTU DO TRASY (handleAddToTrip)
+   * Najważniejsza funkcja logiczna aplikacji. Odpowiada za sekwencyjne budowanie trasy.
+   * Obsługuje automatyczne wykrywanie i wstrzykiwanie przesiadek manualnych 
+   * (np. transport między lotniskami w tym samym mieście).
    */
   const handleAddToTrip = useCallback(async (flight: any) => {
     const sequenceId = Math.random().toString(36).substring(7);
     const showLogs = useSettingsStore.getState().showConsoleLogs;
 
     if (tripExecutionLockRef.current) {
-      if (showLogs) console.log(`%c[ACTION-TRIP] %c[${sequenceId}] Blocked: Another trip action in progress`, 'color: #f59e0b; font-weight: bold', 'color: inherit');
+      logger.log(`%c[ACTION-TRIP] %c[${sequenceId}] Zablokowane: Inna akcja podróży w toku`, 'color: #f59e0b; font-weight: bold', 'color: inherit');
       return;
     }
 
     tripExecutionLockRef.current = true;
-    
-    if (showLogs) {
-      console.log(`%c[ACTION-TRIP] %c[${sequenceId}] START | Flight: ${flight.airline_code}${flight.flight_number} -> ${flight.destination_airport_code}`, 'color: #3b82f6; font-weight: bold', 'color: inherit');
-    }
+
+    logger.log(`%c[ACTION-TRIP] %c[${sequenceId}] START | Lot: ${flight.airline_code}${flight.flight_number} -> ${flight.destination_airport_code}`, 'color: #3b82f6; font-weight: bold', 'color: inherit');
 
     try {
       // INŻYNIERSKI LIVE ACCESS: Pobieramy stan bezpośrednio ze store'a, 
@@ -94,16 +92,17 @@ export function useAppTrip({ mapNav, selection, rightPanelRef }: UseAppTripProps
       const destCode = flight.destination_airport_code.toUpperCase();
       const originCode = flight.origin_airport_code.toUpperCase();
       const isFirstLeg = !currentTripState;
-      
+
       const newFlightLeg = { fromAirportCode: originCode, toAirportCode: destCode, flight };
       const isFromTransferAirport = !isFirstLeg && currentManualTransfers.includes(originCode);
-      
+
       pushToHistory();
 
       const newTripRoutes = [...currentTripRoutes];
       let finalTripState = currentTripState;
 
       if (isFirstLeg) {
+        // Pierwszy segment podróży - definiujemy lotnisko startowe.
         finalTripState = {
           startAirport: {
             code: originCode,
@@ -113,7 +112,9 @@ export function useAppTrip({ mapNav, selection, rightPanelRef }: UseAppTripProps
           legs: [newFlightLeg],
         };
       } else if (isFromTransferAirport) {
-        // Pobieramy zaznaczone lotnisko (kontekst przylotu) bezpośrednio ze store'a selekcji
+        // [LOGIKA PRZESIADKI MANUALNEJ]: 
+        // Jeśli aktualny lot zaczyna się na lotnisku, na które musieliśmy dojechać manualnie,
+        // wstrzykujemy segment typu 'manual' między poprzedni cel a obecny start.
         const arrivalCode = useSelectionStore.getState().selectedAirportCode ?? '';
         const manualLeg = {
           type: 'manual' as const,
@@ -122,7 +123,7 @@ export function useAppTrip({ mapNav, selection, rightPanelRef }: UseAppTripProps
           flight: null as any,
         };
         finalTripState = { ...currentTripState!, legs: [...currentTripState!.legs, manualLeg, newFlightLeg] };
-        
+
         const fromFeat = airportFeaturesMap[arrivalCode];
         const transferFeat = airportFeaturesMap[originCode];
         if (fromFeat?.geometry && transferFeat?.geometry) {
@@ -144,7 +145,7 @@ export function useAppTrip({ mapNav, selection, rightPanelRef }: UseAppTripProps
         manualTransferAirportCodes: []
       });
 
-      // Synchronizacja UI (wycentrowanie na nowym celu)
+      // Synchronizacja UI: Wycentrowanie mapy na nowym lotnisku docelowym.
       const destFeat = airportFeaturesMap[destCode];
       if (destFeat) {
         const overrideFromDatetime = flight.scheduled_arrival_local
@@ -160,7 +161,7 @@ export function useAppTrip({ mapNav, selection, rightPanelRef }: UseAppTripProps
           name: namesMap[destCode] || destCode,
           city_code: cityCode,
           city_name: cityCode ? cityInfoMap[cityCode]?.name : '',
-          country_code: countryCode, 
+          country_code: countryCode,
           country_name: countryCode ? countryInfoMap[countryCode]?.name : '',
           coordinates: { lon: destFeat.geometry.coordinates[0], lat: destFeat.geometry.coordinates[1] },
         };
@@ -179,9 +180,9 @@ export function useAppTrip({ mapNav, selection, rightPanelRef }: UseAppTripProps
         }
       }
 
-      if (showLogs) console.log(`%c[ACTION-TRIP] %c[${sequenceId}] FINISH | Trip updated successfully`, 'color: #3b82f6; font-weight: bold', 'color: inherit');
+      logger.log(`%c[ACTION-TRIP] %c[${sequenceId}] KONIEC | Podróż zaktualizowana pomyślnie`, 'color: #3b82f6; font-weight: bold', 'color: inherit');
     } catch (e) {
-      console.error(`[ACTION-TRIP] [${sequenceId}] Critical Error:`, e);
+      logger.error(`[ACTION-TRIP] [${sequenceId}] Błąd krytyczny:`, e);
     } finally {
       tripExecutionLockRef.current = false;
     }
@@ -205,27 +206,24 @@ export function useAppTrip({ mapNav, selection, rightPanelRef }: UseAppTripProps
     clearTrip();
   }, [clearFilters, selection, clearTrip]);
 
+  /**
+   * INICJALIZACJA TRYBU EDYCJI (handleEditLoadedTrip)
+   * Funkcja "rozpakowująca" zapisaną podróż z bazy danych do formatu edytowalnego.
+   * Implementuje zaawansowany wzorzec odbudowy historii (History Rebuilding), 
+   * pozwalając użytkownikowi cofać kroki trasy, która została wczytana jako gotowa całość.
+   */
   const handleEditLoadedTrip = useCallback(async () => {
     const sequenceId = Math.random().toString(36).substring(7);
     const showLogs = useSettingsStore.getState().showConsoleLogs;
-
-    if (tripExecutionLockRef.current) {
-      if (showLogs) console.log(`%c[ACTION-TRIP] %c[${sequenceId}] Blocked: Action in progress (Edit Mode)`, 'color: #f59e0b; font-weight: bold', 'color: inherit');
-      return;
-    }
-
-    /**
-     * [IMMUTABLE SNAPSHOTTING]: Tworzenie migawek historii dla trybu edycji.
-     * Wykorzystujemy wzorzec Time-Travel, pozwalający na powrót do dowolnego stanu
-     * trasy przed jej modyfikacją.
-     */
     const currentTripState = useTripStore.getState().tripState;
     const currentTripRoutes = useTripStore.getState().tripRoutes;
 
     if (!currentTripState?.legs?.length) return;
-    
-    if (showLogs) console.log(`%c[ACTION-TRIP] %c[${sequenceId}] START | Building edit snapshots`, 'color: #3b82f6; font-weight: bold', 'color: inherit');
-    
+
+    if (showLogs) {
+      logger.log(`[ACTION-TRIP] [${sequenceId}] START | Budowanie migawek edycji`);
+    }
+
     tripExecutionLockRef.current = true;
 
     try {
@@ -241,13 +239,18 @@ export function useAppTrip({ mapNav, selection, rightPanelRef }: UseAppTripProps
           if (dep < now) break;
         }
         const slicedLegs = legs.slice(0, i);
+
+        // Pomijanie migawek kończących się przesiadką manualną, aby undo zawsze lądowało na locie.
+        const lastSlicedLeg = slicedLegs[slicedLegs.length - 1];
+        if (lastSlicedLeg && (lastSlicedLeg as any).type === 'manual') continue;
+
         const slicedState = slicedLegs.length === 0 ? null : { ...currentTripState, legs: slicedLegs };
         let snapCode: string | null = null;
         for (let j = slicedLegs.length - 1; j >= 0; j--) {
           const l = slicedLegs[j];
           if ((l as { type?: string }).type !== 'manual') { snapCode = l.toAirportCode.toUpperCase(); break; }
         }
-        
+
         const snapData = snapCode ? {
           type: 'airport' as const,
           code: snapCode,
@@ -263,7 +266,6 @@ export function useAppTrip({ mapNav, selection, rightPanelRef }: UseAppTripProps
           selectedAirportCode: snapCode,
           selectedAirportCodes: snapCode ? [snapCode] : [],
           highlightedAirports: [],
-          flightsData: [],
           explorationItems: [],
         });
       }
@@ -289,7 +291,7 @@ export function useAppTrip({ mapNav, selection, rightPanelRef }: UseAppTripProps
       if (lastCode) {
         selection.setSelectedAirportCode(lastCode);
         const destFeat = airportFeaturesMap[lastCode];
-        
+
         if (destFeat) {
           const overrideFromDatetime = lastArrivalLocal
             ? lastArrivalLocal.toString().substring(0, 19)
@@ -304,7 +306,7 @@ export function useAppTrip({ mapNav, selection, rightPanelRef }: UseAppTripProps
             type: 'airport',
             city_code: cityCode,
             city_name: cityCode ? cityInfoMap[cityCode]?.name : '',
-            country_code: countryCode, 
+            country_code: countryCode,
             country_name: countryCode ? countryInfoMap[countryCode]?.name : '',
             coordinates: { lon: destFeat.geometry.coordinates[0], lat: destFeat.geometry.coordinates[1] },
           };
@@ -316,7 +318,9 @@ export function useAppTrip({ mapNav, selection, rightPanelRef }: UseAppTripProps
         }
       }
 
-      if (showLogs) console.log(`%c[ACTION-TRIP] %c[${sequenceId}] FINISH | Edit Mode ready`, 'color: #3b82f6; font-weight: bold', 'color: inherit');
+      if (showLogs) {
+        logger.log(`[ACTION-TRIP] [${sequenceId}] FINISH | Tryb edycji gotowy`);
+      }
     } finally {
       tripExecutionLockRef.current = false;
     }

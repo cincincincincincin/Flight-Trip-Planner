@@ -13,7 +13,7 @@ const apiClient = axios.create({
   timeout: CONFIG.API_TIMEOUT_MS,
 });
 
-// Attach Supabase JWT to every request when the user is logged in
+// Dołączenie tokena Supabase JWT do każdego zapytania dla zalogowanych użytkowników
 apiClient.interceptors.request.use(async (config) => {
   const { data: { session } } = await supabase.auth.getSession();
   if (session?.access_token) {
@@ -22,8 +22,8 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
-// On 401: attempt token refresh once, then retry the original request.
-// The _retry flag prevents infinite loops if the refreshed token is also rejected.
+// Przy błędzie 401: jedna próba odświeżenia tokena i ponowienie zapytania.
+// Flaga _retry zapobiega nieskończonym pętlom w przypadku ponownego odrzucenia odświeżonego tokena.
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -38,7 +38,7 @@ apiClient.interceptors.response.use(
           return apiClient(originalRequest);
         }
       } catch {
-        // refresh failed — reject with original 401
+        // Odświeżenie nie powiodło się – odrzuć pierwotnym błędem 401
       }
     }
     return Promise.reject(error);

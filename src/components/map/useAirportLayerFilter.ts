@@ -121,7 +121,7 @@ export function useAirportLayerFilter({
       applyFilter('airports-labels-normal-city', finalCityFilter);
     }
 
-    // Only update highlighted labels if route hover is not active
+    // Aktualizacja podświetlonych etykiet tylko jeśli nie ma najechania (hover) na trasę
     if (!isRouteHoveredRef.current) {
       const codes = [...effectiveHighlighted];
       if (inTripMode) {

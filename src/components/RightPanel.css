@@ -1,8 +1,5 @@
-/* ═══════════════════════════════════════════════════════════════
-   RIGHT PANEL — main content panel
-   ═══════════════════════════════════════════════════════════════ */
+/* Panel boczny - główny kontener */
 
-/* ── Panel header ────────────────────────────────────────────── */
 .panel-header {
   display: flex;
   align-items: flex-start;
@@ -39,7 +36,7 @@
   flex-shrink: 0;
 }
 
-/* ── Airport time display ────────────────────────────────────── */
+/* Wyświetlanie czasu na lotnisku */
 .airport-time {
   font-size: 15px;
   font-family: var(--font-mono);
@@ -146,7 +143,7 @@
   display: block;
 }
 
-/* ── Close button ────────────────────────────────────────────── */
+/* Przycisk zamykania */
 .close-button {
   flex-shrink: 0;
   width: 28px;
@@ -171,17 +168,17 @@
   color: var(--red);
 }
 
-/* ── Panel content ───────────────────────────────────────────── */
+/* Zawartość panelu */
 .panel-content {
   flex: 1;
-  overflow: hidden; /* ULTRA-LEAN: Let children handle scrolling (like Virtuoso) so flex: 1 expands correctly. */
+  overflow: hidden;
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
 
-/* ── Item info section ───────────────────────────────────────── */
+/* Sekcja informacji o przedmiocie */
 .item-info {
   padding: clamp(8px, 1.2vh, 14px) clamp(12px, 1.5vw, 18px);
   flex-shrink: 0;
@@ -209,7 +206,7 @@
   padding: 8px 0;
 }
 
-/* ── Flights section ─────────────────────────────────────────── */
+/* Sekcja lotów */
 .flights-section {
   flex: 1;
   display: flex;
@@ -218,7 +215,7 @@
   overflow: hidden;
 }
 
-/* ── Placeholder ─────────────────────────────────────────────── */
+/* Wiadomość zastępcza */
 .placeholder-message {
   padding: clamp(20px, 4vh, 40px) clamp(16px, 2vw, 24px);
   text-align: center;
@@ -230,9 +227,7 @@
   line-height: 1.6;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   EXPLORATION LIST
-   ═══════════════════════════════════════════════════════════════ */
+/* Lista eksploracji */
 .exploration-list {
   display: flex;
   flex-direction: column;
@@ -385,9 +380,7 @@
   margin-left: 12px;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   TRIP AIRPORTS SECTION
-   ═══════════════════════════════════════════════════════════════ */
+/* Sekcja lotnisk w podróży */
 .trip-airports-section {
   display: flex;
   flex-direction: column;
@@ -417,9 +410,7 @@
   font-weight: 600;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   COUNTRY MODE
-   ═══════════════════════════════════════════════════════════════ */
+/* Tryb kraju */
 .country-mode-info {
   font-size: 11px;
   color: var(--text-muted);
@@ -486,7 +477,7 @@
   font-family: var(--font-mono);
 }
 
-/* ── Country TZ groups ───────────────────────────────────────── */
+/* Grupy stref czasowych w kraju */
 .country-tz-group {
   border: 1px solid var(--border);
   border-radius: var(--r-md);
@@ -541,7 +532,7 @@
   gap: 2px;
 }
 
-/* ── Confirm button ──────────────────────────────────────────── */
+/* Przycisk potwierdzenia */
 .confirm-flights-btn {
   width: 100%;
   margin-top: 8px;
@@ -568,9 +559,7 @@
   cursor: not-allowed;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   PENDING COUNTRY PICKER (inline)
-   ═══════════════════════════════════════════════════════════════ */
+/* Selektor kraju */
 .pending-country-picker {
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
@@ -614,7 +603,7 @@
   overflow-y: auto;
 }
 
-/* ── Mobile ──────────────────────────────────────────────────── */
+/* Widok mobilny */
 @media (max-width: 768px) {
   .panel-header {
     position: relative;

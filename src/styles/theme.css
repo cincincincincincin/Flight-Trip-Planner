@@ -1,7 +1,7 @@
-/* Core Design System Tokens */
+/* Tokeny Koncepcyjne Systemu Projektowego */
 
 :root {
-  /* Surfaces & Backgrounds */
+  /* Powierzchnie i Tła */
   --bg-void:     #E2EAF2; /* Tło pod mapą (App.tsx) */
   --bg-base:     #EDF2F8; /* Tło kontenerów */
   --bg-raised:   #FFFFFF; /* Karty lotów, panele (FlightCard.css) */
@@ -12,7 +12,7 @@
   --bg-glass-hi: rgba(255, 255, 255, 0.96); /* Dropdowny i detale */
   --bg-modal-overlay: rgba(0, 0, 0, 0.38); /* Tło pod modalem */
 
-  /* Main Accent (MapLibre Blue) */
+  /* Główny Akcent (Błękit MapLibre) */
   --accent:        #1B6EF7; 
   --accent-dim:    rgba(27, 110, 247, 0.08);
   --accent-hover:  rgba(27, 110, 247, 0.14);
@@ -20,7 +20,7 @@
   --accent-glow:   0 0 0 3px rgba(27, 110, 247, 0.14); /* Dostępność i focus */
   --accent-dark:   #1560e0;
 
-  /* Cartographic Palette */
+  /* Paleta Kartograficzna */
   --c-teal:     #2BA8B4;
   --c-teal-dim: rgba(43, 168, 180, 0.10);
   --c-teal-b:   rgba(43, 168, 180, 0.28);
@@ -45,7 +45,7 @@
   --c-rose-dim: rgba(191, 78, 120, 0.10);
   --c-rose-b:   rgba(191, 78, 120, 0.28);
 
-  /* Semantic Status */
+  /* Statusy Semantyczne */
   --green:       #0B9460; /* Sukces */
   --green-dim:   rgba(11, 148, 96, 0.09);
   --green-b:     rgba(11, 148, 96, 0.26);
@@ -68,7 +68,7 @@
   --warning-text:#856404;
   --warning-border:#ffeaa7;
 
-  /* Typography */
+  /* Typografia */
   --text-primary:   #0C1A2C; /* Body / Headings */
   --text-secondary: #384F6A; /* Labels / Secondary */
   --text-muted:     #7590AC; /* Tekst wyciszony */
@@ -78,12 +78,12 @@
   --text-inverse:   #FFFFFF;
   --text-black:     #000000;
 
-  /* Borders & Dividers */
+  /* Obramowania i Separatory */
   --border:        rgba(0, 0, 0, 0.08); /* Separatory sekcji */
   --border-light:  rgba(0, 0, 0, 0.13); /* Kontury kart/inputów */
   --border-strong: rgba(0, 0, 0, 0.22);
 
-  /* Elevation (Shadows) */
+  /* Wyniesienie (Cienie) */
   --shadow-xs:    0 1px 2px rgba(0,0,0,0.06);
   --shadow-sm:    0 1px 5px rgba(0,0,0,0.08);
   --shadow-md:    0 4px 14px rgba(0,0,0,0.10);
@@ -93,7 +93,7 @@
   --shadow-float: 0 4px 20px rgba(27, 110, 247, 0.16); /* UserMenu.css */
   --shadow-up:    0 -4px 20px rgba(0,0,0,0.10);
 
-  /* Border Radii */
+  /* Zaokrąglenia Krawędzi */
   --r-xs:   3px;
   --r-sm:   6px;
   --r-md:   10px;
@@ -102,12 +102,12 @@
   --r-2xl:  24px;
   --r-pill: 9999px;
 
-  /* Fonts */
+  /* Czcionki */
   --font-sans:    system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono:    'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
   --font-display: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
-  /* Layout Dimensions */
+  /* Wymiary Układu */
   --panel-w:    clamp(280px, 26vw, 420px); /* RightPanel.tsx */
   --controls-w: clamp(260px, 22vw, 340px); /* ControlsPanel.tsx */
 

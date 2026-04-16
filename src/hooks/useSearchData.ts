@@ -27,6 +27,11 @@ interface UseSearchDataParams {
   containerRef: React.RefObject<HTMLElement | null>;
 }
 
+/**
+ * NORMALIZACJA TEKSTU (normalize)
+ * Usuwa znaki diakrytyczne (akcenty) i zamienia tekst na małe litery.
+ * Pozwala to na wyszukiwanie "Łódź" poprzez wpisanie "lodz".
+ */
 function normalize(str: string): string {
   return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
@@ -45,7 +50,7 @@ function computePhaseData(
 ): { phaseData: PhaseData; searchMode: 'prefix' | 'contains'; exactAirport: Airport | null; phase2Cache: Record<string, PhaseCacheEntry>; phase3Cache: Record<string, PhaseCacheEntry> } {
   const q = normalize(query.trim());
 
-  // Empty query: all countries in phase 1
+  // Przypadek pustego zapytania: Pokaż wszystkie kraje w Fazie 1
   if (q === '') {
     const allCountries: Country[] = Object.entries(countryMap)
       .map(([code, { name }]) => ({ type: 'country' as const, code, name }))
@@ -53,7 +58,8 @@ function computePhaseData(
     return { phaseData: { 1: allCountries, 2: [], 3: [] }, searchMode: 'prefix', exactAirport: null, phase2Cache: {}, phase3Cache: {} };
   }
 
-  // Exact IATA match (3 chars) - O(1)
+  // SZYBKI LOOKUP IATA (3 znaki) - O(1)
+  // Jeśli wpiszesz dokładnie 3 znaki, system sprawdza czy to unikalny kod lotniska.
   const exactAirport = q.length === 3 ? (iataMap[q] || null) : null;
 
   for (const mode of ['prefix', 'contains'] as const) {
@@ -67,8 +73,13 @@ function computePhaseData(
     const p3Cache: Record<string, PhaseCacheEntry> = {};
     const now = Date.now();
 
+    /**
+     * ITERACJA PO INDEKSIE (O(N))
+     * System sprawdza dopasowania w kolejności: Kraje (P1) -> Miasta (P2) -> Lotniska (P3).
+     */
     for (const [cc, { name: countryName, n: countryN, cities }] of Object.entries(countryMap)) {
       if (matches(countryN)) {
+        // Dopasowanie do nazwy kraju (Faza 1)
         const cityList = Object.entries(cities)
           .map(([cityCode, { name, airports }]) => ({ type: 'city' as const, code: cityCode, name, country_code: cc, airports }))
           .sort((a, b) => a.name.localeCompare(b.name));
@@ -81,8 +92,10 @@ function computePhaseData(
 
       for (const [cityCode, { name: cityName, n: cityN, airports }] of Object.entries(cities)) {
         if (matches(cityN)) {
+          // Dopasowanie do nazwy miasta (Faza 2)
           matchingCities.push({ type: 'city', code: cityCode, name: cityName, country_code: cc, airports });
         } else {
+          // Dopasowanie do nazwy lotniska wewnątrz miasta (Faza 3)
           const matched = airports.filter(a => matches(a.n));
           if (matched.length > 0) {
             airportMatchCities.push({ type: 'city', code: cityCode, name: cityName, country_code: cc, airports: matched });
@@ -105,6 +118,7 @@ function computePhaseData(
     p2.sort((a, b) => a.name.localeCompare(b.name));
     p3.sort((a, b) => a.name.localeCompare(b.name));
 
+    // Jeśli znaleziono jakiekolwiek wyniki dla danego trybu (prefix/contains), zwróć je natychmiast.
     if (p1.length > 0 || p2.length > 0 || p3.length > 0) {
       return { phaseData: { 1: p1, 2: p2, 3: p3 }, searchMode: mode, exactAirport, phase2Cache: p2Cache, phase3Cache: p3Cache };
     }
@@ -117,6 +131,11 @@ export function useSearchData({ query }: UseSearchDataParams) {
   const airportsMap = useAirportsMap();
   const { countryMap, iataMap } = useSearchIndex();
 
+  /**
+   * INDEKSOWANIE W PAMIĘCI (useMemo)
+   * Przy zmianie indeksu wyszukiwania (np. po wczytaniu danych GeoJSON),
+   * budujemy mapy lookupu miast i krajów, aby dostęp do nich był natychmiastowy.
+   */
   const { countriesCache, citiesCache } = useMemo(() => {
     const ccCache: Record<string, CountryCacheEntry> = {};
     const ciCache: Record<string, CityCacheEntry> = {};

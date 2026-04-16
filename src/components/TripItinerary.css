@@ -1,7 +1,3 @@
-/* ═══════════════════════════════════════════════════════════════
-   TRIP ITINERARY — floating bar over the map
-   ═══════════════════════════════════════════════════════════════ */
-
 .trip-itinerary-wrapper {
   display: flex;
   flex-direction: column;
@@ -10,7 +6,7 @@
   width: 100%;
 }
 
-/* ── Actions bar ─────────────────────────────────────────────── */
+/* Pasek akcji */
 .trip-itinerary-actions {
   display: flex;
   align-items: center;
@@ -36,7 +32,7 @@
   justify-content: center;
 }
 
-/* ── Action buttons ──────────────────────────────────────────── */
+/* Przyciski akcji */
 .trip-action-btn {
   padding: 5px clamp(8px, 1vw, 14px);
   border-radius: var(--r-md);
@@ -80,7 +76,7 @@
   border-color: var(--c-gold-b);
 }
 
-/* ── Itinerary legs ──────────────────────────────────────────── */
+/* Etapy podróży */
 .trip-itinerary {
   background: var(--bg-glass-hi);
   border: 1px solid var(--border-light);
@@ -100,10 +96,13 @@
   transition: background 0.12s;
 }
 
-.trip-leg:last-child { border-bottom: none; }
+.trip-leg:last-child {
+  border-bottom: none;
+}
 
-.trip-leg:hover { background: var(--bg-hover); }
-
+.trip-leg:hover {
+  background: var(--bg-hover);
+}
 
 .trip-leg-row {
   display: flex;
@@ -167,8 +166,7 @@
   white-space: nowrap;
 }
 
-
-/* ── Time available / transfer connectors ────────────────────── */
+/* Czas wolny i transfery */
 .trip-time-transfer {
   padding: 4px clamp(10px, 1.5vw, 16px);
   font-size: 10px;
@@ -191,7 +189,13 @@
   font-weight: 600;
 }
 
-/* ── Time row (arrival time + tz badge) ─────────────────────── */
+.trip-duration-alert {
+  color: var(--alert-color, var(--red)) !important;
+  background: var(--alert-bg, var(--red-dim)) !important;
+  font-weight: 800 !important;
+}
+
+/* Wiersz czasu */
 .trip-leg-time-row {
   display: flex;
   align-items: center;
@@ -199,6 +203,7 @@
   gap: 2px;
 }
 
+/* Różnice stref czasowych */
 .trip-leg-tz-diff {
   font-size: 9px;
   font-weight: 600;
@@ -217,7 +222,7 @@
   background: var(--red-dim);
 }
 
-/* ── Estimated arrival ───────────────────────────────────────── */
+/* Szacowany przylot */
 .trip-leg-time--estimated {
   background: var(--c-gold-dim);
   color: var(--c-gold);
@@ -243,7 +248,7 @@
   line-height: 1.5;
 }
 
-/* ── Flight popup (portal) ───────────────────────────────────── */
+/* Popup lotu */
 .trip-leg-popup {
   position: fixed;
   z-index: 9999;
@@ -255,7 +260,7 @@
   overflow: hidden;
 }
 
-/* ── Mobile ──────────────────────────────────────────────────── */
+/* Widok mobilny */
 @media (max-width: 768px) {
   .trip-itinerary {
     max-height: 28vh;

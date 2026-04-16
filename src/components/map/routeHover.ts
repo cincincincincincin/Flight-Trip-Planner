@@ -11,31 +11,31 @@ import { buildFlightRow, buildPopupHtml, formatGroupDateLabel, buildHeaderDurati
 import { getVisualRadius } from './utils';
 
 export interface RouteHoverRefs {
-  map: React.MutableRefObject<maplibregl.Map | null>;
-  projectedAirportsRef: React.MutableRefObject<Array<{ code: string; x: number; y: number }>>;
-  hoveredAirportCodeRef: React.MutableRefObject<string | null>;
-  hoveredRouteId: React.MutableRefObject<string | number | null>;
-  hoveredTripRouteId: React.MutableRefObject<string | number | null>;
-  hoveredTransferRouteId: React.MutableRefObject<string | number | null>;
-  isRouteHoveredRef: React.MutableRefObject<boolean>;
-  tripVisibleAirportCodesRef: React.MutableRefObject<string[] | null>;
-  highlightedAirportsRef: React.MutableRefObject<string[]>;
-  selectedAirportCodeRef: React.MutableRefObject<string | null>;
-  selectedAirportCodesRef: React.MutableRefObject<string[]>;
-  explorationAirportCodesRef: React.MutableRefObject<string[]>;
-  manualTransferAirportCodesRef: React.MutableRefObject<string[]>;
-  airportsDataRef: React.MutableRefObject<any>;
-  airportCityKeyRef: React.MutableRefObject<Record<string, string>>;
-  cityLabelCodeByCityRef: React.MutableRefObject<Record<string, string>>;
-  highlightedCityLabelCodesRef: React.MutableRefObject<string[]>;
-  flightDetailsMap: React.MutableRefObject<Record<string, Flight[]>>;
-  /** INDEKS GRUPOWY (Faza 2): Map<"ORIGIN-DEST", Flight[]> dla O(1) popupów */
-  flightsByRouteGroupMapRef: React.MutableRefObject<Map<string, Flight[]>>;
-  airportNamesMap: React.MutableRefObject<Record<string, string>>;
-  airportCoordsMapRef: React.MutableRefObject<Record<string, [number, number]>>;
-  currentPopup: React.MutableRefObject<maplibregl.Popup | null>;
-  routeHoverAtPointRef: React.MutableRefObject<((point: { x: number; y: number }) => void) | null>;
-  clearRouteHoverRef: React.MutableRefObject<((opts?: { keepLabels?: boolean }) => void) | null>;
+  map: React.RefObject<maplibregl.Map | null>;
+  projectedAirportsRef: React.RefObject<Array<{ code: string; x: number; y: number }>>;
+  hoveredAirportCodeRef: React.RefObject<string | null>;
+  hoveredRouteId: React.RefObject<string | number | null>;
+  hoveredTripRouteId: React.RefObject<string | number | null>;
+  hoveredTransferRouteId: React.RefObject<string | number | null>;
+  isRouteHoveredRef: React.RefObject<boolean>;
+  tripVisibleAirportCodesRef: React.RefObject<string[] | null>;
+  highlightedAirportsRef: React.RefObject<string[]>;
+  selectedAirportCodeRef: React.RefObject<string | null>;
+  selectedAirportCodesRef: React.RefObject<string[]>;
+  explorationAirportCodesRef: React.RefObject<string[]>;
+  manualTransferAirportCodesRef: React.RefObject<string[]>;
+  airportsDataRef: React.RefObject<any>;
+  airportCityKeyRef: React.RefObject<Record<string, string>>;
+  cityLabelCodeByCityRef: React.RefObject<Record<string, string>>;
+  highlightedCityLabelCodesRef: React.RefObject<string[]>;
+  flightDetailsMap: React.RefObject<Record<string, Flight[]>>;
+  /** INDEKS GRUPOWY: Map<"ORIGIN-DEST", Flight[]> dla szybkiego dostępu */
+  flightsByRouteGroupMapRef: React.RefObject<Map<string, Flight[]>>;
+  airportNamesMap: React.RefObject<Record<string, string>>;
+  airportCoordsMapRef: React.RefObject<Record<string, [number, number]>>;
+  currentPopup: React.RefObject<maplibregl.Popup | null>;
+  routeHoverAtPointRef: React.RefObject<((point: { x: number; y: number }) => void) | null>;
+  clearRouteHoverRef: React.RefObject<((opts?: { keepLabels?: boolean }) => void) | null>;
   applyAirportFilters: () => void;
   texts: {
     noFlightsForDate: string;
@@ -45,6 +45,7 @@ export interface RouteHoverRefs {
 }
 
 import { spatialIndex } from '../../utils/spatialIndex';
+import { logger } from '../../utils/logger';
 
 const n = (v: any, fallback: number): number => {
   const num = Number(v);
@@ -52,19 +53,19 @@ const n = (v: any, fallback: number): number => {
 };
 
 /**
- * SZKLANA TARCZA (v11.11)
- * Sprawdza czy punkt (mysz) znajduje się wewnątrz wizualnego promienia dowolnej kropki lotniska.
+ * TARCZA OCHRONNA
+ * Sprawdza czy punkt znajduje się wewnątrz promienia lotniska.
  */
 function isAirportNearPoint(
   m: maplibregl.Map,
   point: { x: number; y: number },
   refs: {
-    highlightedAirportsRef: React.MutableRefObject<string[]>,
-    selectedAirportCodesRef: React.MutableRefObject<string[]>,
-    tripVisibleAirportCodesRef: React.MutableRefObject<string[] | null>,
-    explorationAirportCodesRef: React.MutableRefObject<string[]>,
-    manualTransferAirportCodesRef: React.MutableRefObject<string[]>,
-    hoveredAirportCodeRef: React.MutableRefObject<string | null>
+    highlightedAirportsRef: React.RefObject<string[]>,
+    selectedAirportCodesRef: React.RefObject<string[]>,
+    tripVisibleAirportCodesRef: React.RefObject<string[] | null>,
+    explorationAirportCodesRef: React.RefObject<string[]>,
+    manualTransferAirportCodesRef: React.RefObject<string[]>,
+    hoveredAirportCodeRef: React.RefObject<string | null>
   }
 ): boolean {
   if (!spatialIndex) return false;
@@ -75,8 +76,8 @@ function isAirportNearPoint(
  
   const z = m.getZoom();
   const cS = useColorStore.getState();
-  const ha = refs.highlightedAirportsRef.current;
-  const sac = refs.selectedAirportCodesRef.current;
+  const ha = refs.highlightedAirportsRef.current ?? [];
+  const sac = refs.selectedAirportCodesRef.current ?? [];
   const tvac = refs.tripVisibleAirportCodesRef.current ?? [];
   const explorationCodes = refs.explorationAirportCodesRef.current ?? [];
   const manualCodes = refs.manualTransferAirportCodesRef.current ?? [];
@@ -84,7 +85,7 @@ function isAirportNearPoint(
  
   const HIT_MARGIN = 1.0; 
 
-  // --- HIERARCHICZNA TARCZA v11.87 (Stateful-Synced) ---
+  // --- HIERARCHICZNA TARCZA ---
   
   // 1. Sprawdzamy wszystkie trafienia NATURALNE (fizyczne krawędzie)
   for (const cand of candidates) {
@@ -134,7 +135,7 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
   } = refs;
 
   const clearRouteHover = (opts?: { keepLabels?: boolean }) => {
-    isRouteHoveredRef.current = false;
+    if (isRouteHoveredRef) isRouteHoveredRef.current = false;
     const keepLabels = opts?.keepLabels ?? false;
     const routeId = hoveredRouteId.current;
     if (routeId != null) {
@@ -160,15 +161,15 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
       hoveredTransferRouteId.current = null;
     }
 
-    // SNIPERSKA TARCZA (v11.12): Najpierw sprawdzamy ochronę lotniska.
-    // Jeśli jesteśmy w obrębie kropki lotniska, przerywamy WSZELKĄ obsługę trasy.
+    // TARCZA: Najpierw sprawdzamy ochronę lotniska.
+    // Jeśli jesteśmy w obrębie kropki lotniska, przerywamy obsługę trasy.
     if (isAirportNearPoint(m, point, { highlightedAirportsRef, selectedAirportCodesRef, tripVisibleAirportCodesRef, explorationAirportCodesRef, manualTransferAirportCodesRef, hoveredAirportCodeRef })) {
       clearRouteHover();
       return;
     }
 
     // Dopiero teraz uznajemy trasę za potencjalnie aktywną
-    isRouteHoveredRef.current = true;
+    if (isRouteHoveredRef) isRouteHoveredRef.current = true;
 
     const bbox: [maplibregl.PointLike, maplibregl.PointLike] = [
       [point.x - 4, point.y - 4],
@@ -202,7 +203,7 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
     hoveredRouteId.current = (featureId as any);
 
     const tvac = tripVisibleAirportCodesRef.current ?? [];
-    const ha = highlightedAirportsRef.current;
+    const ha = highlightedAirportsRef.current ?? [];
     const sac = selectedAirportCodeRef.current;
     const sacMulti = selectedAirportCodesRef.current ?? [];
     const explorationCodes = explorationAirportCodesRef.current ?? [];
@@ -222,13 +223,13 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
       ? ['==', 'code', '']
       : ['in', 'code', ...filterCodes];
     
-    // Używamy bezpośredniego setFilter, ale w v9.3 trzymamy się legacy syntax: ['in', 'code', ...]
+    // Używamy bezpośredniego setFilter
     if (m.getLayer('airports-labels-highlighted')) m.setFilter('airports-labels-highlighted', hlFilter);
 
     if (m.getLayer('airports-labels-highlighted-city')) {
-      const hlCityCodes = highlightedCityLabelCodesRef.current;
-      const destCityKey = airportCityKeyRef.current[destCode];
-      const destCityCode = destCityKey ? cityLabelCodeByCityRef.current[destCityKey] : null;
+      const hlCityCodes = highlightedCityLabelCodesRef.current ?? [];
+      const destCityKey = airportCityKeyRef.current?.[destCode];
+      const destCityCode = destCityKey ? cityLabelCodeByCityRef.current?.[destCityKey] : null;
       const filteredCityCodes = hlCityCodes.filter(c => c !== destCityCode);
       const hlCityFilter: any = filteredCityCodes.length === 0
         ? ['==', 'code', '']
@@ -238,9 +239,9 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
 
     const srcIdx = (feature.properties as { srcIdx?: number })?.srcIdx ?? 0;
     
-    // UNIFIED SOURCE LIST (v24.46): Must match useRouteAnimation.ts exactly
-    const sourceSet = new Set<string>(selectedAirportCodesRef.current);
-    manualTransferAirportCodesRef.current.forEach(c => sourceSet.add(c));
+    // UNIFIKACJA LISTY ŹRÓDEŁ
+    const sourceSet = new Set<string>(selectedAirportCodesRef.current ?? []);
+    (manualTransferAirportCodesRef.current ?? []).forEach(c => sourceSet.add(c));
     const sacCode = selectedAirportCodeRef.current;
     if (sacCode) sourceSet.add(sacCode);
     const startCodes = Array.from(sourceSet).map(c => c.toUpperCase());
@@ -248,7 +249,7 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
     const srcCode = startCodes[srcIdx] ?? startCodes[0] ?? '';
 
     const routeKey = `${srcCode}-${destCode}`;
-    const displayFlights = (refs.flightsByRouteGroupMapRef.current.get(routeKey) || []);
+    const displayFlights = (refs.flightsByRouteGroupMapRef.current?.get(routeKey) || []);
 
     const shownFlights = displayFlights.slice(0, CONFIG.MAX_POPUP_FLIGHTS);
     const extraCount = displayFlights.length - shownFlights.length;
@@ -261,7 +262,7 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
     }
     const sourceDates = new Set<string>();
     for (const src of startCodes) {
-      for (const flights of Object.values(flightDetailsMap.current)) {
+      for (const flights of Object.values(flightDetailsMap.current ?? {})) {
         const flight = flights.find(f => f.origin_airport_code === src);
         if (flight?.scheduled_departure_local) {
           sourceDates.add(flight.scheduled_departure_local.split('T')[0]);
@@ -271,13 +272,13 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
     }
     const sourcesHaveDifferentDays = sourceDates.size > 1;
     const showDateHeaders = dateGroups.size > 1 || sourcesHaveDifferentDays;
-    const srcAirportName = airportNamesMap.current[srcCode] ?? srcCode ?? texts.unknown;
-    const destAirportName = airportNamesMap.current[destCode] ?? destCode;
+    const srcAirportName = airportNamesMap.current?.[srcCode] ?? srcCode ?? texts.unknown;
+    const destAirportName = airportNamesMap.current?.[destCode] ?? destCode;
     const srcCityName = srcAirportName;
     const destCityName = destAirportName;
 
     const { durationStr: headerDurationStr, estimated: headerDurationEstimated } = buildHeaderDuration(
-      displayFlights, srcCode, destCode, airportCoordsMapRef.current,
+      displayFlights, srcCode, destCode, airportCoordsMapRef.current ?? {},
     );
     const headerDurationHtml = headerDurationStr
       ? headerDurationEstimated
@@ -312,7 +313,7 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
       }
     }
 
-    const rowOpts = { airportCoordsMap: airportCoordsMapRef.current, destUTCOffset, srcUTCOffset, destTimezone, srcTimezone };
+    const rowOpts = { airportCoordsMap: airportCoordsMapRef.current ?? {}, destUTCOffset, srcUTCOffset, destTimezone, srcTimezone };
     const flightRows = [...dateGroups.entries()].map(([dateStr, groupFlights]) => {
       const header = showDateHeaders
         ? `<div class="mc-popup-date-header">${formatGroupDateLabel(dateStr)}</div>`
@@ -359,9 +360,7 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
           airports: nextAirports
         };
 
-        if (useSettingsStore.getState().showConsoleLogs) {
-           console.log(`[ARC-CLICK|MULTI] Toggling ${destCode}. New list: ${nextAirports.join(', ')}`);
-        }
+        logger.log(`[ARC-CLICK|MULTI] Przełączanie ${destCode}. Nowa lista: ${nextAirports.join(', ')}`);
 
         useFilterStore.getState().setDestinationFilter(nextFilter);
       }
@@ -383,11 +382,11 @@ export function setupRouteHoverListeners(m: maplibregl.Map, refs: RouteHoverRefs
   const bindLineHover = (
     layerId: string,
     sourceId: string,
-    hoverRef: React.MutableRefObject<string | number | null>,
+    hoverRef: React.RefObject<string | number | null>,
   ) => {
     m.on('mousemove', layerId, (e) => {
-      // [SNIPER SHIELD v24.55]: Priority for Airports and Main Routes
-      if (isRouteHoveredRef.current || isAirportNearPoint(m, e.point, { 
+      // Priorytet dla lotnisk i głównych tras
+      if ((isRouteHoveredRef.current) || isAirportNearPoint(m, e.point, { 
         highlightedAirportsRef, selectedAirportCodesRef, tripVisibleAirportCodesRef, explorationAirportCodesRef, manualTransferAirportCodesRef, hoveredAirportCodeRef 
       })) {
         if (hoverRef.current !== null) {

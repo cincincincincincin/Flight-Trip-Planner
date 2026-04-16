@@ -14,13 +14,14 @@ interface AirportTransferPickerProps {
   onSelectAirports?: (codes: string[]) => void;
   onPreviewAirport?: (code: string) => void;
   onClearPreview?: () => void;
-  maxSelect?: number;
-  /** Always show the input field; no collapsible display mode */
+  /** Zawsze pokazuj pole wprowadzania; brak trybu zwiniętego */
   inline?: boolean;
-  /** Already-selected codes — shown checked + locked in the dropdown */
+  /** Już wybrane kody — wyświetlane jako zaznaczone i zablokowane na liście */
   preCheckedCodes?: string[];
+  maxSelect?: number;
 }
 
+// Narzędzie pomocnicze do formatowania odległości
 const formatDist = (km: number) => {
   if (km < CONFIG.KM_THRESHOLD) return `${km} ${CONFIG.UNIT_KM}`;
   return `${(km / CONFIG.KM_THRESHOLD).toFixed(1)}${CONFIG.UNIT_K_KM}`;
@@ -50,6 +51,7 @@ const AirportTransferPicker = ({
   const cityInfoMap = useCityInfoMap();
   const countryInfoMap = useCountryInfoMap();
 
+  // Sortowanie lotnisk według odległości od aktualnego lotniska
   const sortedAirports = useMemo(() => {
     if (!airportsData || !currentAirport) return [];
     const coords = currentAirport.coordinates;
@@ -115,7 +117,7 @@ const AirportTransferPicker = ({
     return result;
   }, [sortedAirports, searchText]);
 
-  // In inline mode: pre-checked airports appear first so they're always visible
+  // WYŚWIETLANIE: Wstępnie wybrane lotniska pojawiają się na początku
   const displayedAirports = useMemo(() => {
     if (!inline || preCheckedCodes.length === 0) {
       return filteredAirports.slice(0, displayCount);
@@ -154,7 +156,7 @@ const AirportTransferPicker = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
-  // Toggle mode: open from display div
+  // Otwieranie listy
   const handleOpen = () => {
     setIsOpen(true);
     setDisplayCount(CONFIG.INITIAL_DISPLAY_COUNT);
@@ -163,7 +165,7 @@ const AirportTransferPicker = ({
     setTimeout(() => inputRef.current?.focus(), CONFIG.FOCUS_DELAY_MS);
   };
 
-  // Inline mode: open when input is clicked
+  // Tryb inline: otwarcie po kliknięciu
   const handleInputClick = () => {
     if (!isOpen) {
       setIsOpen(true);
@@ -204,7 +206,6 @@ const AirportTransferPicker = ({
     .filter(Boolean)
     .join(', ');
 
-  // ── Inline mode ───────────────────────────────────────────────────────────────
   if (inline) {
     return (
       <div ref={containerRef} className="airport-transfer-picker airport-transfer-picker--inline">
@@ -273,7 +274,6 @@ const AirportTransferPicker = ({
     );
   }
 
-  // ── Toggle mode (original behavior) ───────────────────────────────────────────
   return (
     <div ref={containerRef} className="airport-transfer-picker">
       {isOpen ? (

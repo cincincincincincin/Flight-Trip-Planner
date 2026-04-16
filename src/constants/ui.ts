@@ -7,7 +7,7 @@ export const UI_SYMBOLS = {
   CLOSE: "×",
   CHECK: "✓",
   ESTIMATED: "~",
-  LOADING: "⌛",
+  LOADING: "⧗",
   UNDO: "↩",
   REDO: "↪",
   PLUS: "+",

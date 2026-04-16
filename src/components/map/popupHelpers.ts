@@ -10,11 +10,13 @@ export const formatTime = (dateString: string | null | undefined, tz?: string): 
 
 export const popupFormatDuration = (minutes: number, estimated: boolean): string => {
   const h = Math.floor(minutes / 60);
-  const m = String(minutes % 60).padStart(2, '0');
-  return estimated ? `~${h}h ${m}m` : `${h}h ${m}m`;
+  const m = minutes % 60;
+  const mFormatted = m > 0 ? ` ${m}m` : '';
+  const result = `${h}h${mFormatted}`;
+  return estimated ? `~${result}` : result;
 };
 
-/** Compute UTC offset (in hours) of a local timestamp relative to a UTC string. */
+/** Oblicza przesunięcie UTC (w godzinach) czasu lokalnego względem UTC. */
 export const getUTCOffH = (
   localStr: string | null | undefined,
   utcStr: string | null | undefined,
@@ -34,7 +36,7 @@ export const formatTzLabel = (diff: number): string | null => {
   const m = Math.round((abs - h) * 60);
   return m > 0 ? `(${sign}${h}h${m}min)` : `(${sign}${h}h)`;
 };
-/** Calculate UTC offset (hours) for a specific timezone and point in time. */
+/** Oblicza przesunięcie UTC dla konkretnej strefy czasowej i punktu w czasie. */
 export const getOffsetForTz = (tz: string, date: Date | dayjs.Dayjs): number | null => {
   return dayjs(date).tz(tz).utcOffset() / 60;
 };

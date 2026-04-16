@@ -1,16 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
 import { CONFIG } from '../constants/config';
 
+/**
+ * HOOK OBSŁUGI GESTÓW MOBILNYCH (Mobile Bottom Sheet Logic)
+ * Zarządza zachowaniem wysuwanego panelu dolnego na urządzeniach dotykowych.
+ */
 export function useMobileSheet(selectedItem: any) {
   const [mobileSheetExpanded, setMobileSheetExpanded] = useState(false);
   const mobileSheetRef = useRef<HTMLDivElement>(null);
   const sheetExpandedRef = useRef(false);
 
   useEffect(() => {
+    // Synchronizacja refa dla funkcji obsługi zdarzeń (unikanie closure stale state)
     sheetExpandedRef.current = mobileSheetExpanded;
   }, [mobileSheetExpanded]);
 
   useEffect(() => {
+    // Resetuj stan (zwiń panel) przy wyborze nowego elementu na mapie
     setMobileSheetExpanded(false);
   }, [selectedItem]);
 
@@ -18,19 +24,26 @@ export function useMobileSheet(selectedItem: any) {
     const sheet = mobileSheetRef.current;
     if (!sheet) return;
 
+    /**
+     * LOGIKA PRZECIĄGANIA (Draggable Logic)
+     * Implementuje płynne przesuwanie panelu za palcem z uwzględnieniem "peeking state".
+     */
     let dragging = false;
     let startY = 0;
     let startTranslate = 0;
     let currentTranslate = 0;
 
     const onStart = (e: TouchEvent) => {
+      // Inicjalizacja dotyku - sprawdzamy czy dotyk nastąpił w strefie nagłówka (Handle)
       const rect = sheet.getBoundingClientRect();
       const fromTop = e.touches[0].clientY - rect.top;
       if (fromTop > CONFIG.PEEK_H + CONFIG.DRAG_HEADER_EXTRA) return;
+      
       dragging = true;
       startY = e.touches[0].clientY;
       startTranslate = sheetExpandedRef.current ? 0 : window.innerHeight - CONFIG.PEEK_H;
       currentTranslate = startTranslate;
+      // Wyłączamy przejścia CSS na czas przeciągania dla efektu "sticky"
       sheet.style.transition = 'none';
     };
 
@@ -48,8 +61,14 @@ export function useMobileSheet(selectedItem: any) {
       dragging = false;
       const totalDrag = currentTranslate - startTranslate;
       const wasExpanded = sheetExpandedRef.current;
+      
+      /**
+       * DECYZJA O DOCELOWEJ POZYCJI (Snap Logic)
+       * Jeśli przesunięcie przekroczyło próg DRAG_THRESHOLD, aktywujemy zmianę stanu.
+       */
       const nextExpanded = wasExpanded ? totalDrag < CONFIG.DRAG_THRESHOLD : totalDrag < -CONFIG.DRAG_THRESHOLD;
-      sheet.style.transition = '';
+      
+      sheet.style.transition = ''; // Przywracamy animacje CSS dla płynnego dosunięcia
       sheet.style.transform = '';
       setMobileSheetExpanded(nextExpanded);
     };

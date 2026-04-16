@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { CONFIG } from '../constants/config';
 import { getTodayInTz } from '../utils/dateFormatting';
 import type { Language } from '../constants/text';
+import { logger } from '../utils/logger';
 
 /**
  * Magazyn ustawień użytkownika i sesji. 
@@ -49,8 +50,8 @@ export const useSettingsStore = create<SettingsState>()(
       savedSnapshot: null,
 
       updateSettings: (values) => set((state) => {
-        if (values.travelDate) console.log(`[RACE-DEBUG] {settingsStore} -> updateSettings | New travelDate: ${values.travelDate}`);
-        if (values.timezone)   console.log(`[RACE-DEBUG] {settingsStore} -> updateSettings | New timezone: ${values.timezone}`);
+        if (values.travelDate) logger.log(`[RACE-DEBUG] {settingsStore} -> updateSettings | Nowa data podróży: ${values.travelDate}`);
+        if (values.timezone) logger.log(`[RACE-DEBUG] {settingsStore} -> updateSettings | Nowa strefa czasowa: ${values.timezone}`);
         return { ...state, ...values };
       }),
     }),

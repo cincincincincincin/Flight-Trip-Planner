@@ -1,11 +1,10 @@
 /**
- * WARSTWA LOTNISK (airportsLayer.ts - WERSJA ATOMYCZNA v9.2)
- * 
+ * WARSTWA LOTNISK
  * Definiuje strukturę warstw GPU z pełną interpolacją rozmiarów i offsetów.
- * Warstwa HOVER jest umieszczona na samym szczycie dla idealnej widoczności.
  */
 
 import { airportLabelField, airportHighlightedLabelField, getSafeFontsFromStyle, getLabelPaint, n } from './utils';
+import { logger } from '../../utils/logger';
 
 export const AIRPORT_LAYERS_ALL = [
   'airports-circles', 'airports-trip', 'airports-highlighted', 'airports-selected',
@@ -20,13 +19,16 @@ export function addAirportsLayer(
   lang: string,
   colorState: any
 ) {
-  console.log("[GPU_INIT] addAirportsLayer started (Master-Label-Pipeline v13.42)");
+  logger.log("[GPU_INIT] addAirportsLayer rozpoczęte");
   
-  const zMin = n(colorState?.zoomRangeMin, 1.3);
-  const zMax = n(colorState?.zoomRangeMax, 12.0);
+  const rawMin = n(colorState?.zoomRangeMin, 1.3);
+  const rawMax = n(colorState?.zoomRangeMax, 12.0);
+  // ZABEZPIECZENIE: Silnik MapLibre wymaga zMin < zMax dla interpolacji
+  const zMin = Math.min(rawMin, rawMax);
+  const zMax = Math.max(zMin + 0.001, rawMax);
 
   try {
-    // 1. BEZPIECZNE CZYSZCZENIE (v10.8)
+    // 1. CZYSZCZENIE
     AIRPORT_LAYERS_ALL.forEach(id => {
       try { if (map.getLayer(id)) map.removeLayer(id); } catch(e) {}
     });
@@ -53,12 +55,12 @@ export function addAirportsLayer(
     addCircleLayer(map, 'airports-highlighted', ['==', 'code', ''], colorState, styleId);
     addCircleLayer(map, 'airports-selected', ['==', 'code', ''], colorState, styleId);
 
-    // --- MASTER LABEL LAYERS (v20.45: Surgical Visibility) ---
+    // WARSTWY ETYKIET
     // Rozdzielamy na dwie warstwy: standardowa (z okluzją) i wybrana (z wymuszonym nakładaniem).
     // Dzięki temu wybrany punkt startowy nigdy nie "zniknie" pod łukami lotów wychodzących.
     
-    // 1. Warstwa wybrana (Selected Only - Zawsze widoczna)
-    addLabelLayer(map, 'airports-labels-selected', ['==', ['get', 'is_selected'], true], fonts, lang, colorState, styleId, true);
+    // 1. Warstwa wybrana (Selected Only - Z detekcją kolizji)
+    addLabelLayer(map, 'airports-labels-selected', ['==', ['get', 'is_selected'], true], fonts, lang, colorState, styleId, false);
     
     // 2. Warstwa ogólna (Pozostałe - Standardowa okluzja)
     addLabelLayer(map, 'airports-labels', ['!=', ['get', 'is_selected'], true], fonts, lang, colorState, styleId, false);
@@ -97,25 +99,27 @@ export function addAirportsLayer(
         paint: {
           'text-color': ['get', 'h_text_color'],
           'text-halo-color': 'rgba(255,255,255,0.95)',
-          'text-halo-width': 2.0
+          'text-halo-blur': 0.5
         }
       });
     } catch (e) {
-      console.warn("[GPU_INIT] Hover layers already exist or failed to add", e);
+      logger.warn("[GPU_INIT] Warstwy hover już istnieją lub błąd dodawania", e);
     }
 
-    console.log("[GPU_INIT] addAirportsLayer finished successfully");
+    logger.log("[GPU_INIT] addAirportsLayer zakończone sukcesem");
   } catch (err) {
-    console.error("[GPU_INIT] CRITICAL ERROR in addAirportsLayer:", err);
+    logger.error("[GPU_INIT] BŁĄD KRYTYCZNY w addAirportsLayer:", err);
   }
 }
 
 function addCircleLayer(map: maplibregl.Map, id: string, filter: any, colorState: any, styleId: string | undefined) {
   try {
-    const zMin = n(colorState?.zoomRangeMin, 1.3);
-    const zMax = n(colorState?.zoomRangeMax, 12.0);
+    const rawMin = n(colorState?.zoomRangeMin, 1.3);
+    const rawMax = n(colorState?.zoomRangeMax, 12.0);
+    const zMin = Math.min(rawMin, rawMax);
+    const zMax = Math.max(zMin + 0.001, rawMax);
     
-    // Inicjalne parametry wizualne (v13.8)
+    // Inicjalne parametry wizualne
     const isImg = (styleId || '').toLowerCase().includes('imagery');
     const strokeColor = isImg ? '#000000' : '#ffffff';
     
@@ -144,7 +148,7 @@ function addCircleLayer(map: maplibregl.Map, id: string, filter: any, colorState
         'circle-pitch-scale': 'map'
       }
     });
-  } catch (e) { console.warn(`[GPU_INIT] Failed to add circle: ${id}`, e); }
+  } catch (e) { logger.warn(`[GPU_INIT] Nie udało się dodać kółka: ${id}`, e); }
 }
 
 function addLabelLayer(
@@ -152,8 +156,10 @@ function addLabelLayer(
   colorState: any, styleId: string | undefined, forceOverlap: boolean = false
 ) {
   try {
-    const zMin = n(colorState?.zoomRangeMin, 1.3);
-    const zMax = n(colorState?.zoomRangeMax, 12.0);
+    const rawMin = n(colorState?.zoomRangeMin, 1.3);
+    const rawMax = n(colorState?.zoomRangeMax, 12.0);
+    const zMin = Math.min(rawMin, rawMax);
+    const zMax = Math.max(zMin + 0.001, rawMax);
     const labelPaint = getLabelPaint(styleId);
     
     const fontsRegular = fonts; // ['Noto Sans Regular']
@@ -169,12 +175,11 @@ function addLabelLayer(
     const isCityTripExpr = ['get', 'is_city_trip'];
 
     const layout: any = {
-      // MASTER LABEL PIPELINE (v13.57): Inteligentne grupowanie dla Highlighted
+      // Inteligentne grupowanie dla Highlighted
       'text-field': [
         'step',
         ['zoom'],
-        // Zoom < 4.2: Grupowanie lub ukrywanie. 
-        // WYBRANE (Selected) są ZAWSZE widoczne z kodem (v17.91)
+        // Zoom < 4.2: Grupowanie lub ukrywanie. Wybrane są zawsze widoczne z kodem
         ['case', 
           isSelectedExpr, ['get', 'cl_hl_high'],
           ['all', isCityHighExpr, ['>', ['coalesce', ['get', 'city_airport_count'], 0], 1]], ['get', 'cl_grouped'],
@@ -194,7 +199,7 @@ function addLabelLayer(
         ['case', isHighExpr, ['get', 'cl_hl_high'], ['get', 'cl_high']]
       ],
       
-      // Dynamiczna czcionka: poniżej 7.0 decyduje stan miasta, powyżej stan konkretnego portu (v13.84)
+      // Dynamiczna czcionka
       'text-font': [
         'step',
         ['zoom'],
@@ -212,24 +217,24 @@ function addLabelLayer(
       'text-justify': 'center',
       'text-allow-overlap': forceOverlap,
       'text-ignore-placement': forceOverlap,
-      'text-padding': 2.0, 
+      'text-padding': 4.0, 
       
-      // MASTER ARBITER: Ścisły priorytet wyświetlania (Zasłanianie) (v13.84)
+      // Ścisły priorytet wyświetlania
       // Selected (-40000) > Destination (-30000) > Trip (-20000) > General
       'symbol-sort-key': [
         'step',
         ['zoom'],
         ['case', 
-          isCitySelectedExpr, -40000, 
-          isCityDestExpr, -30000, 
-          isCityTripExpr, -20000, 
+          isCitySelectedExpr, ['-', -40000, ['coalesce', ['get', 'rank'], 0]], 
+          isCityDestExpr, ['-', -30000, ['coalesce', ['get', 'rank'], 0]], 
+          isCityTripExpr, ['-', -20000, ['coalesce', ['get', 'rank'], 0]], 
           ['-', 1000, ['coalesce', ['get', 'rank'], 0]]
         ],
         7.0,
         ['case', 
-          isSelectedExpr, -40000, 
-          isDestExpr, -30000, 
-          isTripExpr, -20000, 
+          isSelectedExpr, ['-', -40000, ['coalesce', ['get', 'rank'], 0]], 
+          isDestExpr, ['-', -30000, ['coalesce', ['get', 'rank'], 0]], 
+          isTripExpr, ['-', -20000, ['coalesce', ['get', 'rank'], 0]], 
           ['-', 1000, ['coalesce', ['get', 'rank'], 0]]
         ]
       ],
@@ -237,7 +242,7 @@ function addLabelLayer(
       'text-pitch-alignment': 'map',
       'symbol-avoid-edges': false,
       
-      // MASTER SIZE: Wielkość płynnie dopasowana do fazy grupowania (v13.84)
+      // Wielkość płynnie dopasowana
       'text-size': [
         'interpolate', ['linear'], ['zoom'],
         zMin, ['case', 
@@ -262,7 +267,7 @@ function addLabelLayer(
       'text-anchor': 'top'
     };
 
-    // Kolor dziedziczony przez miasto (v13.57)
+    // Kolor dziedziczony przez miasto
     const textColor: any = [
       'step',
       ['zoom'],
@@ -279,5 +284,5 @@ function addLabelLayer(
         'text-halo-blur': 0.5
       }
     });
-  } catch (e) { console.warn(`[GPU_INIT] Failed to add label: ${id}`, e); }
+  } catch (e) { logger.warn(`[GPU_INIT] Nie udało się dodać etykiety: ${id}`, e); }
 }

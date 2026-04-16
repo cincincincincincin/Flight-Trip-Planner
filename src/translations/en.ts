@@ -186,7 +186,7 @@ export const TEXTS_EN = {
     undoWarning: "This action cannot be undone.",
     namePlaceholder: "Empty for auto-name",
     deleteTrip: "Delete trip?",
-    sureDelete: "Are you sure you want to delete",
+    sureDelete: "Are you sure you want to delete ",
   },
   controls: { // ControlsPanel.tsx
     layersTitle: "Map Layers",

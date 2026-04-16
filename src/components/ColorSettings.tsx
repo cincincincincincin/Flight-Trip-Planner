@@ -5,6 +5,7 @@ import { useMapStore } from '../stores/mapStore';
 import './ColorSettings.css';
 import { useTexts } from '../hooks/useTexts';
 import { CONFIG } from '../constants/config';
+/* Przycisk wyboru koloru */
 import ColorPicker from './colorSettings/ColorPicker';
 import RangeSlider from './colorSettings/RangeSlider';
 
@@ -110,12 +111,12 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
           {startPoints.map((sp, i) => (
             <div key={i} className="color-row color-row--sp7">
               <span className="color-row-label">{t.colorSettings.pointLabel(i + 1)}</span>
-              <ColorPicker color={sp.airport}      onChange={c => setStartPointColor(i, 'airport', c)}      title={`${t.colorSettings.pointLabel(i + 1)} - dot`} />
-              <ColorPicker color={sp.airportHover} onChange={c => setStartPointColor(i, 'airportHover', c)} title={`${t.colorSettings.pointLabel(i + 1)} - dot hover`} />
-              <ColorPicker color={sp.route}        onChange={c => setStartPointColor(i, 'route', c)}        title={`${t.colorSettings.pointLabel(i + 1)} - line`} />
-              <ColorPicker color={sp.routeHover}   onChange={c => setStartPointColor(i, 'routeHover', c)}   title={`${t.colorSettings.pointLabel(i + 1)} - line hover`} />
-              <ColorPicker color={sp.label}        onChange={c => setStartPointColor(i, 'label', c)}        title={`${t.colorSettings.pointLabel(i + 1)} - label`} />
-              <ColorPicker color={sp.labelHover}   onChange={c => setStartPointColor(i, 'labelHover', c)}   title={`${t.colorSettings.pointLabel(i + 1)} - label hover`} />
+              <ColorPicker color={sp.airport}      onChange={c => setStartPointColor(i, 'airport', c)}      title={`${t.colorSettings.pointLabel(i + 1)} - kropka`} />
+              <ColorPicker color={sp.airportHover} onChange={c => setStartPointColor(i, 'airportHover', c)} title={`${t.colorSettings.pointLabel(i + 1)} - kropka (najechanie)`} />
+              <ColorPicker color={sp.route}        onChange={c => setStartPointColor(i, 'route', c)}        title={`${t.colorSettings.pointLabel(i + 1)} - linia`} />
+              <ColorPicker color={sp.routeHover}   onChange={c => setStartPointColor(i, 'routeHover', c)}   title={`${t.colorSettings.pointLabel(i + 1)} - linia (najechanie)`} />
+              <ColorPicker color={sp.label}        onChange={c => setStartPointColor(i, 'label', c)}        title={`${t.colorSettings.pointLabel(i + 1)} - etykieta`} />
+              <ColorPicker color={sp.labelHover}   onChange={c => setStartPointColor(i, 'labelHover', c)}   title={`${t.colorSettings.pointLabel(i + 1)} - etykieta (najechanie)`} />
             </div>
           ))}
 
@@ -133,10 +134,10 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
           {MAP_AIRPORT_ROWS.map(({ key, label, hoverKey, labelKey, labelHoverKey }) => (
             <div key={key} className="color-row color-row--elem4">
               <span className="color-row-label">{label}</span>
-              <ColorPicker color={colorValues[key]}           onChange={c => setColor(key, c)}           title={`${label} dot`} />
-              <ColorPicker color={colorValues[hoverKey]}      onChange={c => setColor(hoverKey, c)}      title={`${label} dot hover`} />
-              <ColorPicker color={colorValues[labelKey]}      onChange={c => setColor(labelKey, c)}      title={`${label} label`} />
-              <ColorPicker color={colorValues[labelHoverKey]} onChange={c => setColor(labelHoverKey, c)} title={`${label} label hover`} />
+              <ColorPicker color={colorValues[key]}           onChange={c => setColor(key, c)}           title={`${label} - kropka`} />
+              <ColorPicker color={colorValues[hoverKey]}      onChange={c => setColor(hoverKey, c)}      title={`${label} - kropka (najechanie)`} />
+              <ColorPicker color={colorValues[labelKey]}      onChange={c => setColor(labelKey, c)}      title={`${label} - etykieta`} />
+              <ColorPicker color={colorValues[labelHoverKey]} onChange={c => setColor(labelHoverKey, c)} title={`${label} - etykieta (najechanie)`} />
             </div>
           ))}
 
@@ -154,7 +155,7 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
               </span>
               <ColorPicker color={colorValues[key]} onChange={c => setColor(key, c)} title={label} />
               {hoverKey ? (
-                <ColorPicker color={colorValues[hoverKey]} onChange={c => setColor(hoverKey, c)} title={`${label} hover`} />
+                <ColorPicker color={colorValues[hoverKey]} onChange={c => setColor(hoverKey, c)} title={`${label} - najechanie`} />
               ) : (
                 <div />
               )}
@@ -170,8 +171,8 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
           {FC_HIGHLIGHT_ROWS.map(({ bgKey, borderKey, label }) => (
             <div key={bgKey} className="color-row color-row--elem2">
               <span className="color-row-label">{label}</span>
-              <ColorPicker color={colorValues[bgKey]}     onChange={c => setColor(bgKey, c)}     title={`${label} background`} />
-              <ColorPicker color={colorValues[borderKey]} onChange={c => setColor(borderKey, c)} title={`${label} border`} />
+              <ColorPicker color={colorValues[bgKey]}     onChange={c => setColor(bgKey, c)}     title={`${label} - tło`} />
+              <ColorPicker color={colorValues[borderKey]} onChange={c => setColor(borderKey, c)} title={`${label} - obramowanie`} />
             </div>
           ))}
 
@@ -201,7 +202,7 @@ const ColorSettings: React.FC<ColorSettingsProps> = ({
           <div className="zoom-info-row">
             <span className="zoom-label">{t.controls.zoom}</span>
             <span className="zoom-value">{zoom.toFixed(2)}</span>
-            <button className="zoom-copy-btn" onClick={resetSizes} title="Reset all size sliders to defaults">
+            <button className="zoom-copy-btn" onClick={resetSizes} title="Zresetuj wszystkie suwaki rozmiarów do wartości domyślnych">
               {t.controls.resetSizes}
             </button>
           </div>

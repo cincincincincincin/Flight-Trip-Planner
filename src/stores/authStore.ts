@@ -56,20 +56,20 @@ let lastUserId: string | null = null;
 // i mieć sesję gotową jeszcze przed mountowaniem mapy.
 supabase.auth.onAuthStateChange((event, session) => {
   const userId = session?.user?.id ?? null;
-  
+
   useAuthStore.getState().setSession(session);
-  
+
   // Czyścimy access_token z URL po powrocie z OAuth (Google).
   if (event === 'SIGNED_IN' && window.location.hash.includes('access_token')) {
     window.history.replaceState({}, '', window.location.pathname);
   }
-  
+
   // Sync preferencji (kolory mapy itp.) odpalamy tylko jak faktycznie zmieni się ID usera.
   if (event === 'SIGNED_IN' && userId !== lastUserId) {
     lastUserId = userId;
     loadPreferencesOnLogin(session?.user ?? null);
   }
-  
+
   if (event === 'SIGNED_OUT') {
     lastUserId = null;
     clearPreferencesOnLogout();

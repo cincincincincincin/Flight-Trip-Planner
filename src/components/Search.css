@@ -1,13 +1,11 @@
-/* ═══════════════════════════════════════════════════════════════
-   SEARCH
-   ═══════════════════════════════════════════════════════════════ */
+/* Wyszukiwarka */
 
 .search-container {
   position: relative;
   outline: none;
 }
 
-/* ── Input wrapper ───────────────────────────────────────────── */
+/* Pole wpisywania */
 .search-input-wrapper {
   position: relative;
   display: flex;
@@ -31,7 +29,9 @@
   outline: none;
 }
 
-.search-input::placeholder { color: var(--text-muted); }
+.search-input::placeholder {
+  color: var(--text-muted);
+}
 
 .search-input:focus {
   border-color: var(--accent-border);
@@ -47,7 +47,7 @@
   opacity: 0.6;
 }
 
-/* ── Results dropdown ────────────────────────────────────────── */
+/* Lista wyników */
 .search-results {
   position: absolute;
   top: calc(100% + 6px);
@@ -105,7 +105,10 @@
   transition: all 0.12s;
 }
 
-.close-results:hover { color: var(--red); background: var(--red-dim); }
+.close-results:hover {
+  color: var(--red);
+  background: var(--red-dim);
+}
 
 .visible-expanded-indicator {
   display: flex;
@@ -116,11 +119,18 @@
   color: var(--text-secondary);
 }
 
-.indicator-icon { font-size: 10px; }
-.indicator-text { font-weight: 600; }
+.indicator-icon {
+  font-size: 10px;
+}
 
-/* ── Results content ─────────────────────────────────────────── */
-.results-content { padding: 4px 0; }
+.indicator-text {
+  font-weight: 600;
+}
+
+/* Treść wyników */
+.results-content {
+  padding: 4px 0;
+}
 
 .no-results {
   padding: 20px 16px;
@@ -129,7 +139,7 @@
   color: var(--text-muted);
 }
 
-/* ── Section ─────────────────────────────────────────────────── */
+/* Sekcje */
 .search-section {
   margin-bottom: 2px;
 }
@@ -157,17 +167,19 @@
   font-family: var(--font-mono);
 }
 
-.section-content { padding: 4px 0; }
-
-/* ── Nesting level variables (mirrors FlightsFilter) ─────────── */
-.search-container {
-  --s-l1: var(--bg-hover);         /* cities in expanded country */
-  --s-l2: rgba(0, 0, 0, 0.09);     /* city row in expanded state */
-  --s-l3: rgba(0, 0, 0, 0.12);     /* airports in expanded city  */
-  --s-hover: rgba(0, 0, 0, 0.15);  /* hover on any row           */
+.section-content {
+  padding: 4px 0;
 }
 
-/* ── Search item ─────────────────────────────────────────────── */
+/* Poziomy zagnieżdżenia */
+.search-container {
+  --s-l1: var(--bg-hover);
+  --s-l2: rgba(0, 0, 0, 0.09);
+  --s-l3: rgba(0, 0, 0, 0.12);
+  --s-hover: rgba(0, 0, 0, 0.15);
+}
+
+/* Elementy listy */
 .search-item {
   display: flex;
   align-items: center;
@@ -177,47 +189,49 @@
   transition: background 0.10s;
 }
 
-/* ── Country wrapper ─────────────────────────────────────────── */
+/* Kontener kraju */
 .country-wrapper {
   border-bottom: 1px solid var(--border);
 }
-.country-wrapper:last-child { border-bottom: none; }
 
-/* Country row: bold */
-.search-item.country-item { font-weight: 600; }
+.country-wrapper:last-child {
+  border-bottom: none;
+}
 
-/* Country expanded: L1 background */
-.search-item.country-item--expanded { background: var(--s-l1); }
+.search-item.country-item {
+  font-weight: 600;
+}
 
-/* Hover country row → all cities + airports cascade */
-.search-item.country-item:hover                              { background: var(--s-hover) !important; }
-.search-item.country-item:hover ~ .nested-list .search-item { background: var(--s-hover) !important; }
+.search-item.country-item--expanded {
+  background: var(--s-l1);
+}
 
-/* Country's cities nested list */
-.country-wrapper > .nested-list {
+.search-item.country-item:hover {
+  background: var(--s-hover) !important;
+}
+
+.search-item.country-item:hover~.nested-list .search-item {
+  background: var(--s-hover) !important;
+}
+
+.country-wrapper>.nested-list {
   border-left: 2px solid var(--c-teal-b);
   margin-left: 8px;
 }
 
-/* City row: L2 background + full-width extension */
-.country-wrapper > .nested-list > .city-item-wrapper > .search-item.city-item {
+/* Wiersz miasta */
+.country-wrapper>.nested-list>.city-item-wrapper>.search-item.city-item {
   background: var(--s-l2);
   margin-left: -10px;
   padding-left: 18px;
 }
 
-/* City expanded: L2 */
 .search-item.city-item--expanded {
   background: var(--s-l2) !important;
 }
 
-/* Single airport city: L3 (look like an airport but keep city indent) */
 .search-item.city-item--single-airport {
   background: var(--s-l3) !important;
-}
-
-.search-item.city-item--coral-line {
-  position: relative;
 }
 
 .search-item.city-item--coral-line::before {
@@ -225,46 +239,47 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 8px; /* Precisely overlays the parent's 2px teal border */
+  left: 8px;
   width: 2px;
-  /* Compositing stack: Top layer is the row's background, middle is the coral border, bottom is the solid white dropdown background making it opaque to hide the teal line */
-  background: 
+  background:
     linear-gradient(var(--s-l3), var(--s-l3)),
     linear-gradient(var(--c-coral-b), var(--c-coral-b)),
     var(--bg-raised);
   z-index: 2;
 }
 
-.city-item-wrapper > .search-item.city-item--coral-line:hover::before {
-  /* Update the top compositing layer to match the hovered row background */
-  background: 
+.city-item-wrapper>.search-item.city-item--coral-line:hover::before {
+  background:
     linear-gradient(var(--s-hover), var(--s-hover)),
     linear-gradient(var(--c-coral-b), var(--c-coral-b)),
     var(--bg-raised);
 }
 
-/* Hover city row → airports in that city cascade */
-.city-item-wrapper > .search-item.city-item:hover                              { background: var(--s-hover) !important; }
-.city-item-wrapper > .search-item.city-item:hover ~ .nested-list .search-item { background: var(--s-hover) !important; }
+.city-item-wrapper>.search-item.city-item:hover {
+  background: var(--s-hover) !important;
+}
 
-/* City's airports nested list */
-.city-item-wrapper > .nested-list {
+.city-item-wrapper>.search-item.city-item:hover~.nested-list .search-item {
+  background: var(--s-hover) !important;
+}
+
+.city-item-wrapper>.nested-list {
   border-left: 2px solid var(--c-coral-b);
   margin-left: 14px;
 }
 
-/* Airport row: L3 + full-width + button-equiv left indent (same as ff-nested .ff-airport) */
-.city-item-wrapper > .nested-list > .search-item.airport-item {
+/* Wiersz lotniska */
+.city-item-wrapper>.nested-list>.search-item.airport-item {
   background: var(--s-l3);
   margin-left: -26px;
   padding-left: 52px;
 }
 
-.city-item-wrapper > .nested-list > .search-item.airport-item:hover {
+.city-item-wrapper>.nested-list>.search-item.airport-item:hover {
   background: var(--s-hover) !important;
 }
 
-/* ── Item internals ──────────────────────────────────────────── */
+/* Elementy wewnętrzne */
 .item-main {
   display: flex;
   align-items: center;
@@ -273,7 +288,10 @@
   min-width: 0;
 }
 
-.item-icon { font-size: 12px; flex-shrink: 0; }
+.item-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
 
 .item-name {
   font-size: 14px;
@@ -285,9 +303,10 @@
   white-space: nowrap;
 }
 
-/* Cities and airports: slightly smaller font */
 .search-item.city-item .item-name,
-.search-item.airport-item .item-name { font-size: 13px; }
+.search-item.airport-item .item-name {
+  font-size: 13px;
+}
 
 .item-code {
   font-family: var(--font-mono);
@@ -298,9 +317,12 @@
   padding-left: 8px;
 }
 
-.item-badge { font-size: 10px; flex-shrink: 0; }
+.item-badge {
+  font-size: 10px;
+  flex-shrink: 0;
+}
 
-/* ── Expand button ───────────────────────────────────────────── */
+/* Przycisk rozwijania */
 .expand-btn,
 .expand-button {
   border: none;
@@ -312,7 +334,7 @@
   padding: 0 6px;
 }
 
-/* ── Footer ──────────────────────────────────────────────────── */
+/* Stopka */
 .results-footer {
   padding: 6px 14px 8px;
   border-top: 1px solid var(--border);
@@ -327,7 +349,7 @@
   line-height: 1.6;
 }
 
-/* ── Global loading ──────────────────────────────────────────── */
+/* Ładowanie */
 .global-loading {
   text-align: center;
   padding: 10px;
@@ -335,7 +357,7 @@
   color: var(--text-muted);
 }
 
-/* ── Error boundary ──────────────────────────────────────────── */
+/* Błędy */
 .error-boundary {
   padding: 14px;
   background: var(--red-dim);
@@ -345,9 +367,12 @@
   color: var(--red);
 }
 
-/* ── Mobile ──────────────────────────────────────────────────── */
+/* Mobilne */
 @media (max-width: 768px) {
-  .search-input { height: 36px; font-size: 13px; }
+  .search-input {
+    height: 36px;
+    font-size: 13px;
+  }
 
   .search-results {
     left: 0;

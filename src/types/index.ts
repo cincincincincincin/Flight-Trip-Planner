@@ -42,7 +42,7 @@ export interface FlightOffer {
 export interface GeoBaseProps {
   code: string;
   name: string;
-  n?: string; // normalized name for Zero-Transformation search
+  n?: string; // znormalizowana nazwa dla szybkiego wyszukiwania bez przekształceń
   type: 'airport' | 'city' | 'country';
 }
 
@@ -58,10 +58,10 @@ export interface AirportFeatureProps {
   country_name_en?: string;
   country_name_pl?: string;
   time_zone?: string | null;
-  // [STABLE OFFSETS v12.8.9]
+  // Przesunięcia etykiet dla różnych trybów mapy (Imagery/Normal)
   la_off_n?: [number, number];
   la_off_f?: [number, number];
-  // [MASTER LABEL PIPELINE v13.71]
+  // Flagi określające stan widoczności obiektu na mapie
   is_high?: boolean;
   is_selected?: boolean;
   is_trip?: boolean;
@@ -71,9 +71,12 @@ export interface AirportFeatureProps {
   is_city_dest?: boolean;
   is_city_trip?: boolean;
   is_city_primary?: boolean;
+  is_city_selected_primary?: boolean;
+  is_city_dest_primary?: boolean;
+  is_city_trip_primary?: boolean;
   city_airport_count?: number;
   la_is_high_num?: number;
-  // PRE-CALCULATED LABELS
+  // Wstępnie obliczone etykiety tekstowe (optymalizacja renderowania GPU)
   cl_hl_low?: string;
   cl_hl_high?: string;
   cl_grouped?: string;

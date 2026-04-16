@@ -6,6 +6,7 @@ import type { Flight } from '../types';
 import { useTripStore } from '../stores/tripStore';
 import { useAirportsQuery, useAirportInfosQuery, useAirportsMap, useAirportIndexes } from '../hooks/queries';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useColorStore } from '../stores/colorStore';
 import { getLocalizedProp } from '../utils/i18n';
 import './TripItinerary.css';
 import { useTexts } from '../hooks/useTexts';
@@ -14,10 +15,14 @@ import { UI_SYMBOLS } from '../constants/ui';
 import { haversineKm } from '../utils/math';
 import { formatTime, formatDate, formatDurationMs, getDuration, getDurationMs, computeTzDiff, formatTzDiff } from '../utils/dateFormatting';
 
-// aliases used locally in this file
+// Aliasy używane lokalnie w pliku
 const formatTimeInTz = formatTime;
 const formatDateInTz = formatDate;
 
+/**
+ * KOMPONENT PLANU PODRÓŻY
+ * Wyświetla chronologiczną listę etapów podróży.
+ */
 
 interface TripItineraryProps {
   onUndo?: () => void;
@@ -31,7 +36,10 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
   const t = useTexts();
   const { tripState, undo, redo, pastTrips, futureTrips, isLoadedTrip, editMode } = useTripStore();
   const { namesMap, coordsMap, cityNamesMap } = useAirportIndexes();
-  const { language } = useSettingsStore();
+  const {
+    currency, language, minTransferHours, minManualTransferHours
+  } = useSettingsStore();
+  const { fcHighlightSoonBorder, fcHighlightSoonBg } = useColorStore();
 
   const allLegCodes = useMemo(() => {
     const legs = tripState?.legs ?? [];
@@ -56,6 +64,10 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
     return map;
   }, [allLegCodes, airportInfosResults]);
 
+  /**
+   * SZACOWANIE CZASU PRZYLOTU
+   * Wyliczanie przybliżonego czasu lądowania na podstawie dystansu.
+   */
   const estimateArrivalUTC = (depUtc: string, fromCode: string, toCode: string): string | null => {
     const from = coordsMap[fromCode];
     const to = coordsMap[toCode];
@@ -74,9 +86,12 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // In edit mode: block undo only if the last leg has already departed (real flight, past departure).
-  // Manual legs have no departure time so they can always be undone.
-  // Must be declared before any early return to satisfy Rules of Hooks.
+  // W trybie edycji: blokuj cofanie tylko jeśli ostatni etap już wystartował.
+  // Etapy ręczne nie mają czasu startu, więc zawsze można je cofnąć.
+  /**
+   * LOGIKA COFANIA ZMIAN
+   * Uniemożliwia cofnięcie lotu, który już wystartował.
+   */
   const canUndoInEditMode = useMemo(() => {
     if (pastTrips.length === 0) return false;
     if (!editMode) return true;
@@ -84,7 +99,7 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
     if (currentLegs.length === 0) return false;
     const lastLeg = currentLegs[currentLegs.length - 1];
     const isManual = (lastLeg as { type?: string }).type === 'manual';
-    if (isManual) return true; // manual legs have no departure time {UI_SYMBOLS.DASH} always undoable
+    if (isManual) return true; // Lotniska zmieniane ręcznie
     if (!lastLeg.flight?.scheduled_departure_utc) return true;
     return new Date(lastLeg.flight.scheduled_departure_utc).getTime() >= Date.now();
   }, [editMode, pastTrips.length, tripState]);
@@ -128,7 +143,7 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
     }
   };
 
-  // Compute tripEnded for view mode
+  // Obliczanie zakończenia podróży
   const lastArrivalUTC = (() => {
     if (!tripState?.legs?.length) return null;
     for (let i = tripState.legs.length - 1; i >= 0; i--) {
@@ -144,9 +159,9 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
 
   return (
     <div className="trip-itinerary-wrapper" ref={wrapperRef}>
-      {/* Actions bar {UI_SYMBOLS.DASH} always on top */}
+      {/* Pasek akcji zawsze na górze */}
       <div className={`trip-itinerary-actions${legs.length > 0 ? ' trip-itinerary-actions--has-list' : ''}`}>
-        {/* LEFT: Undo (disabled in view mode since pastTrips=[]) */}
+        {/* LEWO: Cofnij */}
         <button
           onClick={() => { undo(); onUndo?.(); }}
           disabled={editMode ? !canUndoInEditMode : pastTrips.length === 0}
@@ -156,7 +171,7 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
           {UI_SYMBOLS.UNDO} {t.buttons.undo}
         </button>
 
-        {/* MIDDLE: Close (view mode) or Save/Update (edit/normal mode) */}
+        {/* ŚRODEK: Zamknij lub Zapisz */}
         <div className="trip-itinerary-middle">
           {isViewMode
             ? <button className="trip-action-btn trip-action-btn--close" onClick={onClose}>{UI_SYMBOLS.CLOSE} {t.buttons.close}</button>
@@ -164,7 +179,7 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
           }
         </div>
 
-        {/* RIGHT: Edit (view mode) or Redo (edit/normal mode) */}
+        {/* PRAWO: Edytuj lub Ponów */}
         {isViewMode ? (
           <button
             onClick={onEditTrip}
@@ -203,14 +218,15 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
               ? getDuration(f?.scheduled_departure_utc, f?.scheduled_arrival_utc ?? estimatedArrUTC ?? undefined)
               : null;
 
-            // [BEST ARRIVAL LOGIC v24.60]: Use actual or estimated arrival for durations
+            // Logika przylotu dla czasów trwania
             const getBestArrivalUTC = (legItem: any) => {
               if (!legItem || legItem.type === 'manual') return null;
               if (legItem.flight?.scheduled_arrival_utc) return legItem.flight.scheduled_arrival_utc;
               return estimateArrivalUTC(legItem.flight?.scheduled_departure_utc, legItem.fromAirportCode, legItem.toAirportCode);
             };
 
-            // "time available in: city" between two consecutive flight legs
+            // CZAS W MIEŚCIE
+            // Między lądowaniem a kolejnym startem.
             let timeAvailableMs: number | null = null;
             let timeAvailableCity: string | null = null;
             if (!isManual && i > 0) {
@@ -222,7 +238,8 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
               }
             }
 
-            // "time to transfer" for manual legs
+            // CZAS NA PRZESIADKĘ
+            // Przy samodzielnym przemieszczaniu się.
             let timeToTransferMs: number | null = null;
             if (isManual) {
               const lastRealLeg = legs.slice(0, i).reverse().find(l => l.type !== 'manual');
@@ -235,15 +252,35 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
 
             return (
               <React.Fragment key={i}>
-                {timeAvailableMs !== null && timeAvailableCity && (
-                  <div className="trip-time-available">
-                    {UI_SYMBOLS.CLOCK} {t.trip.timeInCity(timeAvailableCity)}: {formatDurationMs(timeAvailableMs)}
-                  </div>
-                )}
+                {timeAvailableMs !== null && timeAvailableCity && (() => {
+                  const isShortStay = timeAvailableMs < minTransferHours * CONFIG.HOUR_IN_MS;
+                  return (
+                    <div
+                      className={`trip-time-available ${isShortStay ? 'trip-duration-alert' : ''}`}
+                      style={isShortStay ? {
+                        '--alert-color': fcHighlightSoonBorder,
+                        '--alert-bg': fcHighlightSoonBg
+                      } as React.CSSProperties : {}}
+                    >
+                      {UI_SYMBOLS.CLOCK} {t.trip.timeInCity(timeAvailableCity)}: {formatDurationMs(timeAvailableMs)}
+                    </div>
+                  );
+                })()}
                 {isManual ? (
-                  <div className="trip-time-transfer">
-                    {t.trip.transfer}{timeToTransferMs !== null ? formatDurationMs(timeToTransferMs) : UI_SYMBOLS.DASH}
-                  </div>
+                  (() => {
+                    const isShortTransfer = timeToTransferMs !== null && timeToTransferMs < (minTransferHours + minManualTransferHours) * CONFIG.HOUR_IN_MS;
+                    return (
+                      <div
+                        className={`trip-time-transfer ${isShortTransfer ? 'trip-duration-alert' : ''}`}
+                        style={isShortTransfer ? {
+                          '--alert-color': fcHighlightSoonBorder,
+                          '--alert-bg': fcHighlightSoonBg
+                        } as React.CSSProperties : {}}
+                      >
+                        {t.trip.transfer}{timeToTransferMs !== null ? formatDurationMs(timeToTransferMs) : UI_SYMBOLS.DASH}
+                      </div>
+                    );
+                  })()
                 ) : (
                   <div
                     className="trip-leg"
@@ -275,7 +312,7 @@ const TripItinerary: React.FC<TripItineraryProps> = ({ onUndo, onRedo, onEditTri
                                 : formatDateInTz(estimatedArrUTC!, destTz!)}
                             </span>
                             <span className="trip-leg-time-row">
-                              {tzDiff !== null && (
+                              {tzDiff !== null && tzDiff !== 0 && (
                                 <span className={`trip-leg-tz-diff ${tzDiff > 0 ? 'positive' : 'negative'}`}>
                                   ({formatTzDiff(tzDiff)})
                                 </span>

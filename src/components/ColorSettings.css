@@ -1,6 +1,4 @@
-/* ═══════════════════════════════════════════════════════════════
-   COLOR SETTINGS — map color & size editor
-   ═══════════════════════════════════════════════════════════════ */
+/* Ustawienia kolorów — edytor kolorów i rozmiarów mapy */
 
 .color-settings {
   padding: clamp(8px, 1vh, 12px) clamp(10px, 1.2vw, 14px);
@@ -11,7 +9,7 @@
   gap: 6px;
 }
 
-/* ── Header ──────────────────────────────────────────────────── */
+/* Nagłówek */
 .color-settings-header {
   display: flex;
   align-items: center;
@@ -41,7 +39,7 @@
 
 .color-settings-reset:hover { background: var(--red); color: var(--text-inverse); }
 
-/* ── Section labels ──────────────────────────────────────────── */
+/* Etykiety sekcji */
 .color-section-label {
   font-size: 10px;
   font-weight: 700;
@@ -62,7 +60,7 @@
   margin: 2px 0 1px;
 }
 
-/* ── Column headers ──────────────────────────────────────────── */
+/* Nagłówki kolumn */
 .color-settings-col-headers {
   display: grid;
   align-items: center;
@@ -92,7 +90,7 @@
   letter-spacing: 0.04em;
 }
 
-/* ── Color rows ──────────────────────────────────────────────── */
+/* Wiersze kolorów */
 .color-row {
   display: grid;
   align-items: center;
@@ -167,7 +165,7 @@
   margin: 4px 0;
 }
 
-/* ── Color swatch button (trigger) ───────────────────────────── */
+/* Przycisk wyboru koloru */
 .color-picker-wrapper {
   position: relative;
   display: inline-flex;
@@ -189,7 +187,7 @@
   box-shadow: 0 1px 6px var(--border-strong);
 }
 
-/* ── Color picker popover ────────────────────────────────────── */
+/* Popover wyboru koloru */
 .color-picker-popover {
   z-index: 9999;
   background: var(--bg-raised);
@@ -261,7 +259,7 @@
   transform: translateY(-50%);
 }
 
-/* ── RGBA inputs row ─────────────────────────────────────────── */
+/* Wiersz wejść RGBA */
 .cp-rgba-row {
   display: flex;
   align-items: center;
@@ -308,7 +306,7 @@
 
 .cp-channel-input:focus { border-color: var(--accent); }
 
-/* ── Size rows ───────────────────────────────────────────────── */
+/* Wiersze rozmiarów */
 .size-row {
   display: flex;
   flex-direction: column;
@@ -334,7 +332,7 @@
   color: var(--c-teal);
 }
 
-/* ── Size group (name + info + slider) ───────────────────────── */
+/* Grupa rozmiarów (nazwa + info + suwak) */
 .size-group {
   display: flex;
   flex-direction: column;
@@ -351,7 +349,7 @@
   white-space: nowrap;
 }
 
-/* ── Zoom info row ───────────────────────────────────────────── */
+/* Wiersz informacji o Zoomie */
 .zoom-info-row {
   display: flex;
   align-items: center;
@@ -385,7 +383,7 @@
 
 .zoom-copy-btn:hover { background: var(--red); color: var(--text-inverse); }
 
-/* ── Range slider ────────────────────────────────────────────── */
+/* Suwak zakresu */
 .range-slider {
   position: relative;
   height: 20px;

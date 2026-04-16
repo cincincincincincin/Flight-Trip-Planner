@@ -4,6 +4,7 @@ import type { FeatureCollection, LineString } from 'geojson';
 import type { RouteFeatureProps, SelectedItem } from '../../types';
 import { getRoute } from '../../api/geo';
 import { THEME_COLORS } from '../../constants/theme';
+import { logger } from '../../utils/logger';
 
 export function addRoutesLayer(
   map: MapLibreMap,
@@ -30,7 +31,7 @@ export function addRoutesLayer(
       const data = await getRoute(props.id);
       onSelectItemRef.current?.({ type: 'route', data });
     } catch (error) {
-      console.error('Error fetching route details:', error);
+      logger.error('Błąd pobierania szczegółów trasy:', error);
       onSelectItemRef.current?.({
         type: 'route',
         data: {

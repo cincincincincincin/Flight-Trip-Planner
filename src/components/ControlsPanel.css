@@ -1,6 +1,4 @@
-/* ═══════════════════════════════════════════════════════════════
-   CONTROLS PANEL — settings sidebar
-   ═══════════════════════════════════════════════════════════════ */
+/* Panel sterowania (Controls Panel) — pasek boczny ustawień */
 
 .controls-panel {
   width: var(--controls-w);
@@ -19,7 +17,7 @@
   z-index: 150;
 }
 
-/* ── Header ──────────────────────────────────────────────────── */
+/* Nagłówek */
 .controls-panel-header {
   display: flex;
   align-items: center;
@@ -60,7 +58,7 @@
   color: var(--red);
 }
 
-/* ── Error ───────────────────────────────────────────────────── */
+/* Komunikat o błędzie */
 .error-message {
   background: var(--red-dim);
   border-left: 3px solid var(--red);
@@ -70,7 +68,7 @@
   color: var(--red);
 }
 
-/* ── Controls card ───────────────────────────────────────────── */
+/* Karta ustawień */
 .controls {
   background: var(--bg-base);
   border: 1px solid var(--border);
@@ -87,7 +85,7 @@
   gap: 8px;
 }
 
-/* ── Labels ──────────────────────────────────────────────────── */
+/* Etykiety */
 .controls label,
 .currency-selector label,
 .switch-label,
@@ -102,7 +100,7 @@
   margin-bottom: 5px;
 }
 
-/* ── Checkbox ────────────────────────────────────────────────── */
+/* Pole wyboru (Checkbox) */
 .checkbox-label {
   display: flex;
   align-items: center;
@@ -134,7 +132,7 @@
   color: var(--text-primary);
 }
 
-/* ── Toggle switch row ───────────────────────────────────────── */
+/* Przełącznik (Toggle switch) */
 .switch-container {
   background: var(--bg-raised);
   border: 1px solid var(--border);
@@ -176,7 +174,7 @@
   border-radius: calc(var(--r-sm) - 1px);
 }
 
-/* ── Language selector ───────────────────────────────────────── */
+/* Wybór języka */
 .language-selector {
   background: var(--bg-raised);
   border: 1px solid var(--border);
@@ -218,7 +216,7 @@
   border-radius: calc(var(--r-sm) - 1px);
 }
 
-/* ── Currency selector ───────────────────────────────────────── */
+/* Wybór waluty */
 .currency-selector {
   background: var(--bg-raised);
   border: 1px solid var(--border);
@@ -260,7 +258,7 @@
   border-radius: calc(var(--r-sm) - 1px);
 }
 
-/* ── Map style select ────────────────────────────────────────── */
+/* Wybór stylu mapy */
 .map-style-selector {
   background: var(--bg-raised);
   border: 1px solid var(--border);
@@ -289,7 +287,7 @@
   box-shadow: var(--accent-glow);
 }
 
-/* ── Globe toggle ────────────────────────────────────────────── */
+/* Przełącznik trybu globu (Globe mode) */
 .globe-toggle-row {
   display: flex;
   align-items: center;
@@ -339,7 +337,7 @@
   transform: translateX(16px);
 }
 
-/* ── Color settings toggle ───────────────────────────────────── */
+/* Przełącznik ustawień kolorów */
 .color-settings-toggle {
   display: block;
   width: 100%;
@@ -370,14 +368,14 @@
   color: var(--accent);
 }
 
-/* ── Loading indicator ───────────────────────────────────────── */
+/* Wskaźnik ładowania */
 .loading {
   font-size: 11px;
   color: var(--text-muted);
   margin-left: 4px;
 }
 
-/* ── Stats ───────────────────────────────────────────────────── */
+/* Statystyki */
 .stats {
   background: var(--bg-base);
   border: 1px solid var(--border);
@@ -395,7 +393,7 @@
 
 .stat-item:last-child { border-bottom: none; }
 
-/* ── Developer section ───────────────────────────────────────── */
+/* Sekcja deweloperska */
 .developer-section {
   display: flex;
   flex-direction: column;
@@ -413,7 +411,7 @@
   padding: 8px 10px;
 }
 
-/* ── Date picker ─────────────────────────────────────────────── */
+/* Wybór daty (Date picker) */
 .date-picker {
   background: var(--bg-raised);
   border: 1px solid var(--border);
@@ -442,7 +440,7 @@
   box-shadow: var(--accent-glow);
 }
 
-/* ── Mobile ──────────────────────────────────────────────────── */
+/* Mobilne style */
 @media (max-width: 768px) {
   .controls-panel {
     position: fixed;

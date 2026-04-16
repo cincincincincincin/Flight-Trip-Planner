@@ -50,14 +50,14 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
 
   const getTripMeta = (trip: SavedTrip) => {
     const { trip_state } = trip;
-    // Visited countries
+    // Odwiedzone kraje
     const countries = new Set<string>();
     if (trip_state.startAirport?.country_code) countries.add(trip_state.startAirport.country_code);
     trip_state.legs.forEach(leg => {
       const cc = airportCountryMap[leg.toAirportCode];
       if (cc) countries.add(cc);
     });
-    // Date range
+    // Zakres dat
     let dateRange = '';
     if (trip_state.legs.length > 0) {
       const firstLeg = trip_state.legs[0];
@@ -99,7 +99,7 @@ const SavedTripsPanel: React.FC<SavedTripsPanelProps> = ({ onClose, onTripLoaded
   });
 
   const handleLoad = (trip: SavedTrip) => {
-    // Obliczamy trasy w locie (nie są przechowywane bezpośrednio w bazie)
+    // Obliczamy trasy w locie
     const calculatedRoutes: any[] = [];
     if (trip.trip_state.startAirport?.code && trip.trip_state.legs) {
       let currentAirportCode = trip.trip_state.startAirport.code;

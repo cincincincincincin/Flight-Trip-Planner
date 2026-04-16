@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { useSelectionStore } from './selectionStore';
 import type { ExplorationItem } from './selectionStore';
 import type { TripState, TripRoute, SelectedItem, Flight } from '../types';
+import { logger } from '../utils/logger';
 
 /**
  * STRUKTURA DANYCH OBRAZU PODRÓŻY (SNAPSHOT)
@@ -148,7 +149,7 @@ export const useTripStore = create<TripStoreState>((set, get) => ({
     const nextSnapshot = futureTrips[0];
     const remainingFuture = futureTrips.slice(1);
 
-    console.log(`[RACE-DEBUG] {tripStore} -> REDO | Snapshot:`, nextSnapshot);
+    logger.log(`[RACE-DEBUG] {tripStore} -> REDO | Snapshot:`, nextSnapshot);
 
     useSelectionStore.getState().setFullSelection({
       selectedItem: nextSnapshot.selectedItem,

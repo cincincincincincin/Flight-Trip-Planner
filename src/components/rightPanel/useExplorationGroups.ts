@@ -7,7 +7,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { getGeoName } from '../../utils/geoUtils';
 
 /**
- * Silnik Konsolidacji Hierarchicznej (Visual Consolidation Engine).
+ * Silnik Konsolidacji Hierarchicznej.
  * Przekształca surowe kody lotnisk w inteligentne grupy Miasto/Kraj.
  */
 export function useExplorationGroups(
@@ -23,7 +23,7 @@ export function useExplorationGroups(
   return useMemo((): ExplorationDisplayItem[] => {
     if (Object.keys(airportsMap).length === 0 || explorationItems.length === 0) return [];
 
-    // O(1) Lookups - korzystamy z przekazanego Rekordu
+    // Szybkie wyszukiwanie
 
     // 1. Zbieramy unikalny zestaw lotnisk z całego magazynu eksploracji
     const allAirportItems: Array<{ id: string; code: string; props: AirportFeatureProps }> = [];
@@ -61,7 +61,7 @@ export function useExplorationGroups(
     const processedCountries = new Set<string>();
     const result: ExplorationDisplayItem[] = [];
 
-    // KRAJE (Highest priority)
+    // KRAJE (Najwyższy priorytet)
     for (const [cc, aps] of airportsByCountry.entries()) {
       if (!cc) continue;
       const totalInCountry = countryInfoMap[cc]?.airportCount || 0;
@@ -91,7 +91,7 @@ export function useExplorationGroups(
       }
     }
 
-    // MIASTA (Secondary priority)
+    // MIASTA (Drugorzędny priorytet)
     for (const [cityCode, aps] of airportsByCity.entries()) {
       if (!cityCode || processedCities.has(cityCode)) continue;
       const totalInCity = cityInfoMap[cityCode]?.airportCount || 0;

@@ -13,7 +13,7 @@ import { CONFIG } from '../../constants/config';
 
 
 export interface GCPath {
-  key: string; // [STABLE ID v12.1]: Unique SRC:DEST pair
+  key: string; // Unikalna para SRC:DEST
   srcCoords: [number, number];
   destCode: string;
   srcCode: string;
@@ -21,7 +21,7 @@ export interface GCPath {
   gcCoords: [number, number][];
 }
 
-/** [STABLE ID v12.1]: Konwertuje string na deterministyczny numer 32-bit (dla MapLibre feature id) */
+/** Konwertuje string na deterministyczny numer 32-bit */
 export const hashString = (s: string): number => {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
@@ -30,7 +30,7 @@ export const hashString = (s: string): number => {
 
 const toFeature = (d: GCPath, coords: [number, number][]) => ({
   type: 'Feature' as const,
-  id: hashString(d.key), // Używamy stałego hasha zamiast indeksu 'i'
+  id: hashString(d.key), // Stały hash kodu
   geometry: { type: 'LineString' as const, coordinates: coords },
   properties: { destCode: d.destCode, srcIdx: d.srcIdx, key: d.key },
 });
@@ -61,8 +61,7 @@ export function buildGCPaths(
       }
     });
     if (sourceToDestsMap.size === 0) return [];
-  } else if (sourceCodes.length === 1) {
-    sourceToDestsMap = new Map([[sourceCodes[0], new Set(newDestCodes)]]);
+    if (sourceToDestsMap.size === 0) return [];
   } else {
     return [];
   }
@@ -89,14 +88,20 @@ export function buildGCPaths(
   return paths;
 }
 
+export interface GCAnimationBatch {
+  paths: GCPath[];
+  progress: number;
+}
+
 /**
- * Dodaje nowe trasy do animacji w sposób addytywny.
+ * Dodaje nowe trasy do animacji w sposób addytywny (system pakietowy).
+ * Zapobiega przerywaniu trwających animacji przy napływie nowych danych.
  */
 export function addRoutesToAnimation(
   map: MapLibreMap,
   animRef: { current: number | null },
   completedPathsRef: { current: GCPath[] },
-  currentAnimatingRef: { current: GCPath[] },
+  currentAnimatingBatchesRef: { current: GCAnimationBatch[] },
   newPaths: GCPath[],
 ): void {
   if (!map || !newPaths.length) return;
@@ -104,51 +109,54 @@ export function addRoutesToAnimation(
   const source = map.getSource('selected-routes') as GeoJSONSource | undefined;
   if (!source) return;
 
-  // If an animation is running, promote the in-progress paths to completed instantly
-  if (animRef.current !== null) {
-    cancelAnimationFrame(animRef.current);
-    animRef.current = null;
-    if (currentAnimatingRef.current.length > 0) {
-      completedPathsRef.current = [...completedPathsRef.current, ...currentAnimatingRef.current];
-      currentAnimatingRef.current = [];
-      
-      // [ZERO-GAP PROMOTION v11.98]: Synchronize source immediately to avoid empty-frame flicker
-      const currentSnapshot = completedPathsRef.current;
-      source.setData({
-        type: 'FeatureCollection',
-        features: currentSnapshot.map((d) => toFeature(d, d.gcCoords)),
-      });
-    }
-  }
+  // Dodajemy nowy pakiet do kolejki animacji
+  currentAnimatingBatchesRef.current.push({
+    paths: newPaths,
+    progress: 0
+  });
 
-  currentAnimatingRef.current = newPaths;
-  const snapshotCompleted = [...completedPathsRef.current];
+  // Jeśli animacja nie trwa, uruchamiamy pętlę
+  if (animRef.current !== null) return;
+
   const speed = CONFIG.ANIMATION_SPEED;
-  let progress = 0;
 
   const renderFrame = () => {
-    progress += speed;
+    let hasRunning = false;
+    const completedIndices: number[] = [];
 
-    if (progress >= 1) {
-      completedPathsRef.current = [...snapshotCompleted, ...newPaths];
-      currentAnimatingRef.current = [];
-      source.setData({
-        type: 'FeatureCollection',
-        features: completedPathsRef.current.map((d) => toFeature(d, d.gcCoords)),
-      });
-      animRef.current = null;
-      return;
-    }
-
-    const numVisible = Math.max(2, Math.ceil(progress * CONFIG.GC_POINTS) + 1);
-    source.setData({
-      type: 'FeatureCollection',
-      features: [
-        ...snapshotCompleted.map((d) => toFeature(d, d.gcCoords)),
-        ...newPaths.map((d) => toFeature(d, d.gcCoords.slice(0, numVisible))),
-      ],
+    // Aktualizacja wszystkich aktywnych pakietów
+    currentAnimatingBatchesRef.current.forEach((batch, idx) => {
+      batch.progress += speed;
+      if (batch.progress >= 1) {
+        completedPathsRef.current = [...completedPathsRef.current, ...batch.paths];
+        completedIndices.push(idx);
+      } else {
+        hasRunning = true;
+      }
     });
-    animRef.current = requestAnimationFrame(renderFrame);
+
+    // Usuwanie zakończonych pakietów (od końca)
+    completedIndices.sort((a, b) => b - a).forEach(idx => {
+      currentAnimatingBatchesRef.current.splice(idx, 1);
+    });
+
+    // Przygotowanie danych do wyświetlenia (completed + animowane kawałki)
+    const features: any[] = completedPathsRef.current.map(d => toFeature(d, d.gcCoords));
+
+    currentAnimatingBatchesRef.current.forEach(batch => {
+      const numVisible = Math.max(2, Math.ceil(batch.progress * CONFIG.GC_POINTS) + 1);
+      batch.paths.forEach(d => {
+        features.push(toFeature(d, d.gcCoords.slice(0, numVisible)));
+      });
+    });
+
+    source.setData({ type: 'FeatureCollection', features });
+
+    if (hasRunning) {
+      animRef.current = requestAnimationFrame(renderFrame);
+    } else {
+      animRef.current = null;
+    }
   };
 
   animRef.current = requestAnimationFrame(renderFrame);
@@ -161,14 +169,14 @@ export function clearRouteAnimation(
   map: MapLibreMap,
   animRef: { current: number | null },
   completedPathsRef: { current: GCPath[] },
-  currentAnimatingRef: { current: GCPath[] },
+  currentAnimatingBatchesRef: { current: GCAnimationBatch[] | any[] },
 ): void {
   if (animRef.current !== null) {
     cancelAnimationFrame(animRef.current);
     animRef.current = null;
   }
   completedPathsRef.current = [];
-  currentAnimatingRef.current = [];
+  currentAnimatingBatchesRef.current = [];
   const source = map.getSource('selected-routes') as GeoJSONSource | undefined;
   if (source) source.setData({ type: 'FeatureCollection', features: [] });
 }

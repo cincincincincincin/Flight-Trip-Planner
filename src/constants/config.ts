@@ -1,207 +1,161 @@
 export const CONFIG = {
-  /** Cache duration for airport info requests */
+  /** Czas przechowywania danych o lotniskach w pamięci podręcznej (ms) */
   CACHE_AIRPORT_INFO_MS: 300000,
-  /** Enable detailed diagnostic logs in console */
+  /** Włączenie szczegółowych logów diagnostycznych w konsoli */
   DEBUG_LOGS: true,
 
-  // ──────────────────────────────────────────────────────────────────────────
   // AirportTransferPicker.tsx
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Initial number of airports shown in the dropdown list before scroll-loading more */
+  /** Początkowa liczba lotnisk wyświetlanych na liście przed dociągnięciem kolejnych */
   INITIAL_DISPLAY_COUNT: 30,
-  /** Remaining scroll pixels below which the next page of airports is loaded */
+  /** Próg przewinięcia w pikselach, poniżej którego ładowana jest kolejna strona lotnisk */
   SCROLL_LOAD_THRESHOLD: 100,
-  /** Delay (ms) before focusing the search input after the picker opens */
+  /** Opóźnienie (ms) przed ustawieniem fokusu na polu wyszukiwania po otwarciu wybieraka */
   FOCUS_DELAY_MS: 50,
-  /** Kilometre threshold above which formatDist switches from "X km" to "X k km" (AirportTransferPicker.tsx) */
+  /** Próg w kilometrach, powyżej którego formatowanie zmienia się z "X km" na "X k km" */
   KM_THRESHOLD: 1000,
-  /** Approximate kilometres per one degree of latitude or longitude (used for fast distance estimation) */
+  /** Przybliżona liczba kilometrów na jeden stopień szerokości lub długości geograficznej */
   KM_PER_DEGREE: 111,
-  /** Distance unit label for values < KM_THRESHOLD */
+  /** Etykieta jednostki odległości dla wartości poniżej progu KM_THRESHOLD */
   UNIT_KM: 'km',
-  /** Distance unit label for values ≥ KM_THRESHOLD */
+  /** Etykieta jednostki odległości dla wartości powyżej progu KM_THRESHOLD */
   UNIT_K_KM: 'k km',
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // ColorSettings.tsx – inline colour-picker canvas dimensions
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Width (px) of the saturation/value gradient canvas */
+  // ColorSettings.tsx – wymiary płótna wybieraka kolorów
+  /** Szerokość (px) płótna gradientu nasycenia/wartości */
   COLOR_PICKER_SV_WIDTH: 148,
-  /** Height (px) of the saturation/value gradient canvas */
+  /** Wysokość (px) płótna gradientu nasycenia/wartości */
   COLOR_PICKER_SV_HEIGHT: 120,
-  /** Width (px) of the hue strip canvas */
+  /** Szerokość (px) płótna paska odcienia */
   COLOR_PICKER_STRIP_WIDTH: 14,
-  /** Height (px) of the hue strip canvas */
+  /** Wysokość (px) płótna paska odcienia */
   COLOR_PICKER_STRIP_HEIGHT: 120,
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // MapComponent.tsx / TripItinerary.tsx – popup positioning
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Maximum vertical height (px) used when clamping a popup to stay inside the viewport */
+  // MapComponent.tsx / TripItinerary.tsx – pozycjonowanie popupów
+  /** Maksymalna wysokość pionowa (px) przy dociąganiu popupu do krawędzi ekranu */
   POPUP_MAX_HEIGHT: 480,
-  /** Horizontal gap (px) between the triggering element boundary and the popup left edge */
+  /** Poziomy odstęp (px) między krawędzią elementu a lewą krawędzią popupu */
   POPUP_OFFSET: 8,
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // RightPanel.tsx / MapComponent.tsx – timezone sentinel values
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Sentinel timezone code used when an airport's timezone is genuinely unknown */
+  // RightPanel.tsx / MapComponent.tsx – wartości specjalne stref czasowych
+  /** Kod strefy czasowej używany, gdy strefa lotniska jest nieznana */
   UNKNOWN_TIMEZONE: '_unknown',
-  /** Sort key injected so that unknown-timezone airports sort after all real UTC offsets */
+  /** Klucz sortowania wymuszający pojawienie się nieznanych stref po wszystkich offsetach UTC */
   UNKNOWN_TZ_FALLBACK: '9999',
-  /** UTC label displayed when no timezone can be determined */
+  /** Etykieta UTC wyświetlana, gdy nie można ustalić strefy czasowej */
   UNKNOWN_TZ_UTCLABEL: '?',
 
-  // ──────────────────────────────────────────────────────────────────────────
   // api/client.ts
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Axios request timeout (ms) applied to every API call */
+  /** Limit czasu żądania Axios (ms) stosowany do każdego połączenia API */
   API_TIMEOUT_MS: 30000,
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // api/geo.ts – default query parameters
-  // ──────────────────────────────────────────────────────────────────────────
-
-  // ──────────────────────────────────────────────────────────────────────────
   // DateInput.tsx
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Maximum number of days in the future a departure date can be selected */
+  /** Maksymalna liczba dni w przód, na jaką można wybrać datę wylotu */
   MAX_DAYS_FORWARD: 180,
-  /** Number of months to scan forward when searching for the closest valid day-of-month */
+  /** Liczba miesięcy skanowanych w przód przy szukaniu najbliższego poprawnego dnia miesiąca */
   MAX_MONTHS_FOR_DAY_SEARCH: 7,
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // FlightsFilter.tsx / RightPanel.tsx – UI timing
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Sentinel value stored in the city-group key when a flight has no city association */
+  // FlightsFilter.tsx / RightPanel.tsx – timingi interfejsu
+  /** Wartość specjalna klucza grupy miast, gdy lot nie jest przypisany do żadnego miasta */
   NO_CITY_PLACEHOLDER: '__nocity__',
-  /** Delay (ms) before closing a search dropdown on input blur, allowing click events to fire first */
+  /** Opóźnienie (ms) przed zamknięciem listy wyszukiwania po utracie fokusu (pozwala na kliknięcie) */
   INPUT_BLUR_DELAY_MS: 50,
 
-  // ──────────────────────────────────────────────────────────────────────────
   // FlightsList.tsx
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Number of virtual-list items kept rendered outside the visible area (react-virtuoso overscan) */
+  /** Liczba elementów wirtualnej listy renderowanych poza widocznym obszarem (overscan) */
   VIRTUOSO_OVERSCAN: 200,
-  /** Delay (ms) after a "jump to date" action before re-enabling automatic scroll behaviour */
+  /** Opóźnienie (ms) po ręcznym "skoku do daty" przed przywróceniem automatycznego przewijania */
   MANUAL_JUMP_TIMEOUT_MS: 500,
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // MapComponent.tsx – interaction geometry
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Minimum zoom level at which airport/city labels become visible */
+  // MapComponent.tsx – geometria interakcji
+  /** Minimalny poziom przybliżenia, od którego etykiety lotnisk/miast stają się widoczne */
   LABEL_MIN_ZOOM: 5,
-  /** Scaling factor applied to a style property at the minimum zoom anchor in ziLegacy (MapComponent.tsx) */
+  /** Współczynnik skalowania właściwości stylu przy minimalnym przybliżeniu (ziLegacy) */
   SIZE_INTERPOLATION_MIN_FACTOR: 0.3,
-  /** Scaling factor applied to a style property at the maximum zoom anchor in ziLegacy (MapComponent.tsx) */
+  /** Współczynnik skalowania właściwości stylu przy maksymalnym przybliżeniu (ziLegacy) */
   SIZE_INTERPOLATION_MAX_FACTOR: 2.5,
-  /** rootMargin for the visibility IntersectionObserver that tracks which expanded country/city is in view (Search.tsx) */
+  /** Margines rootMargin dla obserwatora widoczności śledzącego wybrane kraje/miasta (Search.tsx) */
   VISIBILITY_OBSERVER_ROOT_MARGIN: '-10% 0px -80% 0px',
-  /** Half-size (px) of the bounding box used to hit-test route hover events */
+  /** Połowa rozmiaru (px) ramki ograniczającej dla detekcji najechania na trasę */
   ROUTE_HOVER_BBOX_SIZE: 4,
-  /** Delay (ms) before hiding the map flight-info popup after the cursor leaves */
+  /** Opóźnienie (ms) przed ukryciem popupu z informacjami o locie po opuszczeniu kursora */
   POPUP_HIDE_DELAY_MS: 150,
-  /** Padding (px) added above the airport label expression to avoid label overlap */
+  /** Margines (px) dodawany nad etykietą lotniska w celu uniknięcia nakładania się napisów */
   LABEL_OFFSET_PADDING: 4,
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Search.tsx – IntersectionObserver infinite scroll
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** CSS rootMargin that triggers the next page load before the sentinel element is fully visible */
+  // Search.tsx – nieskończone przewijanie
+  /** Margines CSS wyzwalający ładowanie kolejnej strony przed pełnym pokazaniem elementu */
   INFINITE_SCROLL_MARGIN: '100px',
-  /** IntersectionObserver threshold ratio required to fire the callback */
+  /** Próg stosunku przecięcia wymagany do wywołania callbacku IntersectionObserver */
   INTERSECTION_THRESHOLD: 0.1,
-  /** Delay (ms) before collapsing the search results panel after input loses focus */
+  /** Opóźnienie (ms) przed zwinięciem panelu wyników wyszukiwania po utracie fokusu */
   SEARCH_BLUR_DELAY_MS: 200,
-  /** Delay (ms) before restoring scroll position after search panel closes */
+  /** Opóźnienie (ms) przed przywróceniem pozycji przewinięcia po zamknięciu wyszukiwarki */
   SCROLL_RESTORE_DELAY_MS: 50,
 
-
-  /** App-wide limits */
-
-  /** Maximum number of departure airports that can be selected simultaneously */
+  /** Limity globalne aplikacji */
+  /** Maksymalna liczba lotnisk startowych, które można wybrać jednocześnie */
   MAX_AIRPORTS: 6,
-  /** Maximum number of transfer (stopover) airports that can be added to a segment */
+  /** Maksymalna liczba lotnisk przesiadkowych dodawanych do jednego odcinka */
   MAX_TRANSFER_AIRPORTS: 5,
-  /** Maximum number of flights shown in the map airport hover popup */
+  /** Maksymalna liczba lotów wyświetlanych w popupie po najechaniu na lotnisko */
   MAX_POPUP_FLIGHTS: 6,
-  /** Maximum number of flights fetched per API request */
+  /** Maksymalna liczba lotów pobieranych w jednym żądaniu API */
   FLIGHT_LIMIT: 1400,
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // MapComponent.tsx – animation / fly-to
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Duration (ms) of the MapLibre camera fly-to animation */
+  // MapComponent.tsx – animacje i nawigacja
+  /** Czas trwania (ms) animacji kamery "fly-to" w MapLibre */
   FLY_DURATION: 800,
-  /** Pixel padding applied on all sides when fitting the map to a set of coordinates */
+  /** Margines w pikselach stosowany przy dopasowywaniu widoku mapy do współrzędnych */
   FIT_BOUNDS_PADDING: 80,
-  /** Maximum zoom level allowed when fitting bounds (prevents over-zooming on close airports) */
+  /** Maksymalny poziom zoomu przy dopasowywaniu widoku (zapobiega zbytniemu zbliżeniu) */
   FIT_BOUNDS_MAX_ZOOM: 8,
-  /** Maximum latitude/longitude spread (degrees) before a point is considered an outlier */
+  /** Maksymalna rozpiętość stopni geograficznych przed uznaniem punktu za element odstający */
   OUTLIER_MAX_DEG: 5,
-  /** Maximum zoom level at which a country view is rendered instead of zooming in further */
+  /** Maksymalny poziom zoomu, przy którym renderowany jest widok kraju zamiast zbliżenia */
   MAX_ZOOM_FOR_COUNTRY: 7,
-  /** Default map center [lon, lat] (central Europe) */
+  /** Domyślne centrum mapy [lon, lat] (Europa Środkowa) */
   DEFAULT_MAP_CENTER: [19.0, 52.0] as [number, number],
-  /** Default map zoom level on initial load */
+  /** Domyślny poziom przybliżenia mapy przy starcie */
   DEFAULT_MAP_ZOOM: 4,
 
-  /** Assumed average cruise speed (km/h) used to estimate flight duration when no schedule exists */
+  /** Przyjęta średnia prędkość przelotowa (km/h) do estymacji czasu lotu bez rozkładu */
   AVERAGE_AIRCRAFT_SPEED_KMH: 850,
-  /** Extra hours added to the raw flight-time estimate to account for taxi, climb and descent */
+  /** Dodatkowe godziny doliczane do czasu lotu (kołowanie, wznoszenie, zniżanie) */
   ADDITIONAL_BLOCK_HOURS: 0.5,
 
-  /** Zoom interpolation breakpoints (MapComponent.tsx / ColorSettings.tsx) */
-
-  /** Minimum zoom level used as the lower anchor of zoom-based style interpolations */
+  /** Punkty kontrolne interpolacji zoomu */
+  /** Minimalny zoom używany jako dolna kotwica interpolacji stylów */
   MIN_ZOOM: 1,
-  /** Maximum zoom level used as the upper anchor of zoom-based style interpolations */
+  /** Maksymalny zoom używany jako górna kotwica interpolacji stylów */
   MAX_ZOOM: 12,
-  /** Mid-point zoom level used as the middle anchor of zoom-based style interpolations */
+  /** Punkt środkowy zoomu używany jako referencyjna kotwica interpolacji */
   REFERENCE_ZOOM: 6,
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // MapComponent.tsx – great-circle route rendering
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Number of intermediate points used to draw great-circle arcs */
+  // MapComponent.tsx – renderowanie tras ortodromicznych
+  /** Liczba punktów pośrednich używanych do rysowania łuków tras (Great-Circle) */
   GC_POINTS: 64,
-  /** Step size of the route animation per frame (fraction of total arc length) */
+  /** Rozmiar kroku animacji trasy na klatkę (ułamek całkowitej długości łuku) */
   ANIMATION_SPEED: 0.005,
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // MapComponent.tsx – hover state machine timings
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Process at most one hover event out of this many mouse-move events (reduces CPU load) */
+  // MapComponent.tsx – timingi maszyny stanów 'hover'
+  /** Przetwarzaj maksymalnie jedno zdarzenie hover na tyle ruchów myszy (optymalizacja CPU) */
   HOVER_SAMPLE_EVERY: 10,
-  /** Duration (ms) a hover lock is held after a click to prevent jitter */
+  /** Czas (ms) blokady hovera po kliknięciu w celu uniknięcia drgań interfejsu */
   HOVER_LOCK_DURATION_MS: 80,
-  /** Delay (ms) before clearing the hover state after the cursor leaves a feature */
+  /** Opóźnienie (ms) przed wyczyszczeniem stanu hover po opuszczeniu obiektu przez kursor */
   HOVER_CLEAR_DELAY_MS: 40,
-  /** Delay (ms) after mouse movement stops before snapping hover to the exact position */
+  /** Opóźnienie (ms) po zatrzymaniu ruchu myszy przed precyzyjnym dopasowaniem hovera */
   HOVER_STOP_DELAY_MS: 10,
-  /** Extra pixel radius added around a hovered airport before clearing the hover state */
+  /** Dodatkowy promień w pikselach wokół lotniska przed wyczyszczeniem stanu podświetlenia */
   HOVER_KEEP_RADIUS_EXTRA: 6,
-  /** Milliseconds the hover state is extended after a lock ends */
+  /** Liczba milisekund przedłużenia stanu hover po zakończeniu blokady (lock) */
   HOVER_LOCK_EXTENSION: 120,
-  /** Pixel radius fallback used for hit-testing when the map projection is unavailable */
+  /** Rezerwowy promień trafienia (px), gdy projekcja mapy jest niedostępna */
   HOVER_RADIUS_FALLBACK: 18,
-  /** Minimum pixel distance between labels before one is hidden to prevent overlap */
+  /** Minimalna odległość (px) między etykietami przed ukryciem jednej z nich (anty-kolizja) */
   LABEL_CLEAR_RADIUS: 70,
 
-  /** Maximum results returned per search category (main results / cities / airports) */
+  /** Maksymalna liczba wyników wyszukiwania na kategorię */
   SEARCH_LIMITS: { main: 20, cities: 50, airports: 50 },
 
   /** Minimalny rozmiar etykiety przy podświetleniu (hover) */
@@ -213,89 +167,67 @@ export const CONFIG = {
   /** Domyślny maksymalny zakres zoomu mapy */
   MAP_ZOOM_MAX_DEFAULT: 12.0,
 
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // MapComponent.tsx – layer radius/text size arrays
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Pixel offset added to the map bbox used for click detection */
+  // MapComponent.tsx – tablice promieni warstw i rozmiarów tekstu
+  /** Margines dodany do ramki mapy używany przy detekcji kliknięć */
   MAP_BBOX_OFFSET: 4,
-  /** Zoom level at which an airport label starts to appear significantly larger */
+  /** Poziom przybliżenia, przy którym etykieta lotniska zaczyna się znacząco powiększać */
   AIRPORT_ZOOM_THRESHOLD: 1.2,
-  /** Fallback zoom levels when flying to a selected airport / city / country */
+  /** Domyślne poziomy zoomu przy nawigacji do wybranych obiektów */
   FALLBACK_ZOOM: { AIRPORT: 6, CITY: 5, COUNTRY: 4 },
-  /** Airport circle sizes (radius px) at different zoom breakpoints */
+  /** Rozmiary kółek lotnisk (promień w px) dla różnych poziomów przybliżenia */
   MAP_AIRPORT_LAYER: {
     RADIUS_TINY: 4, RADIUS_SMALL: 6, RADIUS_MEDIUM: 8, RADIUS_LARGE: 10,
     TEXT_TINY: 9, TEXT_SMALL: 10, TEXT_MEDIUM: 11, TEXT_LARGE: 12
   },
-  /** City circle sizes (radius px) at different zoom breakpoints */
+  /** Rozmiary kółek miast (promień w px) dla różnych poziomów przybliżenia */
   MAP_CITY_LAYER: {
     RADIUS_SMALL: 5, RADIUS_MEDIUM: 8,
     TEXT_SMALL: 11, TEXT_LARGE: 13
   },
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // ColorSettings.tsx – colour luminance thresholds
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** RGB channel value below which a colour is considered "black" for contrast purposes */
+  // ColorSettings.tsx – progi luminancji kolorów
+  /** Wartości kanałów RGB, poniżej których kolor uznawany jest za "czarny" dla kontrastu */
   COLOR_THRESHOLDS: {
     BLACK_RGB: 20, WHITE_RGB: 235
   },
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // RightPanel.tsx – drag / panel geometry
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Extra pixels added to the draggable header height to ease grab targeting */
+  // RightPanel.tsx – geometria panelu bocznego i gestów
+  /** Dodatkowe piksele wysokości nagłówka ułatwiające uchwycenie panelu do przeciągania */
   DRAG_HEADER_EXTRA: 20,
-  /** Peek height (px) of the panel when collapsed / minimised */
+  /** Wysokość wysunięcia panelu (px) w stanie zminimalizowanym */
   PEEK_H: 100,
-  /** Minimum drag distance (px) required to trigger a panel open/close gesture */
+  /** Minimalna odległość przeciągania (px) wymagana do wyzwolenia gestu otwarcia/zamknięcia */
   DRAG_THRESHOLD: 60,
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // FlightsList.tsx – timestamp / date helpers
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Delay (ms) before scrolling to a specific date after the user taps "Jump to date" */
+  // FlightsList.tsx – pomocniki czasu i dat
+  /** Opóźnienie (ms) przed przewinięciem do daty po kliknięciu "Skocz do daty" */
   JUMP_TO_DATE_TIMEOUT: 500,
-  /** Milliseconds in one hour (used for timestamp arithmetic) */
+  /** Milisekundy w jednej godzinie */
   HOUR_IN_MS: 3600000,
-  /** Minutes in one hour */
+  /** Minuty w jednej godzinie */
   MINUTES_IN_HOUR: 60,
-  /** Hours in one day */
+  /** Godziny w jednej dobie */
   HOURS_IN_DAY: 24,
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // api/geo.ts – pagination
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** API page-size limits for geo endpoints */
+  // api/geo.ts – paginacja
+  /** Limity rozmiaru strony dla endpointów geograficznych */
   PAGE_LIMITS: { GET_CITY_AIRPORTS: 200, GET_COUNTRY_CITIES: 200 },
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // Stores / misc
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Milliseconds within which a cached API response is considered fresh and not re-fetched */
+  // Magazyny (Stores) i inne
+  /** Czas (ms), w którym odpowiedź z API jest uznawana za świeżą i nie wymaga ponownego pobrania */
   CACHE_FRESHNESS_MS: 1000,
-  /** Alias for MAX_DAYS_FORWARD used by the date store */
+  /** Alias dla MAX_DAYS_FORWARD używany przez magazyn dat */
   MAX_DATE_DAYS: 180,
 
-  /** Base URL for the backend API */
+  /** Bazowy adres URL API backendu */
   API_BASE_URL: import.meta.env.VITE_API_URL ?? '',
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // User Settings Defaults
-  // ──────────────────────────────────────────────────────────────────────────
-
-  /** Default currency selected on first run */
+  // Domyślne ustawienia użytkownika
+  /** Domyślna waluta wybrana przy pierwszym uruchomieniu */
   DEFAULT_CURRENCY: 'PLN',
-  /** Default minimum transfer time (hours) for automatic flights */
+  /** Domyślny minimalny czas na przesiadkę (h) dla lotów automatycznych */
   DEFAULT_MIN_TRANSFER_HOURS: 2,
-  /** Default minimum transfer time (hours) for manual/custom trip segments */
+  /** Domyślny minimalny czas na przesiadkę (h) dla odcinków własnych/ręcznych */
   DEFAULT_MIN_MANUAL_TRANSFER_HOURS: 1,
 
   /** Poziomy przybliżenia mapy zależne od liczby lotnisk w danym kraju */
@@ -311,8 +243,8 @@ export const CONFIG = {
 
 /** Dostępne waluty do wyboru przez użytkownika */
 export const CURRENCIES = [
-  { code: 'PLN', label: 'PLN - Polish Złoty' },
-  { code: 'USD', label: 'USD - US Dollar' },
+  { code: 'PLN', label: 'PLN - Złoty polski' },
+  { code: 'USD', label: 'USD - Dolar amerykański' },
   { code: 'EUR', label: 'EUR - Euro' },
-  { code: 'GBP', label: 'GBP - British Pound' },
+  { code: 'GBP', label: 'GBP - Funt brytyjski' },
 ] as const;

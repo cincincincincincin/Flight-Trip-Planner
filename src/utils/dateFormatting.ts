@@ -2,9 +2,7 @@ import dayjs from '../lib/dayjs';
 import { UI_SYMBOLS } from '../constants/ui';
 
 /**
- * [STRATEGIA DAT]: Pełna migracja na Day.js.
- * Eliminujemy "haki" oparte na lokalach (en-CA, sv-SE) na rzecz 
- * profesjonalnej biblioteki obsługującej strefy czasowe.
+ * Pełna migracja na bibliotekę Day.js dla obsługi dat i stref czasowych.
  */
 
 // Formatuje godzinę (HH:mm) w zadanej strefie czasowej
@@ -33,9 +31,12 @@ export const formatDurationMs = (ms: number): string => {
   const h = Math.floor((totalMinutes % mInDay) / 60);
   const m = totalMinutes % 60;
 
-  if (d > 0) return `${d}d ${h}h ${m}m`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
+  const parts = [];
+  if (d > 0) parts.push(`${d}d`);
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0 || (d === 0 && h === 0)) parts.push(`${m}m`);
+
+  return parts.join(' ');
 };
 
 // Czas trwania lotu między dwoma datami ISO
@@ -55,7 +56,6 @@ export const getDurationMs = (from: string | undefined, to: string | undefined):
 /** Zwraca datę w formacie YYYY-MM-DD w zadanej strefie czasowej. */
 export const getIsoDate = (date: Date | string, tz?: string): string => {
   if (!date) return '';
-  // [LEGACY COMPAT]: Jeśli dostajemy string bez 'Z'/'T' (z API), traktujemy go jako UTC.
   const d = (typeof date === 'string' && !date.includes('Z') && !date.includes('T'))
     ? dayjs.utc(date)
     : dayjs(date);
@@ -126,7 +126,7 @@ export const getLegArrivalUTC = (leg: any, coordsMap: Record<string, [number, nu
   return null;
 };
 
-// Pobiera czas przylotu ostatniego "prawdziwego" (nie-manualnego) odcinka podróży (z estymacją v24.70)
+// Pobiera czas przylotu ostatniego "prawdziwego" (nie-manualnego) odcinka podróży (z estymacją czasu lotu)
 export const getTripCurrentArrivalTimeUTC = (tripState: { legs: any[] } | null, coordsMap: Record<string, [number, number]> = {}): string | null => {
   if (!tripState?.legs?.length) return null;
   for (let i = tripState.legs.length - 1; i >= 0; i--) {

@@ -4,11 +4,12 @@ import { useMapStore } from '../stores/mapStore';
 import { useColorStore } from '../stores/colorStore';
 import { buildPrefsSnapshot } from '../utils/prefsUtils';
 import { savePreferences } from '../api/preferences';
+import { logger } from '../utils/logger';
 
 /**
- * Unified Session Synchronization Hook.
- * Synchronizes local settings to the database only when the user leaves the page
- * or refreshes, and only if changes were made (Dirty Checking).
+ * HOOK SYNCHRONIZACJI SESYJNEJ (Session Sync Controller)
+ * Synchronizuje lokalne ustawienia użytkownika z bazą danych tylko w kluczowych momentach 
+ * (np. zamknięcie karty, zmiana widoczności strony), wykorzystując mechanizm Dirty Checking.
  */
 export const useSettingsSync = () => {
   const syncLockRef = useRef(false);
@@ -19,8 +20,8 @@ export const useSettingsSync = () => {
       if (syncLockRef.current) return;
 
       const { savedSnapshot, updateSettings } = useSettingsStore.getState();
-      
-      // 1. Build current state snapshot
+
+      // 1. Budujemy migawkę aktualnego stanu (Snapshot) ze wszystkich magazynów
       const currentSnap = buildPrefsSnapshot(
         useSettingsStore.getState(),
         useMapStore.getState(),
@@ -28,28 +29,32 @@ export const useSettingsSync = () => {
       );
       const currentSnapStr = JSON.stringify(currentSnap);
 
-      // 2. Dirty Check: Only sync if current state differs from last known saved/loaded state
+      // 2. DIRTY CHECK: Synchronizuj tylko jeśli obecny stan różni się od ostatnio zapisanego
       if (!savedSnapshot || currentSnapStr === savedSnapshot) {
         return;
       }
 
       try {
         syncLockRef.current = true;
-        console.log('[SETTINGS] Session sync triggered (dirty state detected)...');
+        logger.log('[SETTINGS] Rozpoczęto synchronizację sesji (wykryto zmiany)...');
 
-        // 3. Save to database
+        // 3. Zapis do bazy danych (Supabase)
         await savePreferences(currentSnap);
 
-        // 4. Update local "baseline" to avoid redundant saves
+        // 4. Aktualizacja lokalnego "punktu odniesienia" (baseline), aby uniknąć nadmiarowych zapisów
         updateSettings({ savedSnapshot: currentSnapStr });
 
       } catch (err) {
-        console.warn('[SETTINGS] Session sync failed:', err);
+        logger.warn('[SETTINGS] Synchronizacja sesji nie powiodła się:', err);
       } finally {
         syncLockRef.current = false;
       }
     };
 
+    /**
+     * OBSŁUGA CYKLU ŻYCIA PRZEGLĄDARKI
+     * Nasłuchujemy zdarzeń, które sugerują kończenie sesji użytkownika.
+     */
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         handleSync();

@@ -4,7 +4,7 @@ type MapLibreMap = maplibregl.Map;
 
 /**
  * Inicjalizuje źródła i warstwy dla tras (selekcja i podróż).
- * ZERO WASTE: Dodaje tylko jeśli nie istnieją, zapobiegając błędom duplikacji przy przełączaniu stylów.
+ * Dodaje tylko jeśli nie istnieją, zapobiegając błędom duplikacji.
  */
 export const setupRouteLayers = (map: MapLibreMap) => {
   if (!map || !map.isStyleLoaded()) return;
@@ -26,7 +26,7 @@ export const setupRouteLayers = (map: MapLibreMap) => {
     }
   });
 
-  // 2. WARSTWA DLA WYBRANYCH TRAS (Wyszukiwanie/Hover) - LINIA CIĄGŁA
+  // 2. Warstwa wybranych tras - linia ciągła
   if (!map.getLayer('selected-routes')) {
     map.addLayer({
       id: 'selected-routes',
@@ -37,12 +37,11 @@ export const setupRouteLayers = (map: MapLibreMap) => {
         'line-color': '#3b82f6',
         'line-width': 3,
         'line-opacity': 0.8,
-        // Usunięto line-dasharray - teraz linia jest ciągła
       },
     });
   }
 
-  // 3. WARSTWA DLA TRWAŁEJ PODRÓŻY (Główna linia trasy) - LINIA PRZERYWANA
+  // 3. Warstwa trwałej podróży - linia przerywana
   if (!map.getLayer('trip-permanent-routes')) {
     map.addLayer({
       id: 'trip-permanent-routes',
@@ -53,12 +52,12 @@ export const setupRouteLayers = (map: MapLibreMap) => {
         'line-color': '#10b981',
         'line-width': 4,
         'line-opacity': 0.9,
-        'line-dasharray': [0.5, 2], // Linia przerywana dla zatwierdzonej podróży
+        'line-dasharray': [0.5, 2],
       },
     });
   }
 
-  // 4. WARSTWA PODGLĄDU PRZESIADEK (Transfer Preview) - LINIA PRZERYWANA
+  // 4. Warstwa podglądu przesiadek - linia przerywana
   if (!map.getLayer('manual-transfer-preview')) {
     map.addLayer({
       id: 'manual-transfer-preview',
@@ -69,7 +68,7 @@ export const setupRouteLayers = (map: MapLibreMap) => {
         'line-color': '#f59e0b',
         'line-width': 3,
         'line-opacity': 0.7,
-        'line-dasharray': [2, 2], // Linia przerywana dla podglądu
+        'line-dasharray': [2, 2],
       },
     });
   }
@@ -77,7 +76,7 @@ export const setupRouteLayers = (map: MapLibreMap) => {
 
 /**
  * Bezpiecznie usuwa wszystkie warstwy i źródła tras.
- * Wywoływane przed zmianą stylu, aby zapobiec konfliktom w silniku Placement.
+ * Wywoływane przed zmianą stylu.
  */
 export function removeRouteLayers(map: MapLibreMap): void {
   const routeLayers = [

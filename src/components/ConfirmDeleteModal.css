@@ -1,6 +1,4 @@
-/* ═══════════════════════════════════════════════════════════════
-   CONFIRM DELETE MODAL
-   ═══════════════════════════════════════════════════════════════ */
+/* Okno potwierdzenia usunięcia (Confirm Delete Modal) */
 
 .confirm-delete-overlay {
   position: fixed;

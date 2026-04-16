@@ -9,7 +9,7 @@ interface DateInputProps {
   value: string;
   onChange: (value: string) => void;
   timezone?: string;
-  minDate?: string; // YYYY-MM-DD, overrides today as the minimum selectable date
+  minDate?: string; // YYYY-MM-DD, nadpisuje dzisiejszą datę jako minimalną możliwą do wybrania
 }
 
 const DateInput = ({ value, onChange, timezone, minDate: minDateProp }: DateInputProps) => {
@@ -56,7 +56,7 @@ const DateInput = ({ value, onChange, timezone, minDate: minDateProp }: DateInpu
     return (date.isSame(min) || date.isAfter(min)) && (date.isSame(max) || date.isBefore(max));
   };
 
-  // Initialize with value or today
+  // Inicjalizacja z przekazaną wartością lub dzisiejszą datą
   useEffect(() => {
     if (value) {
       const d = dayjs(value).startOf('day');
@@ -73,7 +73,7 @@ const DateInput = ({ value, onChange, timezone, minDate: minDateProp }: DateInpu
     }
   }, [value, dateRange]);
 
-  // Close picker when clicking outside
+  // Zamknij kalendarz przy kliknięciu poza komponentem
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -85,7 +85,7 @@ const DateInput = ({ value, onChange, timezone, minDate: minDateProp }: DateInpu
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Update cursor position
+  // Aktualizacja pozycji kursora
   useEffect(() => {
     if (inputRef.current && editMode) {
       let start, end;
@@ -148,7 +148,7 @@ const DateInput = ({ value, onChange, timezone, minDate: minDateProp }: DateInpu
       if (editPosition === 0) {
         if (digit > 3) {
           const nD = digit;
-          // Find first valid month/year for this day
+          // Znajdź pierwszy poprawny miesiąc/rok dla tego dnia
           for (let i = 0; i < 12; i++) {
             const test = dayjs(`${curYear}-${curMonth}-${nD}`, 'YYYY-MM-DD').add(i, 'month');
             if (test.isValid() && (test.isSame(min) || test.isAfter(min)) && (test.isSame(max) || test.isBefore(max))) {
@@ -228,9 +228,9 @@ const DateInput = ({ value, onChange, timezone, minDate: minDateProp }: DateInpu
     const endOfMonth = currentMonth.endOf('month');
     const daysInMonth = currentMonth.daysInMonth();
     
-    // Dayjs weekday: 0 (Sun) to 6 (Sat)
+    // Dzień tygodnia Dayjs: 0 (Niedz) do 6 (Sob)
     let startDay: number = startOfMonth.day(); 
-    // Adjust to Mon-Sun
+    // Dostosowanie do układu Pon-Niedz
     startDay = startDay === 0 ? 6 : startDay - 1;
 
     const days = [];

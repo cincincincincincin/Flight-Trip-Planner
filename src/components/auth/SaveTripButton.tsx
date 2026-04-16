@@ -20,12 +20,11 @@ const SaveTripButton: React.FC = () => {
     [tripState]
   );
 
-  // All hooks must come before any conditional return.
-  // We pass stateJSON through mutation variables so onSuccess uses the exact client JSON
-  // (server may reformat trip_state, causing a spurious mismatch if we used data.trip_state).
+  // Hooki mutations muszą być przed warunkowym returnem.
+  // Przekazujemy stateJSON przez zmienne mutacji dla spójności.
   const saveMutation = useMutation<SavedTrip, Error, { name: string; stateJSON: string }>({
     mutationFn: ({ name, stateJSON }: { name: string; stateJSON: string }) => {
-      void stateJSON; // carried via variables, not used here
+      void stateJSON; // Przenoszone przez zmienne
       return saveTrip({ name, trip_state: tripState! });
     },
     onSuccess: (data, { stateJSON }) => {
@@ -48,7 +47,7 @@ const SaveTripButton: React.FC = () => {
   const hasChanges = currentStateJSON !== null && currentStateJSON !== savedTripStateJSON;
   const isUpdate = savedTripId !== null && (editMode || !isLoadedTrip);
 
-  // Hide the button entirely when there are no changes to save/update
+  // Ukrywamy przycisk, jeśli nie ma zmian
   if (!tripState || !hasChanges) return null;
 
   const isPending = saveMutation.isPending || updateMutation.isPending;

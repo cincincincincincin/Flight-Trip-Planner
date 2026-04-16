@@ -1,20 +1,18 @@
-/* ═══════════════════════════════════════════════════════════════
-   FLIGHTS FILTER
-   ═══════════════════════════════════════════════════════════════ */
+/* Filtry lotów (Flights Filter) */
 
 .flights-filter {
   display: flex;
   flex-direction: column;
   gap: 0;
   flex-shrink: 0;
-  /* Nesting level backgrounds (black overlays on light theme) */
-  --ff-l1: var(--bg-hover);        /* expanded country header + all cities */
-  --ff-l2: rgba(0, 0, 0, 0.09);    /* expanded city header */
-  --ff-l3: rgba(0, 0, 0, 0.12);    /* airports in expanded city */
-  --ff-hover: rgba(0, 0, 0, 0.15); /* hover on any row */
+  /* Kolory tła dla poziomów zagnieżdżenia (nakładki na jasny motyw) */
+  --ff-l1: var(--bg-hover);        /* Nagłówek rozwiniętego kraju + wszystkie miasta */
+  --ff-l2: rgba(0, 0, 0, 0.09);    /* Nagłówek rozwiniętego miasta */
+  --ff-l3: rgba(0, 0, 0, 0.12);    /* Lotniska w rozwiniętym mieście */
+  --ff-hover: rgba(0, 0, 0, 0.15); /* Hover na dowolnym wierszu */
 }
 
-/* ── Header ──────────────────────────────────────────────────── */
+/* Nagłówek */
 .ff-header {
   display: flex;
   align-items: center;
@@ -79,7 +77,7 @@
   color: var(--text-inverse);
 }
 
-/* ── Body ────────────────────────────────────────────────────── */
+/* Zawartość filtra */
 .ff-body {
   display: flex;
   flex-direction: column;
@@ -87,7 +85,7 @@
   margin-top: 6px;
 }
 
-/* ── Chips ───────────────────────────────────────────────────── */
+/* Etykiety aktywnych filtrów (Chips) */
 .ff-chips {
   display: flex;
   flex-wrap: nowrap;
@@ -135,7 +133,7 @@
 
 .ff-chip button:hover { opacity: 1; }
 
-/* ── Section title ───────────────────────────────────────────── */
+/* Tytuł sekcji */
 .ff-section-title {
   font-size: 10px;
   font-weight: 700;
@@ -146,7 +144,7 @@
   margin-bottom: 5px;
 }
 
-/* ── Destination section ─────────────────────────────────────── */
+/* Sekcja kierunków (Destinations) */
 .ff-dest-section {
   position: relative;
 }
@@ -176,7 +174,7 @@
   box-shadow: var(--accent-glow);
 }
 
-/* ── Results dropdown ────────────────────────────────────────── */
+/* Wyniki wyszukiwania kierunków */
 .ff-results {
   position: absolute;
   top: calc(100% + 3px);
@@ -191,7 +189,7 @@
   overflow-y: auto;
 }
 
-/* ── Section inside results ──────────────────────────────────── */
+/* Podsekcje wewnątrz wyników */
 .ff-section { padding: 4px 0; }
 
 .ff-section-label {
@@ -204,7 +202,7 @@
   letter-spacing: 0.10em;
 }
 
-/* ── Items ───────────────────────────────────────────────────── */
+/* Elementy listy */
 .ff-item {
   display: flex;
   align-items: center;
@@ -251,38 +249,38 @@
   flex-shrink: 0;
 }
 
-/* ── Nested items ────────────────────────────────────────────── */
+/* Zagnieżdżone elementy */
 .ff-country-wrapper { border-bottom: 1px solid var(--border); }
 .ff-country-wrapper:last-child { border-bottom: none; }
 
 .ff-country { font-weight: 600; }
 
-/* Country when expanded: permanent bg L1 */
+/* Kraj po rozwinięciu: stałe tło L1 */
 .ff-country--expanded { background: var(--ff-l1); }
 
-/* All cities in expanded country: same permanent bg L1 */
+/* Wszystkie miasta w rozwniętym kraju: stałe tło L1 */
 .ff-country--expanded + .ff-cities-list .ff-city { background: var(--ff-l1); }
 
-/* Expanded city: permanent bg L2 (same specificity as above, comes after → wins) */
+/* Rozwinięte miasto: stałe tło L2 */
 .ff-country--expanded + .ff-cities-list .ff-city--expanded { background: var(--ff-l2); }
 
-/* Single airport city: permanent bg L3 */
+/* Miasto z jednym lotniskiem: stałe tło L3 */
 .ff-country--expanded + .ff-cities-list .ff-city--single-airport { background: var(--ff-l3); }
 
-/* Hover on any country: ff-hover (same spec as ff-item:hover, comes after → wins) */
+/* Hover na dowolnym kraju: ff-hover */
 .ff-country:hover { background: var(--ff-hover); }
 
-/* Hover on country → all cities + airports */
+/* Hover na kraju → wszystkie miasta + lotniska */
 .ff-country:hover + .ff-cities-list .ff-city { background: var(--ff-hover); }
 .ff-country:hover + .ff-cities-list .ff-airport { background: var(--ff-hover); }
 
-/* Hover on any city */
+/* Hover na dowolnym mieście */
 .ff-country--expanded + .ff-cities-list .ff-city:hover { background: var(--ff-hover); }
 
-/* Hover on expanded city (same spec as above, comes after → wins for expanded) */
+/* Hover na rozwiniętym mieście */
 .ff-country--expanded + .ff-cities-list .ff-city--expanded:hover { background: var(--ff-hover); }
 
-/* Hover on single airport city */
+/* Hover na mieście z jednym lotniskiem */
 .ff-country--expanded + .ff-cities-list .ff-city--single-airport:hover { background: var(--ff-hover); }
 
 .ff-city--coral-line {
@@ -317,34 +315,34 @@
   border-left: 2px solid var(--c-coral-b);
 }
 
-/* Airports in expanded city: L3 — darker than city (L2), lighter than hover */
+/* Lotniska w rozwniętym mieście: tło L3 — ciemniejsze niż miasto (L2), jaśniejsze niż hover */
 .ff-city--expanded + .ff-nested .ff-airport { background: var(--ff-l3); }
 
-/* Hover on expanded city → airports */
+/* Hover na rozwiniętym mieście → lotniska */
 .ff-city--expanded:hover + .ff-nested .ff-airport { background: var(--ff-hover); }
 
-/* Hover directly on airport */
+/* Hover bezpośrednio na lotnisku */
 .ff-city--expanded + .ff-nested .ff-airport:hover { background: var(--ff-hover); }
 
 .ff-city {
   font-size: 13px;
-  padding-left: 18px;  /* 8px original + 10px compensates for -10px margin */
-  margin-left: -10px;  /* extend past cities-list border (2px) + margin (8px) → full-width row */
+  padding-left: 18px;  /* 8px podstawowe + 10px kompensacji za ujemny margines */
+  margin-left: -10px;  /* rozszerzenie wiersza poza obramowanie listy miast */
 }
 
 .ff-airport {
   font-size: 13px;
   color: var(--text-secondary);
-  padding-left: 4px;   /* kept for exact-match airports outside ff-nested */
+  padding-left: 4px;   /* zachowane dla lotnisk spoza ff-nested */
 }
 
-/* Airports inside expanded city: full-width row + indent equiv to one expand button */
+/* Lotniska wewnątrz rozwiniętego miasta: wiersz o pełnej szerokości + wcięcie */
 .ff-nested .ff-airport {
-  margin-left: -26px;  /* extend past nested border (2px) + margin (14px) + cities-list border (2px) + margin (8px) */
-  padding-left: 52px;  /* 4px original + 26px compensation + 22px button-equiv indent */
+  margin-left: -26px;  /* rozszerzenie wiersza poza obramowania zagnieżdżone */
+  padding-left: 52px;  /* 4px podstawowe + 26px kompensacji + 22px wcięcie dla ikony rozwinięcia */
 }
 
-/* ── Airlines section ────────────────────────────────────────── */
+/* Sekcja linii lotniczych (Airlines) */
 .ff-airline-section { padding-top: 4px; }
 
 .ff-airlines {

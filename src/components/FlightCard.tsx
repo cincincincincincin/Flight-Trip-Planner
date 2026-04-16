@@ -2,7 +2,6 @@ import React, { useState, useMemo, memo, forwardRef } from 'react';
 import type { Flight } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSelectionStore } from '../stores/selectionStore';
-import { useFilterStore } from '../stores/filterStore';
 import { useAirportsQuery, useAirportInfoQuery, useFlightOffersQuery, useAirportCoordsMap, useAirportNamesMap } from '../hooks/queries';
 import './FlightCard.css';
 import { useTexts } from '../hooks/useTexts';
@@ -17,11 +16,11 @@ interface FlightCardProps {
   tripHighlight?: string;
   onAddToTrip?: (flight: Flight) => void;
   hideAddToTrip?: boolean;
-  displayTimezone?: string;   // the selected display timezone
-  airportTimezone?: string;   // the departure airport's own timezone
-  isExpanded?: boolean;       // controlled expansion from parent
+  displayTimezone?: string;   // wybrana strefa czasowa wyświetlania
+  airportTimezone?: string;   // strefa czasowa lotniska wylotu
+  isExpanded?: boolean;       // kontrolowane rozwijanie z rodzica
   onToggleExpand?: () => void;
-  isAirportLoaded?: boolean;  // whether the airport schedule is fully loaded
+  isAirportLoaded?: boolean;  // czy rozkład lotniska został w pełni załadowany
 }
 
 const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHighlight, onAddToTrip, hideAddToTrip = false, displayTimezone, airportTimezone, isExpanded = false, onToggleExpand, isAirportLoaded = true }, ref) => {
@@ -32,13 +31,12 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
     return dayjs(flight.scheduled_departure_utc).isBefore(dayjs());
   }, [flight.scheduled_departure_utc]);
 
-  const showPrices = isExpanded && !isDeparted; // controlled by parent, but blocked if departed
+  const showPrices = isExpanded && !isDeparted; // kontrolowane przez rodzica, blokowane jeśli lot już się odbył
 
   /**
-   * INŻYNIERSKI SMAK: Optymalizacja O(N) -> O(1).
-   * Zamiast budować mapy współrzędnych i nazw wewnątrz każdej karty (co przy 100+ lotach
-   * powodowało drastyczny spadek wydajności), korzystamy z globalnych, zmemoizowanych
-   * hooków z queries.ts. Każda karta pobiera dane w czasie stałym.
+   * OPTYMALIZACJA WYDAJNOŚCI: O(N) -> O(1).
+   * Korzystamy z globalnych, zmemoizowanych hooków, aby uniknąć redundancji
+   * i zapewnić płynne renderowanie przy dużej liczbie kart.
    */
   const airportCoordsMap = useAirportCoordsMap();
   const airportCityNameMap = useAirportNamesMap();
@@ -60,12 +58,12 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
     showPrices,
   );
 
-  // Serwer zwraca teraz bezpośrednio pojedynczą, najlepszą ofertę (Single-Offer)
+  // Serwer zwraca pojedynczą, najlepszą ofertę
   const priceData = offersResponse;
 
-  // Price parameters
+  // Parametry ceny
 
-  // Compute origin timezone offset relative to display timezone (at departure time)
+  // Oblicz przesunięcie strefy czasowej wylotu względem wybranej strefy wyświetlania
   const originTzOffsetHours = useMemo(() => {
     if (!displayTimezone || !airportTimezone || airportTimezone === displayTimezone) return null;
     return computeTzDiff(flight.scheduled_departure_utc ?? '', displayTimezone, airportTimezone);
@@ -83,9 +81,8 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
     return (localAsUTC.getTime() - utcDate.getTime()) / (1000 * 60 * 60);
   };
 
-  // Departure time: always show in the departure airport's own local timezone.
-  // Uses UTC → airportTimezone conversion when available; falls back to the local string
-  // (which is already in the airport's local time) or the display timezone.
+  // Czas wylotu: zawsze w lokalnej strefie czasowej lotniska wylotu.
+  // Wykorzystuje konwersję UTC → lokalna strefa, jeśli dostępna.
   const depTimeStr = (() => {
     if (airportTimezone && flight.scheduled_departure_utc)
       return formatTime(flight.scheduled_departure_utc, airportTimezone);
@@ -100,8 +97,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
     return flight.scheduled_departure_utc ? formatTime(flight.scheduled_departure_utc, 'UTC') : null;
   }, [flight.scheduled_departure_utc]);
 
-  // Arrival time: always show in the destination airport's own local time.
-  // scheduled_arrival_local is already stored in destination-local time.
+  // Czas przylotu: zawsze w lokalnej strefie czasowej lotniska docelowego.
   const { data: destAirportInfo } = useAirportInfoQuery(flight.destination_airport_code ?? null);
 
   const estimatedArrUTC = useMemo(() => {
@@ -125,7 +121,9 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
     if (diff <= 0) return null;
     const h = Math.floor(diff / 3600000);
     const m = Math.floor((diff % 3600000) / 60000);
-    return `${UI_SYMBOLS.ESTIMATED}${h}h ${m}m`;
+    const parts = [`${UI_SYMBOLS.ESTIMATED}${h}h`];
+    if (m > 0) parts.push(`${m}m`);
+    return parts.join(' ');
   }, [isArrivalEstimated, estimatedArrUTC, flight.scheduled_departure_utc]);
 
   const destTimezone = destAirportInfo?.time_zone ?? displayTimezone;
@@ -141,7 +139,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
     if (flight.scheduled_arrival_utc && displayTimezone)
       return formatTime(flight.scheduled_arrival_utc, displayTimezone);
     if (estimatedArrUTC) {
-      // Wait for destination timezone before showing to avoid flickering wrong time
+      // Czekaj na strefę czasową docelową, aby uniknąć migotania błędnego czasu
       if (!destAirportInfo) return null;
       return formatTime(estimatedArrUTC, destTimezone);
     }
@@ -150,10 +148,9 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
 
   const depOffset = getUTCOffsetHours(flight.scheduled_departure_local ?? '', flight.scheduled_departure_utc ?? '');
   const arrOffset = getUTCOffsetHours(flight.scheduled_arrival_local ?? '', flight.scheduled_arrival_utc ?? '');
-  // Always show the timezone difference between dep and arr airports so the user can
-  // reconcile "4h flight but only 2h time difference" etc.
+  // Pokazujemy różnicę stref czasowych między lotniskami
   const tzDiff = (depOffset !== null && arrOffset !== null) ? arrOffset - depOffset : null;
-  const tzLabel = tzDiff !== null ? formatTzDiff(tzDiff) : null;
+  const tzLabel = (tzDiff !== null && tzDiff !== 0) ? formatTzDiff(tzDiff) : null;
 
   const depDateStr = (() => {
     if (airportTimezone && flight.scheduled_departure_utc)
@@ -193,18 +190,10 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
 
   const noPricesAvailable = showPrices && !priceLoading && !priceError && !priceData;
 
-  const { setDestinationFilter } = useFilterStore();
-
-  const handleCardClick = () => {
-    if (!flight.destination_airport_code) return;
-    setDestinationFilter({ airports: [flight.destination_airport_code.toUpperCase()], cities: [], countries: [] });
-  };
-
   return (
     <div 
-      className={`flight-card flight-card--clickable${tripHighlight ? ` flight-card--trip-${tripHighlight}` : ''}`} 
+      className={`flight-card${tripHighlight ? ` flight-card--trip-${tripHighlight}` : ''}`} 
       ref={ref}
-      onClick={handleCardClick}
     >
       <div className="flight-header">
         <div className="flight-number">
@@ -217,7 +206,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
         <div className="airport origin">
           <div className="airport-code">
             {flight.origin_airport_code}
-            {originTzOffsetHours !== null && (
+            {originTzOffsetHours !== null && originTzOffsetHours !== 0 && (
               <span className={`origin-tz-diff ${originTzOffsetHours > 0 ? 'positive' : 'negative'}`}>
                 ({originTzOffsetHours > 0 ? '+' : ''}{Math.round(originTzOffsetHours)}h)
               </span>
@@ -261,7 +250,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
               <div className="time-value">
                 {isArrivalEstimated ? (
                   <>
-                {estimatedArrTzDiff !== null && (
+                {estimatedArrTzDiff !== null && estimatedArrTzDiff !== 0 && (
                   <span className={`tz-diff ${estimatedArrTzDiff > 0 ? 'positive' : 'negative'}`}>
                     ({formatTzDiff(estimatedArrTzDiff)})
                   </span>
@@ -277,7 +266,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(({ flight, tripHi
                   </>
                 ) : (
                   <>
-                    {tzDiff !== null && (
+                    {tzDiff !== null && tzDiff !== 0 && (
                       <span className={`tz-diff ${(tzDiff ?? 0) > 0 ? 'positive' : 'negative'}`}>
                         ({formatTzDiff(tzDiff)})
                       </span>

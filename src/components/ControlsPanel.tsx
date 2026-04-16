@@ -18,13 +18,12 @@ interface ControlsPanelProps {
 
 const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
   const t = useTexts();
-  // showRoutes, setShowRoutes,
   const mapStyle = useMapStore(s => s.mapStyle);
   const setMapStyleStore = useMapStore(s => s.setMapStyle);
   const globeMode = useMapStore(s => s.globeMode);
   const setGlobeModeStore = useMapStore(s => s.setGlobeMode);
 
-  // RACE-CONDITION GUARD: Local debounce to prevent state thrashing
+  // ZABEZPIECZENIE PRZED WYŚCIGIEM: Lokalny debouncing zapobiegający zbyt częstym zmianom stanu
   const lastActionTimeRef = useRef(0);
   const ACTION_DEBOUNCE_MS = 400;
   const [isUpdating, setIsUpdating] = useState(false);
@@ -167,7 +166,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
           </div>
         </div>
 
-        {/* Przycisk Customize Styles */}
+        {/* Przycisk dostosowywania stylów */}
         <button
           className={`color-settings-toggle ${showColorSettings ? 'active' : ''}`}
           onClick={() => setShowColorSettings(v => !v)}
@@ -175,10 +174,10 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
           {showColorSettings ? t.controls.hideStyles : t.controls.customizeStyles}
         </button>
 
-        {/* Sekcja Customize Styles – bez suwaków (showSizes={false}) */}
+        {/* Sekcja dostosowywania stylów – bez suwaków rozmiarów (showSizes={false}) */}
         {showColorSettings && <ColorSettings showSizes={false} />}
 
-        {/* Przycisk Developer – teraz na końcu */}
+        {/* Przycisk panelu deweloperskiego */}
         <button
           className={`color-settings-toggle ${showDeveloper ? 'active' : ''}`}
           onClick={() => setShowDeveloper(v => !v)}
@@ -186,7 +185,7 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
           {showDeveloper ? t.controls.hideDeveloper : t.controls.developer}
         </button>
 
-        {/* Zawartość developera */}
+        {/* Zawartość panelu deweloperskiego */}
         {showDeveloper && (
           <div className="developer-section">
             <div className="control-group">

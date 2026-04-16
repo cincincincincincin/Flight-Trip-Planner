@@ -1,6 +1,4 @@
-/* ═══════════════════════════════════════════════════════════════
-   FLIGHTS LIST
-   ═══════════════════════════════════════════════════════════════ */
+/* Lista lotów (Flights List) */
 
 .flights-list {
   display: flex;
@@ -10,7 +8,7 @@
   overflow: hidden;
 }
 
-/* ── List header ─────────────────────────────────────────────── */
+/* Nagłówek listy */
 .flights-header {
   display: flex;
   align-items: center;
@@ -88,10 +86,10 @@
   cursor: not-allowed;
 }
 
-/* ── Virtuoso wrapper ────────────────────────────────────────── */
+/* Kontener Virtuoso (Wirtualna lista) */
 .flights-virtuoso-wrapper {
   flex: 1;
-  min-height: 300px; /* FORCE VISIBILITY: Prevent Virtuoso from collapsing to 0px and halting render */
+  min-height: 300px; /* WYMUSZENIE WIDOCZNOŚCI: Zapobiega zapadaniu się Virtuoso do 0px */
   overflow: hidden;
 }
 
@@ -99,7 +97,7 @@
   height: 100%;
 }
 
-/* ── Loading footer ──────────────────────────────────────────── */
+/* Stopka ładowania */
 .loading-more {
   display: flex;
   align-items: center;
@@ -111,7 +109,7 @@
   flex-direction: column;
 }
 
-/* ── Spinner ─────────────────────────────────────────────────── */
+/* Wskaźnik ładowania (Spinner) */
 .spinner {
   width: 18px;
   height: 18px;
@@ -124,7 +122,7 @@
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Empty / error states ────────────────────────────────────── */
+/* Stany puste i błędy */
 .no-flights {
   display: flex;
   flex-direction: column;

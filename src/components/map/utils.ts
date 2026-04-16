@@ -1,8 +1,10 @@
 /**
- * MODUŁ NARZĘDZIOWY MAPY (utils.ts - WERSJA ATOMYCZNA v9.2)
+ * MODUŁ NARZĘDZIOWY MAPY
  */
 
+import maplibregl from 'maplibre-gl';
 import { THEME_COLORS } from '../../constants/theme';
+import { logger } from '../../utils/logger';
 
 interface LabelPaint {
   textColor: string;
@@ -10,7 +12,30 @@ interface LabelPaint {
   haloWidth: number;
 }
 
-/** Helper dla bezpiecznych liczb (v10.6+) */
+/**
+ * BEZPIECZNE USTAWIANIE LIMITÓW ZOOMU
+ * Zapobiega błędowi "minZoom must be between -2 and current maxZoom", 
+ * dobierając kolejność wywołań zależnie od kierunku przesunięcia zakresu.
+ */
+export const safeSetZoomLimits = (mapInstance: maplibregl.Map, zMin: number, zMax: number) => {
+  try {
+    if (!mapInstance) return;
+    const currentMax = mapInstance.getMaxZoom();
+    if (zMin > currentMax) {
+      // Nowy min jest powyżej obecnego max -> najpierw podnosimy sufit
+      mapInstance.setMaxZoom(zMax);
+      mapInstance.setMinZoom(zMin);
+    } else {
+      // W przeciwnym razie bezpiecznie ustawiamy podłogę, a potem sufit
+      mapInstance.setMinZoom(zMin);
+      mapInstance.setMaxZoom(zMax);
+    }
+  } catch (e) {
+    logger.warn("[GPU_SYNC] Nie udało się bezpiecznie zaktualizować limitów zoomu", e);
+  }
+};
+
+/** Helper dla bezpiecznych liczb */
 export const n = (v: any, fallback: number): number => {
   const num = Number(v);
   return isNaN(num) ? fallback : num;
@@ -44,7 +69,7 @@ export const generateGreatCircle = (
     let lon = toDeg(Math.atan2(y, x));
     const lat = toDeg(Math.atan2(z, Math.sqrt(x * x + y * y)));
     
-    // ANTIMERIDIAN WRAP FIX (v11.57):
+    // KOREKTA PRZEJŚCIA PRZEZ POŁUDNIK 180:
     // Jeśli skok długości geograficznej jest zbyt duży (>180), "odwijamy" ją,
     // aby zachować ciągłość linii dla silnika GPU.
     while (lon - prevLon > 180) lon -= 360;
@@ -85,7 +110,7 @@ export const airportLabelField = (lang: string, isHubMode: boolean = false): any
   return [
     'step',
     ['zoom'],
-    // 1. PONIŻEJ ZOOM 4.2: Tylko huby (>1 lotnisko) lub podświetlone (v11.44)
+    // 1. PONIŻEJ ZOOM 4.2: Tylko huby (>1 lotnisko) lub podświetlone
     ['case',
       ['has', 'h_color'], lblSearch,
       ['>', ['coalesce', ['get', 'city_airport_count'], 0], 1], lblGrouped,
@@ -108,7 +133,7 @@ export const airportLabelField = (lang: string, isHubMode: boolean = false): any
 };
 
 /**
- * Logika etykiet hybrydowych (v11.52)
+ * Logika etykiet hybrydowych
  * Do użytku w warstwie Highlighted/Selected.
  * Zawsze pokazuje Miasto + Lotnisko, z kodem dopiero przy przybliżeniu.
  */
@@ -123,9 +148,9 @@ export const airportHighlightedLabelField = (): any => {
 };
 
 /**
- * Bezpieczne łączenie filtrów (v9.3)
- * Łączy wiele filtrów w jeden 'all' blok, rozpakowując istniejące 'all'.
- * Obsługuje zarówno Expression jak i Legacy syntax (choć preferujemy legacy dla setFilter).
+ * Bezpieczne łączenie filtrów
+ * Łączy wiele filtrów w jeden blok 'all', wypakowując istniejące 'all'.
+ * Obsługuje zarówno nową składnię (Expression), jak i starą (Legacy).
  */
 export const mergeFilterConditions = (...filters: any[]): any => {
   const allConditions: any[] = [];
@@ -141,12 +166,12 @@ export const mergeFilterConditions = (...filters: any[]): any => {
   });
   if (allConditions.length === 0) return true;
   if (allConditions.length === 1) return allConditions[0];
-  // MapLibre REQUIREMENT: Every element after 'all' must be an array (expression)
+  // Wymaganie MapLibre: Każdy element po 'all' musi być tablicą (wyrażeniem)
   return ['all', ...allConditions.filter(c => Array.isArray(c))];
 };
 
 /**
- * Zwraca bezpieczną listę fontów dostępnych w danym stylu (v9.2)
+ * Zwraca bezpieczną listę fontów dostępnych w danym stylu
  * Zapobiega błędom mapy, gdy zdefiniowany font nie istnieje w glifach stylu.
  */
 export const getSafeFontsFromStyle = (map: maplibregl.Map, bold = false): string[] => {
@@ -157,7 +182,7 @@ export const getSafeFontsFromStyle = (map: maplibregl.Map, bold = false): string
 };
 
 /**
- * SNAJPERSKI RADIUS (v11.68 - PURE UTILITY)
+ * OBLICZANIE PROMIENIA WIZUALNEGO
  * Oblicza promień wizualny kropki na podstawie zooma i jej typu.
  * 
  * @param isHover - jeśli true, zwraca promień powiększony (sticky area)
@@ -184,8 +209,11 @@ export const getVisualRadius = (
   const isExp = eac.includes(code);
   const isMan = mtac.includes(code);
 
-  const zMin = n(cS?.zoomRangeMin, 1.3);
-  const zMax = n(cS?.zoomRangeMax, 12);
+  const rawZMin = n(cS?.zoomRangeMin, 1.3);
+  const rawZMax = n(cS?.zoomRangeMax, 12);
+  const zMin = Math.min(rawZMin, rawZMax);
+  const zMax = Math.max(zMin + 0.001, rawZMax);
+
   const t = Math.max(0, Math.min(1, (zoom - zMin) / (zMax - zMin)));
 
   // Wyznaczamy progi na podstawie tego, czy obiekt jest "Ważny" (Enlarged)
@@ -197,11 +225,10 @@ export const getVisualRadius = (
     minR = isHigh ? n(cS?.highlightedAirportHoverRadiusMin, 10) : n(cS?.generalAirportHoverRadiusMin, 6);
     maxR = isHigh ? n(cS?.highlightedAirportHoverRadiusMax, 22) : n(cS?.generalAirportHoverRadiusMax, 14);
   } else {
-    // Promień NORMALNY (Edge)
+    // Promień NORMALNY (Krawędź)
     minR = isHigh ? n(cS?.highlightedAirportRadiusMin, 6) : n(cS?.generalAirportRadiusMin, 2);
     maxR = isHigh ? n(cS?.highlightedAirportRadiusMax, 16) : n(cS?.generalAirportRadiusMax, 8);
   }
 
   return minR + t * (maxR - minR);
 };
-

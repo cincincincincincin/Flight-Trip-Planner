@@ -26,13 +26,13 @@ export const loadPreferencesOnLogin = async (user: User | null): Promise<void> =
   try {
     isSyncing = true;
     
-    // [FIRST-SIGN-IN HEURISTIC]: 
-    // If user is brand new (created_at == last_sign_in_at), we skip the fetch 
-    // as it will absolutely return 404. This saves one network request.
+    // Heurystyka pierwszego logowania: Jeśli użytkownik jest nowy (data utworzenia konta
+    // jest prawie identyczna z datą logowania), pomijamy żądanie do bazy,
+    // oszczędzając czas i zasoby sieciowe.
     if (user && user.last_sign_in_at) {
       const created = new Date(user.created_at).getTime();
       const lastSign = new Date(user.last_sign_in_at).getTime();
-      if (Math.abs(lastSign - created) < 5000) { // 5s threshold for registration
+      if (Math.abs(lastSign - created) < 5000) { // Próg 5 sekund dla rejestracji
         updateLocalSnapshot();
         return;
       }
@@ -41,8 +41,8 @@ export const loadPreferencesOnLogin = async (user: User | null): Promise<void> =
     const prefs = await fetchPreferences();
 
     if (!prefs) {
-      // 404 / null means no preferences yet (first login after registration)
-      // We don't save yet, just mark current local state as "savable" (savedSnapshot = "")
+      // Brak zapisanych preferencji (pierwsze logowanie po rejestracji).
+      // Nie zapisujemy ich jeszcze, tylko oznaczamy stan lokalny jako gotowy do przyszłego zapisu.
       useSettingsStore.getState().updateSettings({ savedSnapshot: "" });
       return;
     }

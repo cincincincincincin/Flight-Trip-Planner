@@ -1,9 +1,11 @@
 /**
- * KOMPONENT MAPY (MapComponent.tsx - WERSJA ATOMYCZNA v9.2)
+ * KOMPONENT MAPY
  * 
  * Implementuje serce systemu: Atomyczny Heartbeat (RAF), który synchronizuje
  * wyświetlanie hovera, ukrywanie bazowych kropek oraz okluzję etykiet.
  */
+
+// Importy
 
 import { forwardRef, useRef, useState, useEffect, useCallback, useMemo, useImperativeHandle } from 'react';
 import maplibregl, { FlyToOptions } from 'maplibre-gl';
@@ -28,15 +30,20 @@ import { setupRouteLayers } from './map/layerSetup';
 import { useMapHover } from './map/useMapHover';
 import type { MapHoverRefs } from './map/useMapHover';
 import { applyMapColors } from './map/colorApplier';
-import { mergeFilterConditions, generateGreatCircle } from './map/utils';
+import { mergeFilterConditions, generateGreatCircle, safeSetZoomLimits } from './map/utils';
 import { useRouteAnimation } from './map/useRouteAnimation';
+import type { GCAnimationBatch } from './map/routeAnimations';
 import { getLocalizedProp } from '../utils/i18n';
 import { getSingleAirportLabel } from './search/searchUtils';
 import { setupRouteHoverListeners } from './map/routeHover';
 import type { RouteHoverRefs } from './map/routeHover';
+import { logger } from '../utils/logger';
 
 import './MapComponent.css';
 
+/**
+ * MapComponentRef - Interfejs do bezpośredniego sterowania mapą bez re-renderów.
+ */
 export interface MapComponentRef {
   flyTo: (options: FlyToOptions) => void;
   getZoom: () => number | undefined;
@@ -47,12 +54,14 @@ export interface MapComponentRef {
 interface MapComponentProps {
   onViewportChange: (viewport: Viewport) => void;
   onSelectItem: (item: SelectedItem) => void;
+  onMapInit?: (map: maplibregl.Map) => void;
   rightPanelRef: React.RefObject<any>;
 }
 
 const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
   onSelectItem,
   onViewportChange,
+  onMapInit,
 }, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -63,11 +72,11 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
   const { tripState, manualTransferAirportCodes } = useTripStore();
   const { language } = useSettingsStore();
   const { destinationFilter } = useFilterStore();
-  
+
   const colorState = useColorStore();
   const { data: airportsData } = useAirportsQuery();
 
-  // Memozidacja mapy współrzędnych dla animacji dróg
+  // Zapamiętywanie współrzędnych dla animacji
   const coordsMap = useMemo(() => {
     if (!airportsData) return undefined;
     const map: Record<string, [number, number]> = {};
@@ -77,13 +86,14 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     return map;
   }, [airportsData]);
 
-  // --- REFERENCJE ATOMYCZNE (Dla pętli Heartbeat) ---
+  // Referencje atomyczne (Dla pętli Heartbeat)
+  // Przechowują szybkozmienne dane (np. przy move mapy) używane w pętli RAF.
   const projectedAirportsRef = useRef<Array<{ code: string; x: number; y: number }>>([]);
   const hoveredAirportCodeRef = useRef<string | null>(null);
   const hoverFeatureDataRef = useRef<any | null>(null);
   const lastDetectedCodeRef = useRef<string | null>(null);
   const applyHoverRef = useRef<((code: string | null) => void) | null>(null);
-  
+
   const mouseStopTimerRef = useRef<any>(null);
   const hoverClearTimerRef = useRef<any>(null);
   const hoverLockUntilRef = useRef<number>(0);
@@ -94,7 +104,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
   const hoveredTransferRouteId = useRef<string | number | null>(null);
   const routeHoverAtPointRef = useRef<((point: { x: number; y: number }) => void) | null>(null);
   const clearRouteHoverRef = useRef<((opts?: { keepLabels?: boolean }) => void) | null>(null);
-  
+
   const airportCityKeyRef = useRef<Record<string, string>>({});
   const cityLabelCodeByCityRef = useRef<Record<string, string>>({});
   const cityLabelCodesRef = useRef<string[]>([]);
@@ -103,21 +113,21 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
   const highlightedAirportsRef = useRef(highlightedAirports);
   const selectedAirportCodesRef = useRef(selectedAirportCodes);
   const tripVisibleAirportCodesRef = useRef<string[] | null>(null);
-  
-  // --- KONTEKST ANIMACJI TRAS (Persistent Memory v12.1-12.4) ---
+
+  // Kontekst animacji tras
   const completedPathsRef = useRef<any[]>([]);
-  const currentAnimatingRef = useRef<any[]>([]);
+  const currentAnimatingRef = useRef<GCAnimationBatch[]>([]);
   const animationRef = useRef<number | null>(null);
   const renderedHighlightedRef = useRef<Set<string>>(new Set());
   const displayedFlightsRef = useRef<Flight[]>([]);
 
-  // --- REFERENCJE ATOMYCZNE (Dla pętli Heartbeat) ---
+  // Referencje atomyczne (Dla pętli Heartbeat)
   const explorationAirportCodesRef = useRef<string[]>([]);
   const manualTransferAirportCodesRef = useRef(manualTransferAirportCodes);
   const airportsDataRef = useRef(airportsData);
   const onSelectItemRef = useRef(onSelectItem);
 
-  // --- REFERENCJE DANYCH LOTÓW (Dla Popupów) ---
+  // Dane lotów dla popupów
   const flightDetailsMap = useRef<Record<string, Flight[]>>({});
   const flightsByRouteGroupMapRef = useRef<Map<string, Flight[]>>(new Map());
   const airportNamesMap = useRef<Record<string, string>>({});
@@ -128,7 +138,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
   useEffect(() => { manualTransferAirportCodesRef.current = manualTransferAirportCodes; }, [manualTransferAirportCodes]);
   useEffect(() => { highlightedAirportsRef.current = highlightedAirports; }, [highlightedAirports]);
   useEffect(() => { selectedAirportCodesRef.current = selectedAirportCodes; }, [selectedAirportCodes]);
-  
+
   useEffect(() => {
     explorationAirportCodesRef.current = explorationItems.flatMap(it => it.airportCodes);
   }, [explorationItems]);
@@ -138,11 +148,16 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
   }, [tripState]);
 
 
+  /**
+   * enrichedAirportsData - Przygotowanie danych dla GPU
+   * 
+   * Wzbogaca surowe lotniska o metadane potrzebne do warstwowego 
+   * wyświetlania (wybór, podróż, priorytety miast).
+   */
   const enrichedAirportsData = useMemo(() => {
     if (!airportsData) return null;
-    console.log("[GPU_SYNC] Enriching airportsData for City Grouping & Sniper Labels...");
-    
-    // 1. Grupowanie po miastach (v11.8)
+
+    // 1. Grupowanie lotnisk według miast
     const cityMap = new Map<string, any[]>();
     airportsData.features.forEach(f => {
       const cityCode = f.properties.city_code || 'UNKNOWN';
@@ -150,17 +165,17 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       cityMap.get(cityCode)!.push(f);
     });
 
-    // 2. Weryfikacja przynależności dla offsetów (v12.8.9)
+    // 2. Pobranie zbiorów dla szybkiej weryfikacji (highlighted, selected, trip)
     const haSet = new Set((highlightedAirports || []).map(c => c.toUpperCase()));
     const sacSet = new Set((selectedAirportCodes || []).map(c => c.toUpperCase()));
     const tvacSet = new Set((tripState?.legs?.flatMap(l => [l.fromAirportCode, l.toAirportCode]) || []).map(c => c.toUpperCase()));
 
-    // --- CITY-LEVEL PRIORITY DETECTION (v13.71/76/24.15) ---
-    const citySelectedIdxMap = new Map<string, number>(); // cityCode -> first startPoint index
+    // Wykrywanie priorytetów miasta
+    // Służy to do wyboru tzw. "lidera etykiety" – jeśli w mieście jest 5 lotnisk, 
+    // pokazujemy domyślnie tylko najważniejsze (według rankingu).
+    const citySelectedIdxMap = new Map<string, number>();
     const cityDestSet = new Set<string>();
     const cityTripSet = new Set<string>();
-    
-    // [NEW 24.15]: Zbiory lotnisk destynacji per miasto do wyliczenia lokalnego lidera
     const cityDestsMap = new Map<string, any[]>();
     const cityTripsMap = new Map<string, any[]>();
 
@@ -183,7 +198,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       }
     });
 
-    // Wyznaczamy "lokalnych liderów" (primary) tylko dla aktywnych warstw
+    // Wyznaczamy liderów dla aktywnych warstw (najwyższy rank w grupie)
     const cityDestPrimaryMap = new Map<string, string>();
     cityDestsMap.forEach((airports, cityCode) => {
       const top = [...airports].sort((a, b) => (b.properties.rank || 0) - (a.properties.rank || 0))[0];
@@ -196,11 +211,21 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       cityTripPrimaryMap.set(cityCode, top.properties.code);
     });
 
-    // 3. Wstrzykiwanie metadanych i PRE-CALC LABELI (v11.13)
+    const citySelectedPrimaryMap = new Map<string, string>();
+    citySelectedIdxMap.forEach((_, cityCode) => {
+      const airports = cityMap.get(cityCode) || [];
+      const selInCity = airports.filter(a => sacSet.has(a.properties.code.toUpperCase()));
+      if (selInCity.length > 0) {
+        const top = [...selInCity].sort((a, b) => (b.properties.rank || 0) - (a.properties.rank || 0))[0];
+        citySelectedPrimaryMap.set(cityCode, top.properties.code);
+      }
+    });
+
+    // 3. Flagi i offsety dla etykiet
     const newFeatures = airportsData.features.map(f => {
       const cityCode = f.properties.city_code || 'UNKNOWN';
       const cityAirports = cityMap.get(cityCode) || [];
-      
+
       const sorted = [...cityAirports].sort((a, b) => (b.properties.rank || 0) - (a.properties.rank || 0));
       const isPrimary = sorted[0].properties.code === f.properties.code;
 
@@ -216,17 +241,17 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       const isTrip = tvacSet.has(code);
       const isDest = haSet.has(code);
       const isHigh = isSelected || isDest || isTrip;
-      
+
       const citySelIdx = citySelectedIdxMap.has(cityCode) ? citySelectedIdxMap.get(cityCode) : -1;
       const isCitySelected = citySelIdx !== -1;
       const isCityDest = cityDestSet.has(cityCode);
       const isCityTrip = cityTripSet.has(cityCode);
       const isCityHigh = isCitySelected || isCityDest || isCityTrip;
 
-      // [NEW 24.15]: Czy to lotnisko jest liderem etykiety w swoim kontekście?
       const isCityDestPrimary = cityDestPrimaryMap.get(cityCode) === code;
       const isCityTripPrimary = cityTripPrimaryMap.get(cityCode) === code;
-      
+      const isCitySelectedPrimary = citySelectedPrimaryMap.get(cityCode) === code;
+
       const rMin = isHigh ? (cS.highlightedAirportRadiusMin || 4) : (cS.generalAirportRadiusMin || 2);
       const rMax = isHigh ? (cS.highlightedAirportRadiusMax || 16) : (cS.generalAirportRadiusMax || 8);
       const fMin = isHigh ? (cS.highlightedLabelSizeMin || 12) : (cS.generalAirportLabelSizeMin || 10);
@@ -243,23 +268,20 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
           is_selected: isSelected,
           is_dest: isDest,
           is_trip: isTrip,
-          // CITY PRIORITY FLAGS (v13.71)
           is_city_high: isCityHigh,
           is_city_selected: isCitySelected,
           is_city_dest: isCityDest,
           is_city_trip: isCityTrip,
-          // LOCAL PRIMARY FLAGS (v24.15)
           is_city_dest_primary: isCityDestPrimary,
           is_city_trip_primary: isCityTripPrimary,
-          // INDEXING FOR START POINTS (v13.76)
+          is_city_selected_primary: isCitySelectedPrimary,
           la_sel_idx: selIdx,
           la_city_sel_idx: citySelIdx,
-          // PRE-CALCULATED LOGIC FOR ROBUST GPU SYNC (v13.49)
-          la_is_high_num: isHigh ? 1 : 0, 
-          // PRE-CALCULATED OFFSETS (v14.70: Strict Sanitation)
+          la_is_high_num: isHigh ? 1 : 0,
+          // Dynamiczne marginesy etykiet
           la_off_n: [0, (() => { const v = (rMin + pad) / (fMin || 11); return Number.isFinite(v) ? v : 1.3; })()] as [number, number],
           la_off_f: [0, (() => { const v = (rMax + pad) / (fMax || 13); return Number.isFinite(v) ? v : 1.8; })()] as [number, number],
-          // PRE-RENDERED LABELS (Kartografia v12)
+          // Teksty etykiet
           cl_search: `${searchLabelBase} (${code})`,
           cl_grouped: cityName,
           cl_high: `${airportName} ${code}`,
@@ -269,25 +291,18 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       };
     });
 
-    const isTripActive = (tripState?.legs?.length || 0) > 0;
-    
-    // FILTR WRAŻLIWY NA TRYB PODRÓŻY (v16.15: selective visibility)
-    const filteredFeatures = isTripActive
-      ? newFeatures.filter(f => f.properties.is_high)
-      : newFeatures;
-
-    return { ...airportsData, features: filteredFeatures };
+    return { ...airportsData, features: newFeatures };
   }, [airportsData, language, highlightedAirports, selectedAirportCodes, explorationItems, tripState]);
 
-  // SYNC DANYCH DLA USEMAPHOVER (v18.20: Fixed Hoisting)
+  // Synchronizacja dla useMapHover
   useEffect(() => {
     airportsDataRef.current = (enrichedAirportsData as any) || undefined;
   }, [enrichedAirportsData]);
 
-  // SYNCHRONIZACJA DANYCH DLA POPUPÓW (v11.19)
+  // Synchronizacja danych dla popupów
   useEffect(() => {
     if (!enrichedAirportsData) return;
-    
+
     // 1. Nazwy i Współrzędne
     const names: Record<string, string> = {};
     const coords: Record<string, [number, number]> = {};
@@ -308,11 +323,11 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       const dst = (f.destination_airport_code || '').toUpperCase();
       if (!src || !dst) return;
 
-      // Group by Dest
+      // Grupowanie według celu (Dest)
       if (!byDest[dst]) byDest[dst] = [];
       byDest[dst].push(f);
 
-      // Group by Route (SRC-DST)
+      // Grupowanie według konkretnej trasy (SRC-DST)
       const key = `${src}-${dst}`;
       if (!byGroup.has(key)) byGroup.set(key, []);
       byGroup.get(key)!.push(f);
@@ -348,33 +363,33 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
   }, [tripState]);
   useEffect(() => { tripVisibleAirportCodesRef.current = tripVisibleAirportCodes; }, [tripVisibleAirportCodes]);
 
-  // --- SYNCHRONIZACJA TRAS PODRÓŻY (v13.29/24.15) ---
+  // Synchronizacja tras podróży
   useEffect(() => {
     const m = map.current;
     if (!m || !mapLoaded || !coordsMap) return;
 
     const features: any[] = [];
     if (tripState) {
-    tripState.legs.forEach((leg, i) => {
-      const from = coordsMap[leg.fromAirportCode];
-      const to = coordsMap[leg.toAirportCode];
-      if (from && to) {
-        const gc = generateGreatCircle(from, to);
-        if (gc.length > 0) {
-          features.push({
-            type: 'Feature',
-            id: i + 1, // NUMERYCZNY IDENTYFIKATOR DLA GPU (v24.15)
-            geometry: { type: 'LineString', coordinates: gc },
-            properties: { 
-              srcCode: leg.fromAirportCode,
-              destCode: leg.toAirportCode,
-              srcIdx: 0, // Domyślnie 0 dla głównej trasy (v24.15)
-              legIdx: i
-            }
-          });
+      tripState.legs.forEach((leg, i) => {
+        const from = coordsMap[leg.fromAirportCode];
+        const to = coordsMap[leg.toAirportCode];
+        if (from && to) {
+          const gc = generateGreatCircle(from, to);
+          if (gc.length > 0) {
+            features.push({
+              type: 'Feature',
+              id: i + 1, // Identyfikator dla GPU
+              geometry: { type: 'LineString', coordinates: gc },
+              properties: {
+                srcCode: leg.fromAirportCode,
+                destCode: leg.toAirportCode,
+                srcIdx: 0, // Domyślnie 0
+                legIdx: i
+              }
+            });
+          }
         }
-      }
-    });
+      });
     }
 
     const source = m.getSource('trip-permanent-routes') as maplibregl.GeoJSONSource;
@@ -384,25 +399,22 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
   }, [mapLoaded, tripState, coordsMap]);
 
   // --- LOGIKA STYLU ---
-  // --- LOGIKA STYLU ---
   const lastAppliedFingerprintRef = useRef<string>('');
-
+  /**
+   * applyColors - ARCHITEKTURA "FINGERPRINT"
+   * 
+   * Synchronizuje stan wizualny aplikacji z GPU. Wykorzystuje "odcisk palca"
+   * stanu, aby unikać zbędnych operacji gdy nic się nie zmieniło.
+   */
   const applyColors = useCallback(() => {
     const m = map.current;
     if (!m || !mapLoaded) return;
-    
-    if (!(m as any).getStyle()) {
-      console.warn("[GPU_SYNC] Style not ready, skipping applyColors.");
-      return;
-    }
+
+    if (!(m as any).getStyle()) return;
 
     try {
-      if (!m.getLayer('airports-circles')) {
-        console.warn("[GPU_SYNC] Layers missing in applyColors. Skipping...");
-        return;
-      }
+      if (!m.getLayer('airports-circles')) return;
 
-      // STRAŻNIK STANU (v11.20.1): Monitorujemy WSZYSTKIE parametry wizualne (kolory i rozmiary)
       const colorState = useColorStore.getState();
       const selection = useSelectionStore.getState();
       const trip = useTripStore.getState();
@@ -411,7 +423,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
         Object.entries(colorState).filter(([_, v]) => typeof v === 'string' || typeof v === 'number')
       );
 
-      // [v24.97-FIX]: Read state DIRECTLY from stores to avoid stale Ref race conditions
+      // Bezpośredni odczyt ze sklepów (Store)
       const currentSAC = selection.selectedAirportCodes || [];
       const currentHA = selection.highlightedAirports || [];
       const currentEAC = (selection.explorationItems || []).flatMap(i => i.airportCodes);
@@ -429,6 +441,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       }
       const tvacUnique = Array.from(new Set(tvac));
 
+      // Budowanie odcisku palca wizualnego
       const fingerprint = JSON.stringify({
         ...visualSettings,
         sac: currentSAC,
@@ -438,16 +451,17 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
         eac: currentEAC,
         sacode: currentSACode,
         lang: language,
-        style: mapStyle, // STYL W ODCISKU (v11.46)
-        startPoints: colorState.startPoints, 
+        style: mapStyle, // STYL W ODCISKU
+        startPoints: colorState.startPoints,
         hover: hoveredAirportCodeRef.current
       });
 
       if (fingerprint === lastAppliedFingerprintRef.current) {
-        return; // Brak zmian wizualnych -> pomijamy ciężką synchronizację
+        return; // Brak zmian - pomijamy
       }
       lastAppliedFingerprintRef.current = fingerprint;
 
+      // Wywołanie niskopoziomowej funkcji ustawiającej kolory warstw i filtry
       applyMapColors(m, {
         selectedAirportCodes: currentSAC,
         tripVisibleAirportCodes: tvacUnique.length > 0 ? tvacUnique : null,
@@ -458,18 +472,18 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
         highlightedLabelCodes: highlightedLabelCodesRef.current,
         colorState: colorState,
         hoveredAirportCode: hoveredAirportCodeRef.current,
-        styleId: mapStyle || '', // JAWNE PRZEKAZANIE (v11.46)
+        styleId: mapStyle || '', // JAWNE PRZEKAZANIE
       });
 
       if (applyHoverRef.current && hoveredAirportCodeRef.current) {
         applyHoverRef.current(hoveredAirportCodeRef.current);
       }
     } catch (err) {
-      console.error("[GPU_SYNC] applyColors CRITICAL ERROR:", err);
+      logger.error("[GPU_SYNC] BŁĄD KRYTYCZNY applyColors:", err);
     }
-  }, [mapLoaded, language, mapStyle]); // USUNIĘTO selectedAirportCode (v11.52) - synchro idzie przez Refy w pętli lub subskrypcję
+  }, [mapLoaded, language, mapStyle]); // Synchronizacja selekcji przez Refy
 
-  // --- SYNCHRONIZACJA ŹRÓDŁA GPU (v13.12) ---
+  // Synchronizacja źródła GPU
   useEffect(() => {
     const m = map.current;
     if (!m || !mapLoaded || !enrichedAirportsData) return;
@@ -479,33 +493,35 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     }
   }, [mapLoaded, enrichedAirportsData]);
 
+  /**
+   * addLayers - Inicjalizacja warstw GPU
+   * 
+   * Tworzy źródła danych i warstwy dla tras oraz lotnisk.
+   */
   const addLayers = useCallback((initialData: any) => {
     const dataToUse = initialData || airportsDataRef.current;
-    console.log("[GPU_SYNC] addLayers() invoked. Data available:", !!dataToUse);
     if (!map.current || !mapLoaded || !dataToUse) return;
-    
+
     const m = map.current;
     const colorState = useColorStore.getState();
-    
-    setupRouteLayers(m);
-    addAirportsLayer(m, dataToUse, mapStyle, language, colorState); 
-    
-    // WYMUSZENIE SYNCHRONIZACJI (v11.15)
+
+    setupRouteLayers(m); // Inicjalizacja tras (linie, łuki)
+    addAirportsLayer(m, dataToUse, mapStyle, language, colorState); // Inicjalizacja lotnisk
+
+    // Wymuszenie synchronizacji
     lastAppliedFingerprintRef.current = '';
     applyColors();
   }, [mapLoaded, mapStyle, language, applyColors]);
 
-  // GŁÓWNA SYNCHRONIZACJA (v15.25: Reactive Selection)
+  // Subskrypcje sklepów
   useEffect(() => {
-    (window as any).applyColorsManual = () => { console.log("[GPU_DEBUG] Manual sync"); applyColors(); };
-    
-    // Subskrypcja obu sklepów gwarantuje reaktywność na kolory ORAZ na selekcję (np. po Add to Trip)
+    // Reagujemy na każdą zmianę kolorów, selekcji lub stanu podróży
     const unsubColor = useColorStore.subscribe(() => applyColors());
     const unsubSelection = useSelectionStore.subscribe(() => applyColors());
     const unsubTrip = useTripStore.subscribe(() => applyColors());
-    
+
     if (mapLoaded) applyColors();
-    
+
     return () => {
       unsubColor();
       unsubSelection();
@@ -513,7 +529,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     };
   }, [applyColors, mapLoaded]);
 
-  // --- ATOMOWE CZYSZCZENIE MAPY (v15.25: Hard Reset) ---
+  // Twardy reset mapy przy braku selekcji
   // Gwarantuje, że po zamknięciu panelu (stan pusty) wszystkie źródła tras zostaną wyzerowane.
   useEffect(() => {
     const m = map.current;
@@ -523,20 +539,20 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     const noTrip = !tripState || !tripState.legs || tripState.legs.length === 0;
 
     if (noSelection && noTrip) {
-      console.log("[GPU_SYNC] State empty - Performing Hard Reset of route sources...");
+      logger.log("[GPU_SYNC] Stan pusty - resetowanie tras...");
       const sourcesToClear = ['selected-routes', 'trip-arc', 'route-arc', 'route-line', 'route-shadow', 'trip-permanent-routes', 'manual-transfer-preview'];
       sourcesToClear.forEach(id => {
         try {
           const s = m.getSource(id) as maplibregl.GeoJSONSource;
           if (s) s.setData({ type: 'FeatureCollection', features: [] });
-        } catch (e) {}
+        } catch (e) { }
       });
-      // Wyłączamy też animacje
+      // Zatrzymanie animacji
       (window as any).stopAllAnimations?.();
     }
   }, [selectedAirportCode, selectedAirportCodes, highlightedAirports, tripState, mapLoaded]);
 
-  // Reaktywne dodawanie warstw przy inicjalizacji i zmianie stylu (v13.12)
+  // Reaktywne dodawanie warstw
   useEffect(() => {
     const m = map.current;
     if (mapLoaded && enrichedAirportsData && m) {
@@ -544,21 +560,25 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
         if (!m.getLayer('airports-circles')) {
           addLayers(enrichedAirportsData);
         } else {
-          // Gwarantujemy Z-Index przy każdym re-renderze danych (v15.25)
+          // Gwarancja Z-Index
           ensureAirportsOnTop(m);
         }
       } catch (e) {
         addLayers(enrichedAirportsData);
       }
     }
-  }, [mapLoaded, mapStyle, enrichedAirportsData, addLayers, tripState, highlightedAirports, selectedAirportCodes]); 
+  }, [mapLoaded, mapStyle, enrichedAirportsData, addLayers, tripState, highlightedAirports, selectedAirportCodes]);
 
-  // --- HIERARCHIA WARSTW (v18.30: Hover-on-Top) ---
+  /**
+   * ensureAirportsOnTop - Hierarchia warstw
+   * 
+   * Gwarantuje, że lotniska i ich etykiety są zawsze nad liniami tras.
+   */
   const ensureAirportsOnTop = (m: maplibregl.Map) => {
     const layers = [
-      'airports-circles', 
-      'airports-trip', 
-      'airports-highlighted', 
+      'airports-circles',
+      'airports-trip',
+      'airports-highlighted',
       'airports-selected',
       'airports-labels',
       'airports-labels-selected',
@@ -567,14 +587,14 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     ];
     layers.forEach(id => {
       if (m.getLayer(id)) {
-        m.moveLayer(id); // Przenosi na sam wierzch
+        m.moveLayer(id); // Na wierzch stosu
       }
     });
   };
 
   const isTripActive = (tripState?.legs?.length || 0) > 0;
 
-  // --- INTERAKCJA ---
+  // Interakcja i hover
   const hoverRefs: MapHoverRefs = {
     map, projectedAirportsRef, hoveredAirportCodeRef, lastDetectedCodeRef,
     hoverSampleCountRef, mouseStopTimerRef, hoverClearTimerRef, hoverLockUntilRef,
@@ -585,8 +605,8 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     hoverFeatureDataRef,
     applyColors: (mode) => { if (mode === 'all') applyColors(); },
     applyHoverRef,
-    mapStyle: mapStyle || '', // PRZEKAZANIE STYLU (v11.49)
-    selectedAirportCode: selectedAirportCode, // PRZEKAZANIE (v15.25.4)
+    mapStyle: mapStyle || '', // PRZEKAZANIE STYLU
+    selectedAirportCode: selectedAirportCode, // PRZEKAZANIE
     isTripActive,
   };
   useMapHover(hoverRefs, mapLoaded, showAirports);
@@ -608,11 +628,11 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
   useEffect(() => {
     if (map.current && mapLoaded) {
       setupRouteHoverListeners(map.current, routeHoverRefs);
-      // Mouse pos tracking for occlusion resume (v11.10)
-      const track = (e: any) => { 
+      // Śledzenie myszy
+      const track = (e: any) => {
         const original = e.originalEvent;
         if (original) {
-          (map.current as any)._mousePos = { x: original.clientX, y: original.clientY }; 
+          (map.current as any)._mousePos = { x: original.clientX, y: original.clientY };
         }
       };
       map.current.on('mousemove', track);
@@ -622,7 +642,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
 
   const lastAppliedZoomRangesRef = useRef({ min: -1, max: -1 });
 
-  // --- TRWAŁOŚĆ KAMERY (v13.2): Zachowanie widoku przy zmianie stylu ---
+  // Zachowanie widoku kamery
   const lastCameraStateRef = useRef({
     center: [19.0, 52.0] as [number, number],
     zoom: 4,
@@ -639,7 +659,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     isFlightsLoading
   });
 
-  // --- KESZOWANIE POZYCJI (v13.98: Repair Scope) ---
+  // Keszynowanie pozycji
   useEffect(() => {
     const m = map.current;
     if (!mapLoaded || !m || !enrichedAirportsData) return;
@@ -659,12 +679,12 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     return () => { m.off('moveend', rebuildProjectedPositions); };
   }, [mapLoaded, enrichedAirportsData]);
 
-  // --- STABILIZACJA WZGLĘDNA RÓWNIKOWA (v11.34) ---
-  // lastStablePerceivedZoomRef: Przechowuje "wyczuwany" przez użytkownika zoom, znormalizowany do Równika.
-  // zoomRelativeOffsetRef: Przechowuje różnicę między surowym silnikiem a naszym stabilnym licznikem.
+  // Stabilizacja globu
   const lastStablePerceivedZoomRef = useRef<number>(CONFIG.DEFAULT_MAP_ZOOM);
-  const zoomRelativeOffsetRef = useRef<number>(0);
+  const lastStableCenterRef = useRef<maplibregl.LngLat | null>(null);
+
   const isZoomInteractingRef = useRef<boolean>(false);
+  const isSyncingRef = useRef<boolean>(false);
   const lastEngineMaxRef = useRef<number>(-1);
 
   useImperativeHandle(ref, () => ({
@@ -674,29 +694,59 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     once: (ev: string, cb: any) => map.current?.once(ev, cb),
   }));
 
+  // Korekta wysokości globu
+  const getGlobeCorrection = (lat: number): number => {
+    // Clamp do 1.57 rad (~89.95 deg) - precyzyjne śledzenie krzywizny bieguna
+    const latRad = (lat * Math.PI) / 180;
+    return Math.log2(Math.cos(Math.min(Math.abs(latRad), 1.57)));
+  };
+
   useEffect(() => {
     if (map.current && mapLoaded) {
       map.current.setProjection({ type: globeMode ? 'globe' : 'mercator' });
+      lastEngineMaxRef.current = -1;
+      const raw = map.current.getZoom();
+      const { zoomRangeMin, zoomRangeMax } = useColorStore.getState();
+      const minZ = Math.min(zoomRangeMin, zoomRangeMax);
+      const maxZ = Math.max(zoomRangeMin, zoomRangeMax);
+
+      if (globeMode) {
+        const correction = getGlobeCorrection(map.current.getCenter().lat);
+        // Perceived zoom = raw - correction
+        lastStablePerceivedZoomRef.current = Math.max(minZ, Math.min(maxZ, raw - correction));
+        // Matematyczna stabilizacja w pętli move
+        safeSetZoomLimits(map.current, -5, 24);
+      } else {
+        lastStablePerceivedZoomRef.current = raw;
+        safeSetZoomLimits(map.current, 0, 24);
+      }
     }
   }, [globeMode, mapLoaded]);
 
-  // SYNCHRONIZACJA LIMITÓW ZOOMU (v11.21)
+  // Synchronizacja limitów zoomu
   useEffect(() => {
     if (map.current && mapLoaded) {
       const { zoomRangeMin, zoomRangeMax } = colorState;
-      
-      // ZABEZPIECZENIE PRZED JITTEREM (v11.23): Wywołujemy funkcje silnika tylko przy zmianie
+
+      // Zabezpieczenie przed drżeniem (jitter)
       if (lastAppliedZoomRangesRef.current.min !== zoomRangeMin || lastAppliedZoomRangesRef.current.max !== zoomRangeMax) {
-        const minZ = Math.max(0, Math.min(zoomRangeMin, zoomRangeMax));
-        const maxZ = Math.min(24, Math.max(zoomRangeMin, zoomRangeMax));
-        map.current.setMinZoom(minZ);
-        map.current.setMaxZoom(maxZ);
+        const minZ = Math.min(zoomRangeMin, zoomRangeMax);
+        const maxZ = Math.max(zoomRangeMin, zoomRangeMax);
+
+        const isGlobe = map.current.getProjection()?.type === 'globe';
+        if (isGlobe) {
+          // W trybie globu nie ruszamy limitów silnika podczas pracy (wydajność)
+          lastStablePerceivedZoomRef.current = Math.max(minZ, Math.min(maxZ, lastStablePerceivedZoomRef.current));
+        } else {
+          // W trybie Mercator limity są statyczne, więc możemy je ustawić bez kradzieży FPS
+          safeSetZoomLimits(map.current, Math.max(0, minZ), Math.min(24, maxZ));
+        }
         lastAppliedZoomRangesRef.current = { min: zoomRangeMin, max: zoomRangeMax };
       }
     }
   }, [colorState.zoomRangeMin, colorState.zoomRangeMax, mapLoaded]);
 
-  // SYNCHRONIZACJA KOLORÓW SYSTEMOWYCH W STORE (v11.47)
+  // Synchronizacja kolorów stylu
   useEffect(() => {
     if (mapLoaded) {
       useColorStore.getState().adaptToStyle(mapStyle);
@@ -718,7 +768,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     } as any);
     map.current = instance;
 
-    // --- ZAPIS STANU KAMERY (v13.2) ---
+    // Zapis stanu kamery
     instance.on('moveend', () => {
       const center = instance.getCenter();
       lastCameraStateRef.current = {
@@ -729,9 +779,14 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       };
     });
 
-    instance.on('load', () => { setMapLoaded(true); addLayers(null); });
-    
-    // Obsługa brakujących assetów w stylach ArcGIS (np. "Disputed label point")
+    instance.on('load', () => {
+      setMapLoaded(true);
+      (window as any).map = instance;
+      onMapInit?.(instance);
+      addLayers(null);
+    });
+
+    // Obsługa brakujących ikon
     instance.on('styleimagemissing', (e) => {
       const id = e.id;
       if (!instance.hasImage(id)) {
@@ -745,72 +800,154 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       }
     });
 
-    // OGRANICZENIE CZĘSTOTLIWOŚCI AKTUALIZACJI VIEWPORTU (v11.22)
+    // Ograniczenie częstotliwości aktualizacji
     let lastUpdate = 0;
 
+    // Stan przeciągania
+    let isPanDragging = false;
+    let isEasingCorrection = false;
+    instance.on('dragstart', () => { isPanDragging = true; isEasingCorrection = false; });
+    instance.on('dragend', () => { isPanDragging = false; });
+
     instance.on('move', () => {
+      // Blokada synchronizacji
+      if (isSyncingRef.current) return;
+
       const raw = instance.getZoom();
       const center = instance.getCenter();
-      
-      // 1. OBLICZANIE ZOOMU ZNORMALIZOWANEGO (v11.35):
-      // W trybie Globe skala rośnie ku biegunom (więcej pikseli na metr).
-      // Aby wrócić do skali równikowej, musimy ODJĄĆ korektę (którą jest ujemny log2(cos)).
-      const latRad = (center.lat * Math.PI) / 180;
-      const correction = Math.log2(Math.cos(Math.min(Math.abs(latRad), 1.565)));
-      const currentPerceived = raw - correction; // raw - (-log) = raw + log
+      const isCurrentlyGlobe = instance.getProjection()?.type === 'globe';
 
-      // 2. DYNAMIZACJA LIMITÓW SILNIKA:
-      // Synchronizujemy fizyczne bariery silnika z szerokością geograficzną.
+      if (!isCurrentlyGlobe) {
+        lastStablePerceivedZoomRef.current = raw;
+        onViewportChange({
+          center: [center.lng, center.lat],
+          zoom: raw,
+          pitch: instance.getPitch(),
+          bearing: instance.getBearing()
+        });
+        return;
+      }
+
+      /**
+       * Obliczanie korekty wysokości (Globe Altitude Correction)
+       * Pozwala utrzymać stałą wysokość nad ziemią (GMD).
+       */
+      const correction = getGlobeCorrection(center.lat);
+      const currentPerceived = raw - correction;
+
+      // 1. Parametry zakresu
       const { zoomRangeMin, zoomRangeMax } = useColorStore.getState();
       const minZ = Math.min(zoomRangeMin, zoomRangeMax);
       const maxZ = Math.max(zoomRangeMin, zoomRangeMax);
 
-      const targetEngineMax = Math.max(0.1, maxZ + correction);
-      const targetEngineMin = Math.max(-2.0, minZ + correction); // TWARDA BARIERA (MapLibre Safety)
+      // Dostępny perceived zoom
+      const engineClampedMin = Math.max(minZ, -5.0 - correction);
+      const engineClampedMax = Math.min(maxZ, 24.0 - correction);
 
-      // 2. DYNAMIZACJA LIMITÓW (Asynchroniczna - v11.36):
-      // Stosujemy requestAnimationFrame, aby odseparować mutacje od cyklu 'move'.
-      // Zapobiega to błędowi "Attempting to run(), but is already running".
-      if (Math.abs(targetEngineMax - lastEngineMaxRef.current) > 0.1) {
-        requestAnimationFrame(() => {
-          if (!map.current) return;
-          try {
-            map.current.setMaxZoom(targetEngineMax);
-            map.current.setMinZoom(targetEngineMin);
-          } catch (e) {
-            console.warn("[GPU_SAFETY] Engine limit update failed (normal during fast moves):", e);
+      // Pominięcie w trakcie korekty
+      if (isEasingCorrection) return;
+
+      // 2. Aktywna synchronizacja
+      if (!instance.isZooming() && !isZoomInteractingRef.current) {
+        // PRZESUWANIE / BEZCZYNNOŚĆ:
+        if (isPanDragging) {
+          // Pozwolenie na naturalny dryf przy przeciąganiu
+          lastStablePerceivedZoomRef.current = raw - correction;
+          lastStableCenterRef.current = center;
+        } else {
+          // Blokada wysokości (Lock)
+          const targetRaw = lastStablePerceivedZoomRef.current + correction;
+          const clampedTargetRaw = Math.max(-5, Math.min(24, targetRaw));
+
+          if (Math.abs(raw - clampedTargetRaw) > 0.001) {
+            isSyncingRef.current = true;
+            instance.jumpTo({ zoom: clampedTargetRaw });
+            isSyncingRef.current = false;
           }
-        });
-        lastEngineMaxRef.current = targetEngineMax;
+          lastStableCenterRef.current = center;
+        }
+      } else {
+        // Limity wysokości (Zoom/Pinch)
+        const clampedPerceived = Math.max(engineClampedMin, Math.min(engineClampedMax, currentPerceived));
+        lastStablePerceivedZoomRef.current = clampedPerceived;
+        isZoomInteractingRef.current = true;
+
+        if (currentPerceived < engineClampedMin || currentPerceived > engineClampedMax) {
+          // Blokada zooma i środka (Overscroll)
+          isSyncingRef.current = true;
+          instance.jumpTo({
+            zoom: clampedPerceived + correction,
+            center: lastStableCenterRef.current || center
+          });
+          isSyncingRef.current = false;
+          return;
+        }
+        lastStableCenterRef.current = center;
       }
 
-      // 3. LOGIKA DYFERENCJALNA (Brak skoków i driftu):
-      if (instance.isZooming()) {
-        if (!isZoomInteractingRef.current) {
-          // Początek zoomowania: zapamiętujemy offset względem stabilnej bazy
-          zoomRelativeOffsetRef.current = currentPerceived - lastStablePerceivedZoomRef.current;
-          isZoomInteractingRef.current = true;
-        }
-        // Aktualizujemy bazę odejmując offset (płynny start)
-        lastStablePerceivedZoomRef.current = currentPerceived - zoomRelativeOffsetRef.current;
-      } else {
-        // Koniec interakcji lub sama rotacja - lockujemy stan
+      // 3. Blokowanie stanu
+      if (!instance.isZooming()) {
         isZoomInteractingRef.current = false;
       }
 
-      // 4. CLAMPING I RAPORTOWANIE:
+      // 4. Raportowanie do UI
       const finalPerceived = Math.max(minZ, Math.min(maxZ, lastStablePerceivedZoomRef.current));
       lastStablePerceivedZoomRef.current = finalPerceived;
 
       const now = Date.now();
-      if (now - lastUpdate < 100) return; // Throttle 10Hz
+      if (now - lastUpdate < 100) return;
       lastUpdate = now;
 
-      onViewportChange({ 
-        center: [center.lng, center.lat], 
-        zoom: lastStablePerceivedZoomRef.current, // UI widzi idealnie stabilną skalę
-        pitch: instance.getPitch(), 
-        bearing: instance.getBearing() 
+      onViewportChange({
+        center: [center.lng, center.lat],
+        zoom: lastStablePerceivedZoomRef.current, // Wysokość (perceived zoom)
+        pitch: instance.getPitch(),
+        bearing: instance.getBearing()
+      });
+    });
+
+    // Korekta inercji
+    instance.on('moveend', () => {
+      if (isSyncingRef.current || isEasingCorrection) {
+        isEasingCorrection = false;
+        return;
+      }
+      if (isPanDragging) return;
+
+      const isGlobe = instance.getProjection()?.type === 'globe';
+      const currentRaw = instance.getZoom();
+      const currentCenter = instance.getCenter();
+
+      if (!isGlobe) {
+        onViewportChange({
+          center: [currentCenter.lng, currentCenter.lat],
+          zoom: currentRaw,
+          pitch: instance.getPitch(),
+          bearing: instance.getBearing()
+        });
+        return;
+      }
+
+      const corr = getGlobeCorrection(currentCenter.lat);
+      const { zoomRangeMin, zoomRangeMax } = useColorStore.getState();
+      const minZ = Math.min(zoomRangeMin, zoomRangeMax);
+      const maxZ = Math.max(zoomRangeMin, zoomRangeMax);
+      const perceived = currentRaw - corr;
+      const clamped = Math.max(minZ, Math.min(maxZ, perceived));
+      lastStablePerceivedZoomRef.current = clamped;
+      lastStableCenterRef.current = currentCenter;
+
+      const targetRaw = clamped + corr;
+      if (Math.abs(currentRaw - targetRaw) > 0.01) {
+        isEasingCorrection = true;
+        instance.easeTo({ zoom: targetRaw, duration: 200 });
+      }
+
+      onViewportChange({
+        center: [currentCenter.lng, currentCenter.lat],
+        zoom: lastStablePerceivedZoomRef.current, // Stabilna wysokość
+        pitch: instance.getPitch(),
+        bearing: instance.getBearing()
       });
     });
 
