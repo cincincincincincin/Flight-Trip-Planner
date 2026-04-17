@@ -60,10 +60,10 @@ export function addAirportsLayer(
     // Dzięki temu wybrany punkt startowy nigdy nie "zniknie" pod łukami lotów wychodzących.
 
     // 1. Warstwa wybrana (Selected Only - Z detekcją kolizji)
-    addLabelLayer(map, 'airports-labels-selected', ['==', ['get', 'is_selected'], true], fonts, lang, colorState, styleId, false);
+    addLabelLayer(map, 'airports-labels-selected', ['==', ['get', 'code'], '_NONE_'], fonts, lang, colorState, styleId, false);
 
     // 2. Warstwa ogólna (Pozostałe - Standardowa okluzja)
-    addLabelLayer(map, 'airports-labels', ['!=', ['get', 'is_selected'], true], fonts, lang, colorState, styleId, false);
+    addLabelLayer(map, 'airports-labels', ['all'], fonts, lang, colorState, styleId, false);
 
     // 4. WARSTWY HOVER (Na szczycie)
     try {
@@ -165,40 +165,9 @@ function addLabelLayer(
     const fontsRegular = fonts; // ['Noto Sans Regular']
     const fontsBold = getSafeFontsFromStyle(map, true); // ['Noto Sans Bold']
 
-    const isHighExpr = ['==', ['get', 'is_high'], true];
-    const isCityHighExpr = ['==', ['get', 'is_city_high'], true];
-    const isSelectedExpr = ['==', ['get', 'is_selected'], true];
-    const isTripExpr = ['==', ['get', 'is_trip'], true];
-    const isDestExpr = ['==', ['get', 'is_dest'], true];
-    const isCitySelectedExpr = ['==', ['get', 'is_city_selected'], true];
-    const isCityDestExpr = ['==', ['get', 'is_city_dest'], true];
-    const isCityTripExpr = ['==', ['get', 'is_city_trip'], true];
-
     const layout: any = {
-      // Inteligentne grupowanie dla Highlighted
-      'text-field': [
-        'step',
-        ['zoom'],
-        // Zoom < 4.2: Grupowanie lub ukrywanie. Wybrane są zawsze widoczne z kodem
-        ['case',
-          isSelectedExpr, ['get', 'cl_hl_high'],
-          ['all', isCityHighExpr, ['>', ['coalesce', ['get', 'city_airport_count'], 0], 1]], ['get', 'cl_grouped'],
-          isHighExpr, ['get', 'cl_hl_low'],
-          ['case', ['>', ['coalesce', ['get', 'city_airport_count'], 0], 1], ['get', 'cl_grouped'], ""]
-        ],
-        4.2,
-        // Zoom 4.2 - 7.0: Miasta i Wyszukiwanie (Low Detail)
-        ['case',
-          isSelectedExpr, ['get', 'cl_hl_high'],
-          ['all', isCityHighExpr, ['>', ['coalesce', ['get', 'city_airport_count'], 0], 1]], ['get', 'cl_grouped'],
-          isHighExpr, ['get', 'cl_hl_low'],
-          ['case', ['>', ['coalesce', ['get', 'city_airport_count'], 0], 1], ['get', 'cl_grouped'], ['get', 'cl_search']]
-        ],
-        7.0,
-        // Zoom > 7.0: Pełny detal dla wszystkich (High Detail)
-        ['case', isHighExpr, ['get', 'cl_hl_high'], ['get', 'cl_high']]
-      ],
-
+      'text-field': ['get', 'cl_high'],
+      
       // Dynamiczna czcionka w warstwach jest niestabilna przy braku glifów. MapLibre próbuje 
       // rzutować wyrażenie logiczne przy tworzeniu lokalnego canvas i wywala awarię (type: 3).
       // Zamiast tego używamy statycznej reguły per warstwa.
@@ -210,68 +179,26 @@ function addLabelLayer(
       'text-padding': 4.0,
 
       // Ścisły priorytet wyświetlania
-      // Selected (-40000) > Destination (-30000) > Trip (-20000) > General
-      'symbol-sort-key': [
-        'step',
-        ['zoom'],
-        ['case',
-          isCitySelectedExpr, ['-', -40000, ['coalesce', ['get', 'rank'], 0]],
-          isCityDestExpr, ['-', -30000, ['coalesce', ['get', 'rank'], 0]],
-          isCityTripExpr, ['-', -20000, ['coalesce', ['get', 'rank'], 0]],
-          ['-', 1000, ['coalesce', ['get', 'rank'], 0]]
-        ],
-        7.0,
-        ['case',
-          isSelectedExpr, ['-', -40000, ['coalesce', ['get', 'rank'], 0]],
-          isDestExpr, ['-', -30000, ['coalesce', ['get', 'rank'], 0]],
-          isTripExpr, ['-', -20000, ['coalesce', ['get', 'rank'], 0]],
-          ['-', 1000, ['coalesce', ['get', 'rank'], 0]]
-        ]
-      ],
+      'symbol-sort-key': ['-', 1000, ['coalesce', ['get', 'rank'], 0]],
 
       'text-pitch-alignment': 'map',
       'symbol-avoid-edges': false,
 
       // Wielkość płynnie dopasowana
-      'text-size': [
-        'interpolate', ['linear'], ['zoom'],
-        zMin, ['case',
-          ['any', isCitySelectedExpr, isCityDestExpr, isCityTripExpr], n(colorState?.highlightedLabelSizeMin, 12),
-          n(colorState?.generalAirportLabelSizeMin, 10)
-        ],
-        7.0, ['case',
-          ['any', isCitySelectedExpr, isCityDestExpr, isCityTripExpr], n(colorState?.highlightedLabelSizeMax, 18),
-          n(colorState?.generalAirportLabelSizeMax, 14)
-        ],
-        12.0, ['case',
-          ['any', isSelectedExpr, isDestExpr, isTripExpr], n(colorState?.highlightedLabelSizeMax, 18),
-          n(colorState?.generalAirportLabelSizeMax, 14)
-        ]
-      ],
-
-      'text-offset': [
-        'interpolate', ['linear'], ['zoom'],
-        1.3, ['case', ['==', ['typeof', ['get', 'la_off_n']], 'array'], ['get', 'la_off_n'], ['literal', [0, 1.3]]],
-        10, ['case', ['==', ['typeof', ['get', 'la_off_f']], 'array'], ['get', 'la_off_f'], ['literal', [0, 1.8]]]
-      ],
+      'text-size': 12,
+      'text-offset': [0, 1.3],
       'text-anchor': 'top'
     };
 
     // Kolor dziedziczony przez miasto
-    const textColor: any = [
-      'step',
-      ['zoom'],
-      ['case', isCityHighExpr, (colorState?.destinationLabelColor || labelPaint.textColor), (colorState?.generalLabelColor || labelPaint.textColor)],
-      7.0,
-      ['case', isHighExpr, (colorState?.destinationLabelColor || labelPaint.textColor), (colorState?.generalLabelColor || labelPaint.textColor)]
-    ];
+    const textColor = labelPaint.textColor;
 
     map.addLayer({
       id, type: 'symbol', source: 'airports', filter, layout,
       paint: {
         'text-color': textColor,
         'text-halo-color': labelPaint.haloColor,
-        'text-halo-width': ['case', isCityHighExpr, 2.5, labelPaint.haloWidth] as any,
+        'text-halo-width': labelPaint.haloWidth,
         'text-halo-blur': 0.5
       }
     });

@@ -158,87 +158,25 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
   const enrichedAirportsData = useMemo(() => {
     if (!airportsData) return null;
 
-    // 1. Grupowanie lotnisk według miast
+    // 1. Grupowanie lotnisk według miast do statycznych priorytetów
     const cityMap = new Map<string, any[]>();
+    const codeMap: Record<string, string> = {};
     airportsData.features.forEach(f => {
       const cityCode = f.properties.city_code || 'UNKNOWN';
+      codeMap[f.properties.code.toUpperCase()] = cityCode;
       if (!cityMap.has(cityCode)) cityMap.set(cityCode, []);
       cityMap.get(cityCode)!.push(f);
     });
+    airportCityKeyRef.current = codeMap;
 
-    // 2. Pobranie zbiorów dla szybkiej weryfikacji (highlighted, selected, trip)
-    const haSet = new Set((highlightedAirports || []).map(c => c.toUpperCase()));
-    const sacSet = new Set((selectedAirportCodes || []).map(c => c.toUpperCase()));
-
-    // ZBIÓR TRIP: Zawiera lotniska z trasy, przesiadki manualne oraz aktualnie podglądane lotnisko
-    const manualTransfersCodes = (useTripStore.getState().manualTransferAirportCodes || []).map(c => c.toUpperCase());
-    const previewCode = useTripStore.getState().previewAirportCode?.toUpperCase();
-
-    const tvacSet = new Set([
-      ...(tripState?.legs?.flatMap(l => [l.fromAirportCode, l.toAirportCode]) || []).map(c => c.toUpperCase()),
-      ...(tripState ? [tripState.startAirport.code.toUpperCase()] : []),
-      ...manualTransfersCodes,
-      ...(previewCode ? [previewCode] : [])
-    ]);
-
-    // Wykrywanie priorytetów miasta
-    // Służy to do wyboru tzw. "lidera etykiety" – jeśli w mieście jest 5 lotnisk, 
-    // pokazujemy domyślnie tylko najważniejsze (według rankingu).
-    const citySelectedIdxMap = new Map<string, number>();
-    const cityDestSet = new Set<string>();
-    const cityTripSet = new Set<string>();
-    const cityDestsMap = new Map<string, any[]>();
-    const cityTripsMap = new Map<string, any[]>();
-
-    airportsData.features.forEach(f => {
-      const code = f.properties.code;
-      const cityCode = f.properties.city_code || 'UNKNOWN';
-      const selIdx = (selectedAirportCodes || []).findIndex(c => c.toUpperCase() === code);
-      if (selIdx !== -1) {
-        if (!citySelectedIdxMap.has(cityCode)) citySelectedIdxMap.set(cityCode, selIdx);
-      }
-      if (haSet.has(code)) {
-        cityDestSet.add(cityCode);
-        if (!cityDestsMap.has(cityCode)) cityDestsMap.set(cityCode, []);
-        cityDestsMap.get(cityCode)!.push(f);
-      }
-      if (tvacSet.has(code)) {
-        cityTripSet.add(cityCode);
-        if (!cityTripsMap.has(cityCode)) cityTripsMap.set(cityCode, []);
-        cityTripsMap.get(cityCode)!.push(f);
-      }
-    });
-
-    // Wyznaczamy liderów dla aktywnych warstw (najwyższy rank w grupie)
-    const cityDestPrimaryMap = new Map<string, string>();
-    cityDestsMap.forEach((airports, cityCode) => {
-      const top = [...airports].sort((a, b) => (b.properties.rank || 0) - (a.properties.rank || 0))[0];
-      cityDestPrimaryMap.set(cityCode, top.properties.code);
-    });
-
-    const cityTripPrimaryMap = new Map<string, string>();
-    cityTripsMap.forEach((airports, cityCode) => {
-      const top = [...airports].sort((a, b) => (b.properties.rank || 0) - (a.properties.rank || 0))[0];
-      cityTripPrimaryMap.set(cityCode, top.properties.code);
-    });
-
-    const citySelectedPrimaryMap = new Map<string, string>();
-    citySelectedIdxMap.forEach((_, cityCode) => {
-      const airports = cityMap.get(cityCode) || [];
-      const selInCity = airports.filter(a => sacSet.has(a.properties.code.toUpperCase()));
-      if (selInCity.length > 0) {
-        const top = [...selInCity].sort((a, b) => (b.properties.rank || 0) - (a.properties.rank || 0))[0];
-        citySelectedPrimaryMap.set(cityCode, top.properties.code);
-      }
-    });
-
-    // 3. Flagi i offsety dla etykiet
+    // 2. Flagi statyczne (ranking miasta i nazwy wyświetlane)
     const newFeatures = airportsData.features.map(f => {
       const cityCode = f.properties.city_code || 'UNKNOWN';
       const cityAirports = cityMap.get(cityCode) || [];
 
+      // Sortujemy po randze lotniska
       const sorted = [...cityAirports].sort((a, b) => (b.properties.rank || 0) - (a.properties.rank || 0));
-      const isPrimary = sorted[0].properties.code === f.properties.code;
+      const isPrimary = sorted.length > 0 && sorted[0].properties.code === f.properties.code;
 
       const cityName = getLocalizedProp(f.properties as any, 'city_name', language);
       const airportName = getLocalizedProp(f.properties as any, 'name', language);
@@ -246,54 +184,13 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       const searchLabelBase = getSingleAirportLabel(cityName, airportName, false);
       const code = f.properties.code;
 
-      const cS = useColorStore.getState();
-      const isSelected = sacSet.has(code);
-      const selIdx = (selectedAirportCodes || []).findIndex(c => c.toUpperCase() === code);
-      const isTrip = tvacSet.has(code);
-      const isDest = haSet.has(code);
-      // isHigh = dowolna forma wyróżnienia (selekcja, cel, podróż, przesiadka drafted, preview)
-      const isHigh = isSelected || isDest || isTrip;
-
-      const citySelIdx = citySelectedIdxMap.has(cityCode) ? citySelectedIdxMap.get(cityCode) : -1;
-      const isCitySelected = citySelIdx !== -1;
-      const isCityDest = cityDestSet.has(cityCode);
-      const isCityTrip = cityTripSet.has(cityCode);
-      const isCityHigh = isCitySelected || isCityDest || isCityTrip;
-
-      const isCityDestPrimary = cityDestPrimaryMap.get(cityCode) === code;
-      const isCityTripPrimary = cityTripPrimaryMap.get(cityCode) === code;
-      const isCitySelectedPrimary = citySelectedPrimaryMap.get(cityCode) === code;
-
-      const rMin = isHigh ? (cS.highlightedAirportRadiusMin || 4) : (cS.generalAirportRadiusMin || 2);
-      const rMax = isHigh ? (cS.highlightedAirportRadiusMax || 16) : (cS.generalAirportRadiusMax || 8);
-      const fMin = isHigh ? (cS.highlightedLabelSizeMin || 12) : (cS.generalAirportLabelSizeMin || 10);
-      const fMax = isHigh ? (cS.highlightedLabelSizeMax || 18) : (cS.generalAirportLabelSizeMax || 14);
-      const pad = 3;
-
       return {
         ...f,
         properties: {
           ...f.properties,
           city_airport_count: cityAirports.length,
           is_city_primary: isPrimary,
-          is_high: isHigh,
-          is_selected: isSelected,
-          is_dest: isDest,
-          is_trip: isTrip,
-          is_city_high: isCityHigh,
-          is_city_selected: isCitySelected,
-          is_city_dest: isCityDest,
-          is_city_trip: isCityTrip,
-          is_city_dest_primary: isCityDestPrimary,
-          is_city_trip_primary: isCityTripPrimary,
-          is_city_selected_primary: isCitySelectedPrimary,
-          la_sel_idx: selIdx,
-          la_city_sel_idx: citySelIdx,
-          la_is_high_num: isHigh ? 1 : 0,
-          // Dynamiczne marginesy etykiet
-          la_off_n: [0, (() => { const v = (rMin + pad) / (fMin || 11); return Number.isFinite(v) ? v : 1.3; })()] as [number, number],
-          la_off_f: [0, (() => { const v = (rMax + pad) / (fMax || 13); return Number.isFinite(v) ? v : 1.8; })()] as [number, number],
-          // Teksty etykiet
+          // Statyczne Etykiety
           cl_search: `${searchLabelBase} (${code})`,
           cl_grouped: cityName,
           cl_high: `${airportName} ${code}`,
@@ -304,7 +201,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     });
 
     return { ...airportsData, features: newFeatures };
-  }, [airportsData, language, highlightedAirports, selectedAirportCodes, explorationItems, tripState, useTripStore.getState().manualTransferAirportCodes, useTripStore.getState().previewAirportCode]);
+  }, [airportsData, language]);
 
   // Synchronizacja dla useMapHover
   useEffect(() => {
@@ -415,6 +312,10 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     const m = map.current;
     if (!m || !mapLoaded) return;
 
+    // Tylko uruchamiamy pętlę animacji, gdy istnieją manualne przesiadki
+    const hasTransfers = (manualTransferAirportCodes || []).length > 0 || useTripStore.getState().previewAirportCode;
+    if (!hasTransfers) return;
+
     let rafId: number;
     const animate = () => {
       if (m.getLayer('manual-transfer-preview')) {
@@ -428,7 +329,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
 
     rafId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(rafId);
-  }, [mapLoaded]);
+  }, [mapLoaded, manualTransferAirportCodes]);
 
   // --- LOGIKA STYLU ---
   const lastAppliedFingerprintRef = useRef<string>('');
@@ -451,10 +352,6 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       const selection = useSelectionStore.getState();
       const trip = useTripStore.getState();
 
-      const visualSettings = Object.fromEntries(
-        Object.entries(colorState).filter(([_, v]) => typeof v === 'string' || typeof v === 'number')
-      );
-
       // Bezpośredni odczyt ze sklepów (Store)
       const currentSAC = selection.selectedAirportCodes || [];
       const currentHA = selection.highlightedAirports || [];
@@ -474,21 +371,28 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       }
       const tvacUnique = Array.from(new Set(tvac));
 
-      // Budowanie odcisku palca wizualnego
-      const fingerprint = JSON.stringify({
-        ...visualSettings,
-        sac: currentSAC,
-        tvac: tvacUnique,
-        ha: currentHA,
-        mtac: currentMTAC,
-        eac: currentEAC,
-        sacode: currentSACode,
-        lang: language,
-        style: mapStyle, // STYL W ODCISKU
-        startPoints: colorState.startPoints,
-        hover: hoveredAirportCodeRef.current,
-        previewCode: currentPreviewCode
-      });
+      // Budowanie odcisku palca wizualnego (lekki - bez serializacji całego colorState)
+      const fingerprint = [
+        currentSAC.join(','),
+        tvacUnique.join(','),
+        currentHA.length,
+        currentMTAC.join(','),
+        currentEAC.length,
+        currentSACode || '',
+        language,
+        mapStyle || '',
+        hoveredAirportCodeRef.current || '',
+        currentPreviewCode || '',
+        colorState.generalAirport || '',
+        colorState.destinationAirport || '',
+        colorState.tripAirport || '',
+        colorState.generalLabelColor || '',
+        colorState.destinationLabelColor || '',
+        colorState.tripLabelColor || '',
+        colorState.zoomRangeMin || '',
+        colorState.zoomRangeMax || '',
+        (colorState.startPoints || []).map((sp: any) => `${sp.airport}|${sp.label}|${sp.route}`).join(';')
+      ].join('|');
 
       if (fingerprint === lastAppliedFingerprintRef.current) {
         return; // Brak zmian - pomijamy
@@ -497,6 +401,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
 
       // Wywołanie niskopoziomowej funkcji ustawiającej kolory warstw i filtry
       applyMapColors(m, {
+        airportCityKeyMap: airportCityKeyRef.current,
         selectedAirportCodes: currentSAC,
         tripVisibleAirportCodes: tvacUnique.length > 0 ? tvacUnique : null,
         highlightedAirports: currentHA,
@@ -550,12 +455,22 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     applyColors();
   }, [mapLoaded, mapStyle, language, applyColors]);
 
-  // Subskrypcje sklepów
+  // Subskrypcje sklepów - DEBOUNCED via requestAnimationFrame
+  // Jedno kliknięcie może wyzwolić zmianę w 2-3 sklepach naraz.
+  // Zamiast wywoływać applyColors() synchronicznie 3x, łączymy je w jedną klatkę.
+  const applyColorsPendingRef = useRef<number | null>(null);
+  const scheduleApplyColors = useCallback(() => {
+    if (applyColorsPendingRef.current !== null) return; // Już zaplanowane
+    applyColorsPendingRef.current = requestAnimationFrame(() => {
+      applyColorsPendingRef.current = null;
+      applyColors();
+    });
+  }, [applyColors]);
+
   useEffect(() => {
-    // Reagujemy na każdą zmianę kolorów, selekcji lub stanu podróży
-    const unsubColor = useColorStore.subscribe(() => applyColors());
-    const unsubSelection = useSelectionStore.subscribe(() => applyColors());
-    const unsubTrip = useTripStore.subscribe(() => applyColors());
+    const unsubColor = useColorStore.subscribe(scheduleApplyColors);
+    const unsubSelection = useSelectionStore.subscribe(scheduleApplyColors);
+    const unsubTrip = useTripStore.subscribe(scheduleApplyColors);
 
     if (mapLoaded) applyColors();
 
@@ -563,8 +478,12 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       unsubColor();
       unsubSelection();
       unsubTrip();
+      if (applyColorsPendingRef.current !== null) {
+        cancelAnimationFrame(applyColorsPendingRef.current);
+        applyColorsPendingRef.current = null;
+      }
     };
-  }, [applyColors, mapLoaded]);
+  }, [scheduleApplyColors, applyColors, mapLoaded]);
 
   // Twardy reset mapy przy braku selekcji
   // Gwarantuje, że po zamknięciu panelu (stan pusty) wszystkie źródła tras zostaną wyzerowane.
@@ -604,7 +523,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
         addLayers(enrichedAirportsData);
       }
     }
-  }, [mapLoaded, mapStyle, enrichedAirportsData, addLayers, tripState, highlightedAirports, selectedAirportCodes]);
+  }, [mapLoaded, mapStyle, enrichedAirportsData, addLayers]);
 
   /**
    * ensureAirportsOnTop - Hierarchia warstw

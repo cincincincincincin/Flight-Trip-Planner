@@ -143,34 +143,53 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       const isGroupingPhase = currentZoom < 7.0;
       let activeIdx = -1;
 
+      const sac = refs.selectedAirportCodesRef.current || [];
+      const ha = refs.highlightedAirportsRef.current || [];
+      const tvac = refs.tripVisibleAirportCodesRef.current || [];
+      const mtac = (window as any).manualTransferAirportCodes || [];
+      const tripCodes = Array.from(new Set([...tvac, ...mtac]));
+
+      const isSelected = sac.includes(code);
+      const isDest = ha.includes(code);
+      const isTrip = tripCodes.includes(code);
+
+      const cityCode = feat.properties.city_code;
+      const cityKeyMap = refs.airportCityKeyRef.current || {};
+      
+      const citySelectedCodes = Array.from(new Set(sac.map(c => cityKeyMap[c]).filter(Boolean)));
+      const cityDestCodes = Array.from(new Set(ha.map(c => cityKeyMap[c]).filter(Boolean)));
+      const cityTripCodes = Array.from(new Set(tripCodes.map(c => cityKeyMap[c]).filter(Boolean)));
+
+      const isCitySelected = cityCode ? citySelectedCodes.includes(cityCode) : false;
+      const isCityDest = cityCode ? cityDestCodes.includes(cityCode) : false;
+      const isCityTrip = cityCode ? cityTripCodes.includes(cityCode) : false;
+      const isCityPrimary = feat.properties.is_city_primary;
+
       if (isGroupingPhase) {
-        if (feat.properties.is_selected) {
+        if (isSelected) {
           type = 'selected';
-          activeIdx = n(feat.properties.la_sel_idx, -1);
-        } else if (feat.properties.is_city_selected_primary) {
+          activeIdx = sac.indexOf(code);
+        } else if (isCitySelected && isCityPrimary) {
           type = 'selected';
-          activeIdx = n(feat.properties.la_city_sel_idx, -1);
-        } else if (feat.properties.is_dest) {
+          const firstSelectedCode = sac.find(c => cityKeyMap[c] === cityCode);
+          if (firstSelectedCode) activeIdx = sac.indexOf(firstSelectedCode);
+        } else if (isDest) {
           type = 'destination';
-        } else if (feat.properties.is_city_dest_primary) {
+        } else if (isCityDest && isCityPrimary) {
           type = 'destination';
-        } else if (feat.properties.is_trip) {
+        } else if (isTrip) {
           type = 'trip';
-        } else if (feat.properties.is_city_trip_primary) {
+        } else if (isCityTrip && isCityPrimary) {
           type = 'trip';
-        } else {
-          type = 'general';
         }
       } else {
-        if (feat.properties.is_selected) {
+        if (isSelected) {
           type = 'selected';
-          activeIdx = n(feat.properties.la_sel_idx, -1);
-        } else if (feat.properties.is_dest) {
+          activeIdx = sac.indexOf(code);
+        } else if (isDest) {
           type = 'destination';
-        } else if (feat.properties.is_trip) {
+        } else if (isTrip) {
           type = 'trip';
-        } else {
-          type = 'general';
         }
       }
 
@@ -198,8 +217,13 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       hoverFeature.properties.h_color = color;
       hoverFeature.properties.h_text_color = textColor;
       hoverFeature.properties.h_type = type;
-      hoverFeature.properties.h_off_n = feat.properties.la_off_n || [0, 0];
-      hoverFeature.properties.h_off_f = feat.properties.la_off_f || [0, 0];
+      const pad = 3;
+      const hRMin = isHigh ? n(cS.highlightedAirportRadiusMin, 4) : n(cS.generalAirportRadiusMin, 2);
+      const hRMax = isHigh ? n(cS.highlightedAirportRadiusMax, 16) : n(cS.generalAirportRadiusMax, 8);
+      const hFMin = isHigh ? n(cS.highlightedLabelSizeMin, 12) : n(cS.generalAirportLabelSizeMin, 10);
+      const hFMax = isHigh ? n(cS.highlightedLabelSizeMax, 18) : n(cS.generalAirportLabelSizeMax, 14);
+      hoverFeature.properties.h_off_n = [0, (hRMin + pad) / (hFMin || 11)];
+      hoverFeature.properties.h_off_f = [0, (hRMax + pad) / (hFMax || 13)];
 
       const data = { type: 'FeatureCollection', features: [hoverFeature] };
       refs.hoverFeatureDataRef.current = data;
@@ -300,7 +324,7 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
           requestAnimationFrame(() => {
             refs.applyColors('all');
           });
-        }, 16); // ~60fps debounce dla ciężkich operacji logicznych
+        }, 80); // Debounce dla ciężkich operacji logicznych (hover dot jest aktualizowany natychmiast)
       }
     };
 
@@ -331,7 +355,15 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       nearby.forEach(cand => {
         const feat = cachedAirportsMap.get(cand.code.toUpperCase());
         if (feat && !seen.has(cand.code)) {
-          if (refs.isTripActive && !feat.properties.is_high) return;
+          if (refs.isTripActive) {
+            const _sac = refs.selectedAirportCodesRef.current || [];
+            const _ha = refs.highlightedAirportsRef.current || [];
+            const _tvac = refs.tripVisibleAirportCodesRef.current || [];
+            const _eac = refs.explorationAirportCodesRef.current || [];
+            const _mtac = (window as any).manualTransferAirportCodes || [];
+            const visible = _sac.includes(cand.code) || _ha.includes(cand.code) || _tvac.includes(cand.code) || _eac.includes(cand.code) || _mtac.includes(cand.code);
+            if (!visible) return;
+          }
 
           const p = m.project(feat.geometry.coordinates as [number, number]);
           const dist = Math.sqrt((lastPos.x - p.x) ** 2 + (lastPos.y - p.y) ** 2);
@@ -369,10 +401,18 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       const tripState = useTripStore.getState().tripState;
       const currentTripActive = !!(tripState && tripState.legs && tripState.legs.length > 0);
 
-      if (fullFeat.properties.is_selected) return;
+      const sac = refs.selectedAirportCodesRef.current || [];
+      const ha = refs.highlightedAirportsRef.current || [];
+      const tvac = refs.tripVisibleAirportCodesRef.current || [];
+      const eac = refs.explorationAirportCodesRef.current || [];
+      const mtac = (window as any).manualTransferAirportCodes || [];
+
+      // Jeśli lotnisko jest już wybrane (selected), ignorujemy kliknięcie
+      if (sac.includes(code)) return;
 
       if (currentTripActive) {
-        if (!fullFeat.properties.is_high && !fullFeat.properties.is_dest) {
+        const isHighOrDest = sac.includes(code) || ha.includes(code) || tvac.includes(code) || eac.includes(code) || mtac.includes(code);
+        if (!isHighOrDest) {
           return;
         }
 

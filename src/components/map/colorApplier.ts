@@ -11,6 +11,7 @@ import { logger } from '../../utils/logger';
 export function applyMapColors(
   map: MapLibreMap,
   extra: {
+    airportCityKeyMap: Record<string, string>;
     selectedAirportCodes: string[];
     tripVisibleAirportCodes: string[] | null;
     highlightedAirports: string[];
@@ -80,21 +81,52 @@ export function applyMapColors(
   const fGen = ['interpolate', ['linear'], ['zoom'], zMin, n(colorState?.generalAirportLabelSizeMin, 10), zMax, n(colorState?.generalAirportLabelSizeMax, 14)];
   const fHigh = ['interpolate', ['linear'], ['zoom'], zMin, n(colorState?.highlightedLabelSizeMin, 12), zMax, n(colorState?.highlightedLabelSizeMax, 18)];
 
-  // KOLORY WYBRANYCH: Precyzyjne rozdzielenie kropki i etykiety
-  const buildSelectedExpr = (type: 'airport' | 'label', propName: 'la_sel_idx' | 'la_city_sel_idx', fallback: string) => {
+  const sac = Array.from(new Set((extra.selectedAirportCodes || []).map(c => c.toUpperCase())));
+  const mtac = Array.from(new Set((extra.manualTransferAirportCodes || []).map(c => c.toUpperCase())));
+  const eac = Array.from(new Set((extra.explorationAirportCodes || []).map(c => c.toUpperCase())));
+  const ha = Array.from(new Set((extra.highlightedAirports || []).map(c => c.toUpperCase())));
+  const tvac = Array.from(new Set((extra.tripVisibleAirportCodes || []).map(c => c.toUpperCase())));
+
+  const isTripActive = (extra.tripState?.legs?.length || 0) > 0;
+  const tripCodes = Array.from(new Set([...tvac, ...mtac]));
+  const destCodes = Array.from(new Set(ha));
+  const hCodes = Array.from(new Set([...sac, ...ha, ...tvac, ...mtac, ...eac]));
+
+  const cityKeyMap = extra.airportCityKeyMap || {};
+  const citySelectedCodes = Array.from(new Set(sac.map(c => cityKeyMap[c]).filter(Boolean)));
+  const cityDestCodes = Array.from(new Set(destCodes.map(c => cityKeyMap[c]).filter(Boolean)));
+  const cityTripCodes = Array.from(new Set(tripCodes.map(c => cityKeyMap[c]).filter(Boolean)));
+  const cityHighCodes = Array.from(new Set(hCodes.map(c => cityKeyMap[c]).filter(Boolean)));
+
+  const buildSelectedExpr = (type: 'airport' | 'label', fallback: string) => {
     const pairs: any[] = [];
     (colorState?.startPoints || []).forEach((sp: any, i: number) => {
       const color = type === 'airport' ? sp.airport : sp.label;
-      if (color) pairs.push(i, color);
+      const code = sac[i];
+      if (color && code) pairs.push(code, color);
     });
     if (pairs.length === 0) return fallback;
-    return ['match', ['get', propName], ...pairs, fallback];
+    return ['match', ['get', 'code'], ...pairs, fallback];
   };
 
-  const cSelCircle = buildSelectedExpr('airport', 'la_sel_idx', '#000000');
-  const cSelLabel = buildSelectedExpr('label', 'la_sel_idx', labelPaint.textColor);
-  const cCitySelCircle = buildSelectedExpr('airport', 'la_city_sel_idx', '#000000');
-  const cCitySelLabel = buildSelectedExpr('label', 'la_city_sel_idx', labelPaint.textColor);
+  const buildCitySelectedExpr = (fallback: string) => {
+    const pairs: any[] = [];
+    citySelectedCodes.forEach(cityCode => {
+      const selectedInCity = sac.filter(c => cityKeyMap[c] === cityCode);
+      if (selectedInCity.length > 0) {
+        const firstSelectedCode = selectedInCity[0];
+        const i = sac.indexOf(firstSelectedCode);
+        const color = colorState?.startPoints?.[i]?.label;
+        if (color) pairs.push(cityCode, color);
+      }
+    });
+    if (pairs.length === 0) return fallback;
+    return ['match', ['get', 'city_code'], ...pairs, fallback];
+  };
+
+  const cSelCircle = buildSelectedExpr('airport', '#000000');
+  const cSelLabel = buildSelectedExpr('label', labelPaint.textColor);
+  const cCitySelLabel = buildCitySelectedExpr(labelPaint.textColor);
 
   // APLIKACJA STYLU KROPEK
   const isImg = (styleId || '').toLowerCase().includes('imagery');
@@ -120,13 +152,15 @@ export function applyMapColors(
   const tripLabelC = colorState?.tripLabelColor || labelPaint.textColor;
   const genLabelC = colorState?.generalLabelColor || labelPaint.textColor;
 
-  const isSelected = ['==', ['get', 'is_selected'], true];
-  const isTrip = ['==', ['get', 'is_trip'], true];
-  const isDest = ['==', ['get', 'is_high'], true];
+  const isSelected = ['match', ['get', 'code'], sac.length > 0 ? sac : ['_NONE_'], true, false];
+  const isTrip = ['match', ['get', 'code'], tripCodes.length > 0 ? tripCodes : ['_NONE_'], true, false];
+  const isDest = ['match', ['get', 'code'], destCodes.length > 0 ? destCodes : ['_NONE_'], true, false];
 
-  const isCitySelected = ['==', ['get', 'is_city_selected'], true];
-  const isCityTrip = ['==', ['get', 'is_city_trip'], true];
-  const isCityDest = ['==', ['get', 'is_city_dest'], true];
+  const isCitySelected = ['match', ['get', 'city_code'], citySelectedCodes.length > 0 ? citySelectedCodes : ['_NONE_'], true, false];
+  const isCityTrip = ['match', ['get', 'city_code'], cityTripCodes.length > 0 ? cityTripCodes : ['_NONE_'], true, false];
+  const isCityDest = ['match', ['get', 'city_code'], cityDestCodes.length > 0 ? cityDestCodes : ['_NONE_'], true, false];
+  const isCityHighExpr = ['match', ['get', 'city_code'], cityHighCodes.length > 0 ? cityHighCodes : ['_NONE_'], true, false];
+  const isHighExpr = ['match', ['get', 'code'], hCodes.length > 0 ? hCodes : ['_NONE_'], true, false];
 
   const textColorExpr: any = [
     'step',
@@ -155,14 +189,78 @@ export function applyMapColors(
     // Rozmiar: Wyróżnione (Wybrane/Cel/Trasa) zawsze korzystają z wysokiego detalu
     const textSizeExpr: any = [
       'interpolate', ['linear'], ['zoom'],
-      zMin, ['case', ['==', ['get', 'is_city_high'], true], n(colorState?.highlightedLabelSizeMin, 12), n(colorState?.generalAirportLabelSizeMin, 10)],
-      zMax, ['case', ['==', ['get', 'is_high'], true], n(colorState?.highlightedLabelSizeMax, 18), n(colorState?.generalAirportLabelSizeMax, 14)]
+      zMin, ['case', isCityHighExpr, n(colorState?.highlightedLabelSizeMin, 12), n(colorState?.generalAirportLabelSizeMin, 10)],
+      zMax, ['case', isHighExpr, n(colorState?.highlightedLabelSizeMax, 18), n(colorState?.generalAirportLabelSizeMax, 14)]
+    ];
+
+    const pad = 3;
+    const off_n_low = [0, (n(colorState?.generalAirportRadiusMin, 2) + pad) / (n(colorState?.generalAirportLabelSizeMin, 10) || 11)];
+    const off_f_low = [0, (n(colorState?.generalAirportRadiusMax, 8) + pad) / (n(colorState?.generalAirportLabelSizeMax, 14) || 13)];
+    const off_n_high = [0, (n(colorState?.highlightedAirportRadiusMin, 4) + pad) / (n(colorState?.highlightedLabelSizeMin, 12) || 11)];
+    const off_f_high = [0, (n(colorState?.highlightedAirportRadiusMax, 16) + pad) / (n(colorState?.highlightedLabelSizeMax, 18) || 13)];
+
+    const textOffsetExpr: any = [
+      'interpolate', ['linear'], ['zoom'],
+      1.3, ['case', isHighExpr, ['literal', off_n_high], ['literal', off_n_low]],
+      10, ['case', isHighExpr, ['literal', off_f_high], ['literal', off_f_low]]
+    ];
+
+    const textFieldExpr: any = [
+      'step',
+      ['zoom'],
+      // Zoom < 4.2
+      ['case',
+        isSelected, ['get', 'cl_hl_high'],
+        ['all', isCityHighExpr, ['>', ['coalesce', ['get', 'city_airport_count'], 0], 1]], ['get', 'cl_grouped'],
+        isHighExpr, ['get', 'cl_hl_low'],
+        ['case', ['>', ['coalesce', ['get', 'city_airport_count'], 0], 1], ['get', 'cl_grouped'], ""]
+      ],
+      4.2,
+      // Zoom 4.2 - 7.0
+      ['case',
+        isSelected, ['get', 'cl_hl_high'],
+        ['all', isCityHighExpr, ['>', ['coalesce', ['get', 'city_airport_count'], 0], 1]], ['get', 'cl_grouped'],
+        isHighExpr, ['get', 'cl_hl_low'],
+        ['case', ['>', ['coalesce', ['get', 'city_airport_count'], 0], 1], ['get', 'cl_grouped'], ['get', 'cl_search']]
+      ],
+      7.0,
+      // Zoom > 7.0
+      ['case', isHighExpr, ['get', 'cl_hl_high'], ['get', 'cl_high']]
+    ];
+
+    const symbolSortKeyExpr: any = [
+      'step',
+      ['zoom'],
+      ['case',
+        isCitySelected, ['-', -40000, ['coalesce', ['get', 'rank'], 0]],
+        isCityDest, ['-', -30000, ['coalesce', ['get', 'rank'], 0]],
+        isCityTrip, ['-', -20000, ['coalesce', ['get', 'rank'], 0]],
+        ['-', 1000, ['coalesce', ['get', 'rank'], 0]]
+      ],
+      7.0,
+      ['case',
+        isSelected, ['-', -40000, ['coalesce', ['get', 'rank'], 0]],
+        isDest, ['-', -30000, ['coalesce', ['get', 'rank'], 0]],
+        isTrip, ['-', -20000, ['coalesce', ['get', 'rank'], 0]],
+        ['-', 1000, ['coalesce', ['get', 'rank'], 0]]
+      ]
     ];
 
     map.setLayoutProperty('airports-labels', 'text-size', textSizeExpr);
+    map.setLayoutProperty('airports-labels-selected', 'text-size', textSizeExpr);
+    map.setLayoutProperty('airports-labels', 'text-offset', textOffsetExpr);
+    map.setLayoutProperty('airports-labels-selected', 'text-offset', textOffsetExpr);
+    map.setLayoutProperty('airports-labels', 'text-field', textFieldExpr);
+    map.setLayoutProperty('airports-labels-selected', 'text-field', textFieldExpr);
+    map.setLayoutProperty('airports-labels', 'symbol-sort-key', symbolSortKeyExpr);
+    map.setLayoutProperty('airports-labels-selected', 'symbol-sort-key', symbolSortKeyExpr);
+
     map.setPaintProperty('airports-labels', 'text-color', textColorExpr);
+    map.setPaintProperty('airports-labels-selected', 'text-color', textColorExpr);
     map.setPaintProperty('airports-labels', 'text-halo-color', labelPaint.haloColor);
-    map.setPaintProperty('airports-labels', 'text-halo-width', ['case', ['==', ['get', 'is_city_high'], true], 2.5, labelPaint.haloWidth] as any);
+    map.setPaintProperty('airports-labels-selected', 'text-halo-color', labelPaint.haloColor);
+    map.setPaintProperty('airports-labels', 'text-halo-width', ['case', isCityHighExpr, 2.5, labelPaint.haloWidth] as any);
+    map.setPaintProperty('airports-labels-selected', 'text-halo-width', ['case', isCityHighExpr, 2.5, labelPaint.haloWidth] as any);
     map.setLayoutProperty('airports-labels', 'visibility', 'visible');
   }
 
@@ -220,29 +318,20 @@ export function applyMapColors(
     map.setPaintProperty('selected-routes', 'line-width', globalStyles.width);
   }
 
-  // SYNC FILTRÓW: Grupowanie miast
-  const sac = Array.from(new Set((extra.selectedAirportCodes || []).map(c => c.toUpperCase())));
-  const mtac = Array.from(new Set((extra.manualTransferAirportCodes || []).map(c => c.toUpperCase())));
-  const eac = Array.from(new Set((extra.explorationAirportCodes || []).map(c => c.toUpperCase())));
-  const ha = Array.from(new Set((extra.highlightedAirports || []).map(c => c.toUpperCase())));
-  const tvac = Array.from(new Set((extra.tripVisibleAirportCodes || []).map(c => c.toUpperCase())));
-
-  const hCodes = Array.from(new Set([...sac, ...ha, ...tvac, ...mtac, ...eac]));
-
+  const isCityDestPrimary = ['all', isCityDest, ['==', ['get', 'is_city_primary'], true]];
+  const isCityTripPrimary = ['all', isCityTrip, ['==', ['get', 'is_city_primary'], true]];
+  
   // Filtr grupowania dla labeli: poniżej zooma 7 tylko główny port miasta
   const labelGroupFilter = [
     'case',
     ['<', ['zoom'], 7.0],
     ['case',
-      ['==', ['get', 'is_city_dest'], true], ['==', ['get', 'is_city_dest_primary'], true],
-      ['==', ['get', 'is_city_trip'], true], ['==', ['get', 'is_city_trip_primary'], true],
+      isCityDest, isCityDestPrimary,
+      isCityTrip, isCityTripPrimary,
       ['==', ['get', 'is_city_primary'], true]
     ],
     true
   ];
-
-  const isTripActive = (extra.tripState?.legs?.length || 0) > 0;
-  const tripCodes = Array.from(new Set([...tvac, ...mtac]));
 
   safeSetFilter('airports-selected', ['match', ['get', 'code'], sac.length > 0 ? sac : ['_NONE_'], true, false]);
   safeSetFilter('airports-highlighted', ['match', ['get', 'code'], ha.length > 0 ? ha : ['_NONE_'], true, false]);
@@ -258,31 +347,20 @@ export function applyMapColors(
   // APLIKACJA FILTRÓW DLA ETYKIET
   // [SOLIDNA OKLUZJA]: Rozdzielamy na dwie warstwy, aby Wybrane (wymuszone nakładanie) 
   // nie dublowało się z warstwą ogólną.
-  const isSelectedFilter = ['==', ['get', 'is_selected'], true];
-  const notSelectedFilter = ['!=', ['get', 'is_selected'], true];
+  const isSelectedFilter = ['match', ['get', 'code'], sac.length > 0 ? sac : ['_NONE_'], true, false];
+  const notSelectedFilter = ['match', ['get', 'code'], sac.length > 0 ? sac : ['_NONE_'], false, true];
 
-  // 1. Warstwa ogólna (Pozostałe - Standardowa okluzja)
-  safeSetFilter('airports-labels', mergeFilterConditions(labelGroupFilter, notSelectedFilter));
+  if (isTripActive) {
+    // W trybie podróży: warstwa ogólna pokazuje TYLKO wyróżnione (dest/trip/exploration), NIE general
+    const tripLabelFilter = ['match', ['get', 'code'], hCodes.length > 0 ? hCodes : ['_NONE_'], true, false];
+    safeSetFilter('airports-labels', mergeFilterConditions(mergeFilterConditions(labelGroupFilter, notSelectedFilter), tripLabelFilter));
+  } else {
+    // 1. Warstwa ogólna (Pozostałe - Standardowa okluzja)
+    safeSetFilter('airports-labels', mergeFilterConditions(labelGroupFilter, notSelectedFilter));
+  }
 
   // 2. Warstwa wybrana (Selected Only - Zawsze widoczna)
   safeSetFilter('airports-labels-selected', isSelectedFilter);
-
-  // Synchronizacja stylów dla OBU warstw etykiet
-  const labelIds = ['airports-labels', 'airports-labels-selected'];
-  labelIds.forEach(id => {
-    if (map.getLayer(id)) {
-      const textSizeExpr: any = [
-        'interpolate', ['linear'], ['zoom'],
-        zMin, ['case', ['==', ['get', 'is_city_high'], true], n(colorState?.highlightedLabelSizeMin, 12), n(colorState?.generalAirportLabelSizeMin, 10)],
-        zMax, ['case', ['==', ['get', 'is_high'], true], n(colorState?.highlightedLabelSizeMax, 18), n(colorState?.generalAirportLabelSizeMax, 14)]
-      ];
-      map.setLayoutProperty(id, 'text-size', textSizeExpr);
-      map.setPaintProperty(id, 'text-color', textColorExpr);
-      map.setPaintProperty(id, 'text-halo-color', labelPaint.haloColor);
-      map.setPaintProperty(id, 'text-halo-width', ['case', ['==', ['get', 'is_city_high'], true], 2.5, labelPaint.haloWidth] as any);
-      map.setLayoutProperty(id, 'visibility', 'visible');
-    }
-  });
 
   // --- SYNCHRONIZACJA DANYCH PRZEGLĄDU PRZESIADEK (Dash lines) ---
   const transferSrc = map.getSource('manual-transfer-preview') as maplibregl.GeoJSONSource | undefined;
