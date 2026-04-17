@@ -20,7 +20,7 @@ export function addAirportsLayer(
   colorState: any
 ) {
   logger.log("[GPU_INIT] addAirportsLayer rozpoczęte");
-  
+
   const rawMin = n(colorState?.zoomRangeMin, 1.3);
   const rawMax = n(colorState?.zoomRangeMax, 12.0);
   // ZABEZPIECZENIE: Silnik MapLibre wymaga zMin < zMax dla interpolacji
@@ -30,10 +30,10 @@ export function addAirportsLayer(
   try {
     // 1. CZYSZCZENIE
     AIRPORT_LAYERS_ALL.forEach(id => {
-      try { if (map.getLayer(id)) map.removeLayer(id); } catch(e) {}
+      try { if (map.getLayer(id)) map.removeLayer(id); } catch (e) { }
     });
-    try { if (map.getSource('airports')) map.removeSource('airports'); } catch(e) {}
-    try { if (map.getSource('airports-hover-single')) map.removeSource('airports-hover-single'); } catch(e) {}
+    try { if (map.getSource('airports')) map.removeSource('airports'); } catch (e) { }
+    try { if (map.getSource('airports-hover-single')) map.removeSource('airports-hover-single'); } catch (e) { }
 
     // 2. DODANIE ŹRÓDEŁ
     map.addSource('airports', {
@@ -58,10 +58,10 @@ export function addAirportsLayer(
     // WARSTWY ETYKIET
     // Rozdzielamy na dwie warstwy: standardowa (z okluzją) i wybrana (z wymuszonym nakładaniem).
     // Dzięki temu wybrany punkt startowy nigdy nie "zniknie" pod łukami lotów wychodzących.
-    
+
     // 1. Warstwa wybrana (Selected Only - Z detekcją kolizji)
     addLabelLayer(map, 'airports-labels-selected', ['==', ['get', 'is_selected'], true], fonts, lang, colorState, styleId, false);
-    
+
     // 2. Warstwa ogólna (Pozostałe - Standardowa okluzja)
     addLabelLayer(map, 'airports-labels', ['!=', ['get', 'is_selected'], true], fonts, lang, colorState, styleId, false);
 
@@ -81,7 +81,7 @@ export function addAirportsLayer(
           'circle-pitch-scale': 'map'
         }
       });
-  
+
       map.addLayer({
         id: 'airports-hover-single-label',
         type: 'symbol',
@@ -118,11 +118,11 @@ function addCircleLayer(map: maplibregl.Map, id: string, filter: any, colorState
     const rawMax = n(colorState?.zoomRangeMax, 12.0);
     const zMin = Math.min(rawMin, rawMax);
     const zMax = Math.max(zMin + 0.001, rawMax);
-    
+
     // Inicjalne parametry wizualne
     const isImg = (styleId || '').toLowerCase().includes('imagery');
     const strokeColor = isImg ? '#000000' : '#ffffff';
-    
+
     // Radii i Kolor
     let radius: any = 4;
     let color: string = '#FF6B6B';
@@ -152,7 +152,7 @@ function addCircleLayer(map: maplibregl.Map, id: string, filter: any, colorState
 }
 
 function addLabelLayer(
-  map: maplibregl.Map, id: string, filter: any, fonts: string[], lang: string, 
+  map: maplibregl.Map, id: string, filter: any, fonts: string[], lang: string,
   colorState: any, styleId: string | undefined, forceOverlap: boolean = false
 ) {
   try {
@@ -161,18 +161,18 @@ function addLabelLayer(
     const zMin = Math.min(rawMin, rawMax);
     const zMax = Math.max(zMin + 0.001, rawMax);
     const labelPaint = getLabelPaint(styleId);
-    
+
     const fontsRegular = fonts; // ['Noto Sans Regular']
     const fontsBold = getSafeFontsFromStyle(map, true); // ['Noto Sans Bold']
 
-    const isHighExpr = ['get', 'is_high'];
-    const isCityHighExpr = ['get', 'is_city_high'];
-    const isSelectedExpr = ['get', 'is_selected'];
-    const isTripExpr = ['get', 'is_trip'];
-    const isDestExpr = ['get', 'is_dest'];
-    const isCitySelectedExpr = ['get', 'is_city_selected'];
-    const isCityDestExpr = ['get', 'is_city_dest'];
-    const isCityTripExpr = ['get', 'is_city_trip'];
+    const isHighExpr = ['==', ['get', 'is_high'], true];
+    const isCityHighExpr = ['==', ['get', 'is_city_high'], true];
+    const isSelectedExpr = ['==', ['get', 'is_selected'], true];
+    const isTripExpr = ['==', ['get', 'is_trip'], true];
+    const isDestExpr = ['==', ['get', 'is_dest'], true];
+    const isCitySelectedExpr = ['==', ['get', 'is_city_selected'], true];
+    const isCityDestExpr = ['==', ['get', 'is_city_dest'], true];
+    const isCityTripExpr = ['==', ['get', 'is_city_trip'], true];
 
     const layout: any = {
       // Inteligentne grupowanie dla Highlighted
@@ -180,7 +180,7 @@ function addLabelLayer(
         'step',
         ['zoom'],
         // Zoom < 4.2: Grupowanie lub ukrywanie. Wybrane są zawsze widoczne z kodem
-        ['case', 
+        ['case',
           isSelectedExpr, ['get', 'cl_hl_high'],
           ['all', isCityHighExpr, ['>', ['coalesce', ['get', 'city_airport_count'], 0], 1]], ['get', 'cl_grouped'],
           isHighExpr, ['get', 'cl_hl_low'],
@@ -188,7 +188,7 @@ function addLabelLayer(
         ],
         4.2,
         // Zoom 4.2 - 7.0: Miasta i Wyszukiwanie (Low Detail)
-        ['case', 
+        ['case',
           isSelectedExpr, ['get', 'cl_hl_high'],
           ['all', isCityHighExpr, ['>', ['coalesce', ['get', 'city_airport_count'], 0], 1]], ['get', 'cl_grouped'],
           isHighExpr, ['get', 'cl_hl_low'],
@@ -198,70 +198,60 @@ function addLabelLayer(
         // Zoom > 7.0: Pełny detal dla wszystkich (High Detail)
         ['case', isHighExpr, ['get', 'cl_hl_high'], ['get', 'cl_high']]
       ],
-      
-      // Dynamiczna czcionka
-      'text-font': [
-        'step',
-        ['zoom'],
-        ['case', 
-          ['any', isCitySelectedExpr, isCityDestExpr, isCityTripExpr], ['literal', fontsBold], 
-          ['literal', fontsRegular]
-        ],
-        7.0,
-        ['case', 
-          ['any', isSelectedExpr, isDestExpr, isTripExpr], ['literal', fontsBold], 
-          ['literal', fontsRegular]
-        ]
-      ],
-      
+
+      // Dynamiczna czcionka w warstwach jest niestabilna przy braku glifów. MapLibre próbuje 
+      // rzutować wyrażenie logiczne przy tworzeniu lokalnego canvas i wywala awarię (type: 3).
+      // Zamiast tego używamy statycznej reguły per warstwa.
+      'text-font': id === 'airports-labels-selected' ? ['literal', fontsBold] : ['literal', fontsRegular],
+
       'text-justify': 'center',
       'text-allow-overlap': forceOverlap,
       'text-ignore-placement': forceOverlap,
-      'text-padding': 4.0, 
-      
+      'text-padding': 4.0,
+
       // Ścisły priorytet wyświetlania
       // Selected (-40000) > Destination (-30000) > Trip (-20000) > General
       'symbol-sort-key': [
         'step',
         ['zoom'],
-        ['case', 
-          isCitySelectedExpr, ['-', -40000, ['coalesce', ['get', 'rank'], 0]], 
-          isCityDestExpr, ['-', -30000, ['coalesce', ['get', 'rank'], 0]], 
-          isCityTripExpr, ['-', -20000, ['coalesce', ['get', 'rank'], 0]], 
+        ['case',
+          isCitySelectedExpr, ['-', -40000, ['coalesce', ['get', 'rank'], 0]],
+          isCityDestExpr, ['-', -30000, ['coalesce', ['get', 'rank'], 0]],
+          isCityTripExpr, ['-', -20000, ['coalesce', ['get', 'rank'], 0]],
           ['-', 1000, ['coalesce', ['get', 'rank'], 0]]
         ],
         7.0,
-        ['case', 
-          isSelectedExpr, ['-', -40000, ['coalesce', ['get', 'rank'], 0]], 
-          isDestExpr, ['-', -30000, ['coalesce', ['get', 'rank'], 0]], 
-          isTripExpr, ['-', -20000, ['coalesce', ['get', 'rank'], 0]], 
+        ['case',
+          isSelectedExpr, ['-', -40000, ['coalesce', ['get', 'rank'], 0]],
+          isDestExpr, ['-', -30000, ['coalesce', ['get', 'rank'], 0]],
+          isTripExpr, ['-', -20000, ['coalesce', ['get', 'rank'], 0]],
           ['-', 1000, ['coalesce', ['get', 'rank'], 0]]
         ]
       ],
-      
+
       'text-pitch-alignment': 'map',
       'symbol-avoid-edges': false,
-      
+
       // Wielkość płynnie dopasowana
       'text-size': [
         'interpolate', ['linear'], ['zoom'],
-        zMin, ['case', 
-          ['any', isCitySelectedExpr, isCityDestExpr, isCityTripExpr], n(colorState?.highlightedLabelSizeMin, 12), 
+        zMin, ['case',
+          ['any', isCitySelectedExpr, isCityDestExpr, isCityTripExpr], n(colorState?.highlightedLabelSizeMin, 12),
           n(colorState?.generalAirportLabelSizeMin, 10)
         ],
-        7.0, ['case', 
-          ['any', isCitySelectedExpr, isCityDestExpr, isCityTripExpr], n(colorState?.highlightedLabelSizeMax, 18), 
+        7.0, ['case',
+          ['any', isCitySelectedExpr, isCityDestExpr, isCityTripExpr], n(colorState?.highlightedLabelSizeMax, 18),
           n(colorState?.generalAirportLabelSizeMax, 14)
         ],
-        12.0, ['case', 
-          ['any', isSelectedExpr, isDestExpr, isTripExpr], n(colorState?.highlightedLabelSizeMax, 18), 
+        12.0, ['case',
+          ['any', isSelectedExpr, isDestExpr, isTripExpr], n(colorState?.highlightedLabelSizeMax, 18),
           n(colorState?.generalAirportLabelSizeMax, 14)
         ]
       ],
-      
+
       'text-offset': [
-        'interpolate', ['linear'], ['zoom'], 
-        1.3, ['case', ['==', ['typeof', ['get', 'la_off_n']], 'array'], ['get', 'la_off_n'], ['literal', [0, 1.3]]], 
+        'interpolate', ['linear'], ['zoom'],
+        1.3, ['case', ['==', ['typeof', ['get', 'la_off_n']], 'array'], ['get', 'la_off_n'], ['literal', [0, 1.3]]],
         10, ['case', ['==', ['typeof', ['get', 'la_off_f']], 'array'], ['get', 'la_off_f'], ['literal', [0, 1.8]]]
       ],
       'text-anchor': 'top'
@@ -276,7 +266,8 @@ function addLabelLayer(
       ['case', isHighExpr, (colorState?.destinationLabelColor || labelPaint.textColor), (colorState?.generalLabelColor || labelPaint.textColor)]
     ];
 
-    map.addLayer({ id, type: 'symbol', source: 'airports', filter, layout,
+    map.addLayer({
+      id, type: 'symbol', source: 'airports', filter, layout,
       paint: {
         'text-color': textColor,
         'text-halo-color': labelPaint.haloColor,

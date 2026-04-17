@@ -71,6 +71,15 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
     const m = refs.map.current;
     const canvas = m.getCanvas();
 
+    // OPTYMALIZACJA WYDAJNOŚCI: Cache'owanie prostokąta canvasu, aby uniknąć wymuszonych reflow (getBoundingClientRect)
+    // podczas każdego zdarzenia mousemove.
+    let canvasRect = canvas.getBoundingClientRect();
+    const updateCanvasRect = () => {
+      if (canvas) canvasRect = canvas.getBoundingClientRect();
+    };
+    window.addEventListener('resize', updateCanvasRect);
+    window.addEventListener('scroll', updateCanvasRect, true);
+
     // 1. Dynamiczne buforowanie cech
     let cachedAirportsMap = new Map<string, AirportFeature>();
     let lastDataRef: any = null;
@@ -108,10 +117,20 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
         return;
       }
 
-      // W trybie podróży ignorujemy wszystko, co nie jest wyróżnione
-      if (refs.isTripActive && !feat.properties.is_high) {
-        applyHover(null);
-        return;
+      // W trybie podróży ignorujemy wszystko, co nie jest widoczne (wyróżnione)
+      if (refs.isTripActive) {
+        const sac = refs.selectedAirportCodesRef.current || [];
+        const ha = refs.highlightedAirportsRef.current || [];
+        const tvac = refs.tripVisibleAirportCodesRef.current || [];
+        const eac = refs.explorationAirportCodesRef.current || [];
+        const mtac = (window as any).manualTransferAirportCodes || [];
+        
+        const isVisibleInTrip = sac.includes(code) || ha.includes(code) || tvac.includes(code) || eac.includes(code) || mtac.includes(code);
+        
+        if (!isVisibleInTrip) {
+          applyHover(null);
+          return;
+        }
       }
 
       refs.hoveredAirportCodeRef.current = code;
@@ -125,12 +144,19 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       let activeIdx = -1;
 
       if (isGroupingPhase) {
-        if (feat.properties.is_selected || feat.properties.is_city_selected_primary) {
+        if (feat.properties.is_selected) {
+          type = 'selected';
+          activeIdx = n(feat.properties.la_sel_idx, -1);
+        } else if (feat.properties.is_city_selected_primary) {
           type = 'selected';
           activeIdx = n(feat.properties.la_city_sel_idx, -1);
-        } else if (feat.properties.is_dest || feat.properties.is_city_dest_primary) {
+        } else if (feat.properties.is_dest) {
           type = 'destination';
-        } else if (feat.properties.is_trip || feat.properties.is_city_trip_primary) {
+        } else if (feat.properties.is_city_dest_primary) {
+          type = 'destination';
+        } else if (feat.properties.is_trip) {
+          type = 'trip';
+        } else if (feat.properties.is_city_trip_primary) {
           type = 'trip';
         } else {
           type = 'general';
@@ -190,7 +216,7 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
             m.setPaintProperty('airports-hover-single-label', 'text-halo-color', isImg ? '#000000' : 'rgba(255,255,255,0.95)');
             m.setPaintProperty('airports-hover-single-label', 'text-halo-width', isImg ? 2.5 : 2.0);
           }
-        } catch(e) {}
+        } catch (e) { }
       }
     };
 
@@ -198,13 +224,14 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
 
     const prevNaturalHits = new Set<string>();
     const lastMoveTimeRef = { current: 0 };
+    let applyColorsTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    const processInteraction = (x: number, y: number, candidates: Array<{code: string, distance: number}>) => {
+    const processInteraction = (x: number, y: number, candidates: Array<{ code: string, distance: number }>) => {
       refreshFeatureMap();
       const zoom = m.getZoom();
       const cS = useColorStore.getState();
       const currentHovered = refs.hoveredAirportCodeRef.current;
-      
+
       const sac = refs.selectedAirportCodesRef.current || [];
       const ha = refs.highlightedAirportsRef.current || [];
       const tvac = refs.tripVisibleAirportCodesRef.current || [];
@@ -216,8 +243,8 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
 
       candidates.forEach(cand => {
         if (refs.isTripActive) {
-          const feat = cachedAirportsMap.get(cand.code.toUpperCase());
-          if (!feat || !feat.properties.is_high) return;
+          const isVisibleInTrip = sac.includes(cand.code) || ha.includes(cand.code) || tvac.includes(cand.code) || eac.includes(cand.code) || mtac.includes(cand.code);
+          if (!isVisibleInTrip) return;
         }
 
         const radius = getVisualRadius(cand.code, zoom, cS, false, sac, ha, tvac, eac, mtac);
@@ -265,18 +292,24 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       if (finalCode !== refs.lastDetectedCodeRef.current) {
         refs.lastDetectedCodeRef.current = finalCode;
         applyHover(finalCode);
-        requestAnimationFrame(() => {
-          refs.applyColors('all');
-        });
+
+        // OPTYMALIZACJA: Debouncing aktualizacji filtrów i kolorów. 
+        // setFilter w MapLibre jest operacją ciężką, nie należy jej wywoływać w każdej klatce hovera.
+        if (applyColorsTimeout) clearTimeout(applyColorsTimeout);
+        applyColorsTimeout = setTimeout(() => {
+          requestAnimationFrame(() => {
+            refs.applyColors('all');
+          });
+        }, 16); // ~60fps debounce dla ciężkich operacji logicznych
       }
     };
 
     const handleMouseMove = (e: MouseEvent | { clientX: number, clientY: number }) => {
       if (!showAirports || !spatialIndex) return;
       if (Date.now() < refs.hoverLockUntilRef.current) return;
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+
+      const x = e.clientX - canvasRect.left;
+      const y = e.clientY - canvasRect.top;
       const SCAN_DIST = 45;
       const candidates = spatialIndex.searchRadius(x, y, SCAN_DIST);
       processInteraction(x, y, candidates);
@@ -292,7 +325,7 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       const lastPos = (m as any)._mousePos;
       if (!lastPos) return;
       const nearby = spatialIndex.searchRadius(lastPos.x, lastPos.y, 100);
-      const candidates: Array<{code: string, distance: number}> = [];
+      const candidates: Array<{ code: string, distance: number }> = [];
       const seen = new Set<string>();
 
       nearby.forEach(cand => {
@@ -301,7 +334,7 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
           if (refs.isTripActive && !feat.properties.is_high) return;
 
           const p = m.project(feat.geometry.coordinates as [number, number]);
-          const dist = Math.sqrt((lastPos.x - p.x)**2 + (lastPos.y - p.y)**2);
+          const dist = Math.sqrt((lastPos.x - p.x) ** 2 + (lastPos.y - p.y) ** 2);
           if (dist < 100) {
             candidates.push({ code: cand.code, distance: dist });
             seen.add(cand.code);
@@ -326,7 +359,7 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
 
     const handleClick = (e: MouseEvent) => {
       refreshFeatureMap();
-      
+
       const code = refs.hoveredAirportCodeRef.current;
       if (!code) return;
 
@@ -335,7 +368,7 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
 
       const tripState = useTripStore.getState().tripState;
       const currentTripActive = !!(tripState && tripState.legs && tripState.legs.length > 0);
-      
+
       if (fullFeat.properties.is_selected) return;
 
       if (currentTripActive) {
@@ -354,13 +387,13 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
           nextAirports = [...airports, code];
         }
 
-        const nextFilter = { 
+        const nextFilter = {
           ...currentFilter,
-          airports: nextAirports 
+          airports: nextAirports
         };
 
         logger.log(`[MAP-CLICK|MULTI] Przełączanie ${code}. Nowa lista: ${nextAirports.join(', ')}`);
-        
+
         useFilterStore.getState().setDestinationFilter(nextFilter);
         return;
       }
@@ -391,6 +424,9 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       m.off('movestart', onMoveStart); m.off('move', onMove); m.off('moveend', onMoveEnd);
       canvas.removeEventListener('mousemove', handleMouseMove);
       canvas.removeEventListener('click', handleClick, { capture: true });
+      window.removeEventListener('resize', updateCanvasRect);
+      window.removeEventListener('scroll', updateCanvasRect, true);
+      if (applyColorsTimeout) clearTimeout(applyColorsTimeout);
     };
   }, [mapLoaded, showAirports, language, refs.map]);
 }

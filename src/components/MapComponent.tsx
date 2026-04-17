@@ -133,6 +133,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
   const airportNamesMap = useRef<Record<string, string>>({});
   const airportCoordsMapRef = useRef<Record<string, [number, number]>>({});
   const currentPopup = useRef<maplibregl.Popup | null>(null);
+  const transferDashOffsetRef = useRef(0);
 
   useEffect(() => { displayedFlightsRef.current = displayedFlights; }, [displayedFlights]);
   useEffect(() => { manualTransferAirportCodesRef.current = manualTransferAirportCodes; }, [manualTransferAirportCodes]);
@@ -168,7 +169,17 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     // 2. Pobranie zbiorów dla szybkiej weryfikacji (highlighted, selected, trip)
     const haSet = new Set((highlightedAirports || []).map(c => c.toUpperCase()));
     const sacSet = new Set((selectedAirportCodes || []).map(c => c.toUpperCase()));
-    const tvacSet = new Set((tripState?.legs?.flatMap(l => [l.fromAirportCode, l.toAirportCode]) || []).map(c => c.toUpperCase()));
+
+    // ZBIÓR TRIP: Zawiera lotniska z trasy, przesiadki manualne oraz aktualnie podglądane lotnisko
+    const manualTransfersCodes = (useTripStore.getState().manualTransferAirportCodes || []).map(c => c.toUpperCase());
+    const previewCode = useTripStore.getState().previewAirportCode?.toUpperCase();
+
+    const tvacSet = new Set([
+      ...(tripState?.legs?.flatMap(l => [l.fromAirportCode, l.toAirportCode]) || []).map(c => c.toUpperCase()),
+      ...(tripState ? [tripState.startAirport.code.toUpperCase()] : []),
+      ...manualTransfersCodes,
+      ...(previewCode ? [previewCode] : [])
+    ]);
 
     // Wykrywanie priorytetów miasta
     // Służy to do wyboru tzw. "lidera etykiety" – jeśli w mieście jest 5 lotnisk, 
@@ -240,6 +251,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       const selIdx = (selectedAirportCodes || []).findIndex(c => c.toUpperCase() === code);
       const isTrip = tvacSet.has(code);
       const isDest = haSet.has(code);
+      // isHigh = dowolna forma wyróżnienia (selekcja, cel, podróż, przesiadka drafted, preview)
       const isHigh = isSelected || isDest || isTrip;
 
       const citySelIdx = citySelectedIdxMap.has(cityCode) ? citySelectedIdxMap.get(cityCode) : -1;
@@ -292,7 +304,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     });
 
     return { ...airportsData, features: newFeatures };
-  }, [airportsData, language, highlightedAirports, selectedAirportCodes, explorationItems, tripState]);
+  }, [airportsData, language, highlightedAirports, selectedAirportCodes, explorationItems, tripState, useTripStore.getState().manualTransferAirportCodes, useTripStore.getState().previewAirportCode]);
 
   // Synchronizacja dla useMapHover
   useEffect(() => {
@@ -398,6 +410,26 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     }
   }, [mapLoaded, tripState, coordsMap]);
 
+  // --- ANIMACJA LINII PRZESIADEK (Marching Ants) ---
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !mapLoaded) return;
+
+    let rafId: number;
+    const animate = () => {
+      if (m.getLayer('manual-transfer-preview')) {
+        transferDashOffsetRef.current = (transferDashOffsetRef.current + 0.15) % 100;
+        try {
+          m.setPaintProperty('manual-transfer-preview', 'line-dasharray-offset', transferDashOffsetRef.current);
+        } catch (e) { }
+      }
+      rafId = requestAnimationFrame(animate);
+    };
+
+    rafId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafId);
+  }, [mapLoaded]);
+
   // --- LOGIKA STYLU ---
   const lastAppliedFingerprintRef = useRef<string>('');
   /**
@@ -430,6 +462,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       const currentSACode = selection.selectedAirportCode;
       const currentMTAC = trip.manualTransferAirportCodes || [];
       const currentTripState = trip.tripState;
+      const currentPreviewCode = trip.previewAirportCode;
 
       const tvac: string[] = [];
       if (currentTripState) {
@@ -453,7 +486,8 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
         lang: language,
         style: mapStyle, // STYL W ODCISKU
         startPoints: colorState.startPoints,
-        hover: hoveredAirportCodeRef.current
+        hover: hoveredAirportCodeRef.current,
+        previewCode: currentPreviewCode
       });
 
       if (fingerprint === lastAppliedFingerprintRef.current) {
@@ -472,6 +506,9 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
         highlightedLabelCodes: highlightedLabelCodesRef.current,
         colorState: colorState,
         hoveredAirportCode: hoveredAirportCodeRef.current,
+        previewAirportCode: currentPreviewCode,
+        coordsMap: coordsMap || {},
+        tripState: currentTripState,
         styleId: mapStyle || '', // JAWNE PRZEKAZANIE
       });
 

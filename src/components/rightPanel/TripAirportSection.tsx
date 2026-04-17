@@ -87,18 +87,20 @@ const TripAirportSection = ({
           onSelectAirports={(newCodes) => {
             setTransferAirports(prev => {
               const combined = [...new Set([...prev, ...newCodes])];
+              // SZTYWNY LIMIT: Zamiast FIFO, po prostu przycinamy do limitu
               return combined.slice(0, CONFIG.MAX_TRANSFER_AIRPORTS);
             });
           }}
           onSelectAirport={(code) => {
             setTransferAirports(prev => {
-              if (prev.includes(code) || prev.length >= CONFIG.MAX_TRANSFER_AIRPORTS) return prev;
+              if (prev.includes(code)) return prev;
+              if (prev.length >= CONFIG.MAX_TRANSFER_AIRPORTS) return prev; // Blokada
               return [...prev, code];
             });
           }}
           onPreviewAirport={onPreviewAirport}
           onClearPreview={onClearPreview}
-          maxSelect={CONFIG.MAX_TRANSFER_AIRPORTS - transferAirports.length}
+          maxSelect={CONFIG.MAX_TRANSFER_AIRPORTS}
         />
       )}
     </div>

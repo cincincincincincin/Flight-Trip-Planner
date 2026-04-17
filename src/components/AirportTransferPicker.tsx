@@ -7,6 +7,7 @@ import { UI_SYMBOLS } from '../constants/ui';
 import { useTexts } from '../hooks/useTexts';
 import { getLocalizedProp } from '../utils/i18n';
 import { useSettingsStore } from '../stores/settingsStore';
+import { logger } from '../utils/logger';
 
 interface AirportTransferPickerProps {
   currentAirport: Airport;
@@ -190,7 +191,12 @@ const AirportTransferPicker = ({
   const handleToggle = (code: string) => {
     setCheckedCodes(prev => {
       if (prev.includes(code)) return prev.filter(c => c !== code);
-      if (prev.length >= maxSelect) return prev;
+      // SZTYWNY LIMIT: Blokujemy dodawanie, jeśli suma wybranych i już istniejących przekracza limit.
+      const totalCount = preCheckedCodes.length + prev.length;
+      if (totalCount >= maxSelect) {
+        logger.log(`[PICKER] Osiągnięto limit ${maxSelect} lotnisk.`);
+        return prev;
+      }
       return [...prev, code];
     });
   };
@@ -222,7 +228,7 @@ const AirportTransferPicker = ({
             onClick={handleInputClick}
             placeholder={t.transferPicker.searchAirports}
           />
-          {isOpen && <span className="atp-counter">{checkedCodes.length}/{maxSelect}</span>}
+          {isOpen && <span className="atp-counter">{checkedCodes.length}</span>}
         </div>
         {isOpen && (
           <>
@@ -234,12 +240,14 @@ const AirportTransferPicker = ({
                   const isPreChecked = preCheckedCodes.includes(airport.code);
                   const isNewChecked = checkedCodes.includes(airport.code);
                   const checked = isPreChecked || isNewChecked;
-                  const disabled = isPreChecked || (!isNewChecked && checkedCodes.length >= maxSelect);
+                  const totalChecked = preCheckedCodes.length + checkedCodes.length;
+                  const canSelectMore = totalChecked < maxSelect;
+                  const disabled = isPreChecked || (!checked && !canSelectMore);
                   return (
                     <label
                       key={airport.code}
                       className={`atp-option ${checked ? 'atp-checked' : ''} ${disabled ? 'atp-disabled' : ''} ${isPreChecked ? 'atp-pre-checked' : ''}`}
-                      onMouseEnter={() => !isPreChecked && !disabled && onPreviewAirport?.(airport.code)}
+                      onMouseEnter={() => !isPreChecked && onPreviewAirport?.(airport.code)}
                     >
                       <input
                         type="checkbox"
@@ -289,26 +297,27 @@ const AirportTransferPicker = ({
               }}
               placeholder={displayName}
             />
-            <span className="atp-counter">{checkedCodes.length}/{maxSelect}</span>
+            <span className="atp-counter">{checkedCodes.length}</span>
           </div>
           <div className="atp-dropdown" onScroll={handleListScroll} onMouseLeave={() => onClearPreview?.()}>
             {displayedAirports.length === 0 ? (
               <div className="atp-no-results">{t.transferPicker.noAirports}</div>
             ) : (
               displayedAirports.map(airport => {
-                const checked = checkedCodes.includes(airport.code);
-                const disabled = !checked && checkedCodes.length >= maxSelect;
+                const isNewChecked = checkedCodes.includes(airport.code);
+                const isPreChecked = preCheckedCodes.includes(airport.code);
+                const checked = isPreChecked || isNewChecked;
+                const totalChecked = preCheckedCodes.length + checkedCodes.length;
+                const canSelectMore = totalChecked < maxSelect;
+                const disabled = isPreChecked || (!checked && !canSelectMore);
+
                 return (
-                  <label
-                    key={airport.code}
-                    className={`atp-option ${checked ? 'atp-checked' : ''} ${disabled ? 'atp-disabled' : ''}`}
-                    onMouseEnter={() => !disabled && onPreviewAirport?.(airport.code)}
-                  >
+                  <label key={airport.code} className={`atp-option ${checked ? 'atp-checked' : ''} ${disabled ? 'atp-disabled' : ''}`}>
                     <input
                       type="checkbox"
                       checked={checked}
                       disabled={disabled}
-                      onChange={() => handleToggle(airport.code)}
+                      onChange={() => !disabled && handleToggle(airport.code)}
                       className="atp-checkbox"
                     />
                     <span className="atp-option-code">{airport.code}</span>

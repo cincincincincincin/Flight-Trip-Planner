@@ -59,6 +59,7 @@ interface SelectionState {
     explorationItems: ExplorationItem[];
   }) => void;
   removeAirportsData: (codes: string[]) => void;
+  calculateNextExplorationItems: (items: ExplorationItem[], newItem: ExplorationItem) => ExplorationItem[];
 }
 
 export const useSelectionStore = create<SelectionState>((set) => ({
@@ -209,62 +210,59 @@ export const useSelectionStore = create<SelectionState>((set) => ({
   }),
 
   /**
-   * Zaawansowana polityka zarządzania kafelkami eksploracji (Slot Management).
-   * Zintegrowana z architekturą Smart Static Data – operuje na unikalnych kodach
-   * lotnisk, dbając o limit CONFIG.MAX_AIRPORTS. Jeśli dodanie nowego elementu
-   * (np. całego miasta) przekroczy zasoby UI, system automatycznie zwalnia najstarsze 
-   * sloty w trybie FIFO, zachowując płynność renderowania.
+   * POMOCNIK: Oblicza nowy stan eksploracji z zachowaniem limitów FIFO.
    */
-  addExplorationItem: (item) => set(state => {
-    // Identyfikator deterministyczny: zapobiega kolizjom (np. city-WAW vs airport-WAW)
-    const id = `${item.type}-${item.code}`;
+  calculateNextExplorationItems: (items: ExplorationItem[], newItem: ExplorationItem): ExplorationItem[] => {
+    // 1. Sprawdzanie duplikatów (Idempotentność)
+    if (items.some(i => i.id === newItem.id)) return items;
 
-    // 1. Sprawdzanie duplikatów na podstawie stałego klucza (Idempotentność)
-    if (state.explorationItems.some(i => i.id === id)) {
-      return state;
-    }
-
-    // 2. [ZASADA HIERARCHII]: Jeśli dodajemy lotnisko, sprawdzamy czy nie jest już objęte kafelkiem Miasta/Kraju.
-    // "Jeżeli zostało dodane miasto, a potem lotnisko z tego miasta, to nic nie robimy"
-    if (item.type === 'airport') {
-      const code = item.code.toUpperCase();
-      const isAlreadyCovered = state.explorationItems.some(existing =>
+    // 2. [ZASADA HIERARCHII]: Jeśli dodajemy lotniska, sprawdzamy czy nie są już objęte kafelkiem Miasta/Kraju.
+    if (newItem.type === 'airport') {
+      const code = newItem.code.toUpperCase();
+      const isAlreadyCovered = items.some(existing =>
         (existing.type === 'city' || existing.type === 'country') && existing.airportCodes.includes(code)
       );
-      if (isAlreadyCovered) return state;
+      if (isAlreadyCovered) return items;
     }
-
-    const newItem: ExplorationItem = { ...item, id };
 
     // Funkcja pomocnicza do zliczania unikalnych lotnisk w kolekcjach
     const getUniqueAirportCount = (itms: ExplorationItem[]) =>
       new Set(itms.flatMap(i => i.airportCodes)).size;
 
-    // 3. Konsolidacja lotnisk: jeśli nowy kafelek (np. Miasto) zawiera lotniska, które są już
-    // wyświetlane jako osobne kafelki, usuwamy te mniejsze kafelki (Up-promotion).
-    let items = state.explorationItems.filter(i => i.id !== id);
-    const newCodes = new Set(newItem.airportCodes.map(c => c.toUpperCase()));
+    // 3. Konsolidacja lotnisk: usuwamy mniejsze kafelki, jeśli nowy je zawiera (Up-promotion).
+    let nextItems = items.filter(i => i.id !== newItem.id);
+    const newCodesSet = new Set(newItem.airportCodes.map(c => c.toUpperCase()));
 
-    items = items.map(i => ({
+    nextItems = nextItems.map(i => ({
       ...i,
-      airportCodes: i.airportCodes.filter(c => !newCodes.has(c.toUpperCase()))
+      airportCodes: i.airportCodes.filter(c => !newCodesSet.has(c.toUpperCase()))
     })).filter(i => i.airportCodes.length > 0);
 
-    // Dynamiczne zwalnianie miejsca (FIFO).
-    // Limit CONFIG.MAX_AIRPORTS (np. 6) odpowiada liczbie lotnisk w Londynie.
-    // Przy dodawaniu kraju przez dedykowany panel ze strefami czasowymi, 
-    // system również pilnuje tego limitu, usuwając najstarsze sloty.
-    while (items.length > 0 && getUniqueAirportCount(items) + newItem.airportCodes.length > CONFIG.MAX_AIRPORTS) {
-      const oldest = items[0];
+    // 4. Dynamiczne zwalnianie miejsca (FIFO).
+    while (nextItems.length > 0 && getUniqueAirportCount(nextItems) + Math.min(newItem.airportCodes.length, CONFIG.MAX_AIRPORTS) > CONFIG.MAX_AIRPORTS) {
+      const oldest = nextItems[0];
       if (oldest.airportCodes.length <= 1) {
-        items.shift();
+        nextItems.shift();
       } else {
-        // Redukcja częściowa - zwalnianie lotnisk po kolei
-        items[0] = { ...oldest, airportCodes: oldest.airportCodes.slice(1) };
+        nextItems[0] = { ...oldest, airportCodes: oldest.airportCodes.slice(1) };
       }
     }
 
-    return { explorationItems: [...items, newItem] };
+    // 5. Dodatkowe zabezpieczenie: przycinamy samo newItem
+    if (newItem.airportCodes.length > CONFIG.MAX_AIRPORTS) {
+      newItem.airportCodes = newItem.airportCodes.slice(0, CONFIG.MAX_AIRPORTS);
+    }
+
+    return [...nextItems, newItem];
+  },
+
+  /**
+   * Zaawansowana polityka zarządzania kafelkami eksploracji (Slot Management).
+   */
+  addExplorationItem: (item) => set(state => {
+    const id = `${item.type}-${item.code}`;
+    const nextItems = state.calculateNextExplorationItems(state.explorationItems, { ...item, id } as ExplorationItem);
+    return { explorationItems: nextItems };
   }),
 
   removeExplorationItem: (id) => set(state => ({

@@ -152,22 +152,14 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
           if (!isAlreadyCovered) {
             const newCodes = getExplorationAirportCodes(item.type, itemCode);
             const id = `airport-${itemCode}`;
-            if (!currentExplorationItems.some(i => i.id === id)) {
-              updates.explorationItems = [
-                ...currentExplorationItems,
-                { type: item.type, code: itemCode, name: (item.data as any).name || (item.data as any).code, airportCodes: newCodes, id }
-              ];
-            }
+            const newItem = { type: item.type as any, code: itemCode, name: (item.data as any).name || (item.data as any).code, airportCodes: newCodes, id };
+            updates.explorationItems = currentState.calculateNextExplorationItems(currentExplorationItems, newItem);
           }
         } else if (item.type === 'city') {
           const newCodes = getExplorationAirportCodes(item.type, itemCode);
           const id = `city-${itemCode}`;
-          if (!currentExplorationItems.some(i => i.id === id)) {
-            updates.explorationItems = [
-              ...currentExplorationItems,
-              { type: item.type, code: itemCode, name: (item.data as any).name || (item.data as any).code, airportCodes: newCodes, id }
-            ];
-          }
+          const newItem = { type: item.type as any, code: itemCode, name: (item.data as any).name || (item.data as any).code, airportCodes: newCodes, id };
+          updates.explorationItems = currentState.calculateNextExplorationItems(currentExplorationItems, newItem);
         }
       } else if (item.type === 'country') {
         // Specyficzna obsługa dla kraju - jeśli coś było wcześniej wybrane, pokazujemy modal potwierdzenia (Picker).
@@ -181,21 +173,13 @@ export function useAppSelection({ mapNav, mapRef, handleAddToTripRef }: UseAppSe
         if (item.type === 'airport') {
           updates.highlightedAirports = [];
           const id = `airport-${itemCode}`;
-          if (!currentState.explorationItems.some(i => i.id === id)) {
-            updates.explorationItems = [
-              ...currentState.explorationItems,
-              { type: 'airport', code: itemCode, name: (item.data as any).name || itemCode, airportCodes: [itemCode], id }
-            ];
-          }
+          const newItem = { type: 'airport' as any, code: itemCode, name: (item.data as any).name || itemCode, airportCodes: [itemCode], id };
+          updates.explorationItems = currentState.calculateNextExplorationItems(currentState.explorationItems, newItem);
         } else if (item.type === 'city') {
           const cityAirportCodes = getExplorationAirportCodes('city', itemCode);
           const id = `city-${itemCode}`;
-          if (!currentState.explorationItems.some(i => i.id === id)) {
-            updates.explorationItems = [
-              ...currentState.explorationItems,
-              { type: 'city', code: itemCode, name: (item.data as any).name || itemCode, airportCodes: cityAirportCodes, id }
-            ];
-          }
+          const newItem = { type: 'city' as any, code: itemCode, name: (item.data as any).name || itemCode, airportCodes: cityAirportCodes, id };
+          updates.explorationItems = currentState.calculateNextExplorationItems(currentState.explorationItems, newItem);
         }
       }
 

@@ -50,13 +50,13 @@ export const generateGreatCircle = (
   const toRad = (deg: number) => deg * Math.PI / 180;
   const toDeg = (rad: number) => rad * 180 / Math.PI;
   const φ1 = toRad(from[1]), λ1 = toRad(from[0]);
-  const φ2 = toRad(to[1]),   λ2 = toRad(to[0]);
+  const φ2 = toRad(to[1]), λ2 = toRad(to[0]);
   const Δλ = λ2 - λ1;
   const a = Math.sin((φ2 - φ1) / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
   const d = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   if (d < 0.0001) return [from, to];
   const points: [number, number][] = [];
-  
+
   let prevLon = from[0];
   for (let i = 0; i <= numPoints; i++) {
     const t = i / numPoints;
@@ -65,16 +65,16 @@ export const generateGreatCircle = (
     const x = A * Math.cos(φ1) * Math.cos(λ1) + B * Math.cos(φ2) * Math.cos(λ2);
     const y = A * Math.cos(φ1) * Math.sin(λ1) + B * Math.cos(φ2) * Math.sin(λ2);
     const z = A * Math.sin(φ1) + B * Math.sin(φ2);
-    
+
     let lon = toDeg(Math.atan2(y, x));
     const lat = toDeg(Math.atan2(z, Math.sqrt(x * x + y * y)));
-    
+
     // KOREKTA PRZEJŚCIA PRZEZ POŁUDNIK 180:
     // Jeśli skok długości geograficznej jest zbyt duży (>180), "odwijamy" ją,
     // aby zachować ciągłość linii dla silnika GPU.
     while (lon - prevLon > 180) lon -= 360;
     while (lon - prevLon < -180) lon += 360;
-    
+
     points.push([lon, lat]);
     prevLon = lon;
   }
@@ -176,8 +176,8 @@ export const mergeFilterConditions = (...filters: any[]): any => {
  */
 export const getSafeFontsFromStyle = (map: maplibregl.Map, bold = false): string[] => {
   // Wyłącznie Noto Sans (zgodnie z folderem legacy)
-  return bold 
-    ? ['Noto Sans Bold'] 
+  return bold
+    ? ['Noto Sans Bold']
     : ['Noto Sans Regular'];
 };
 
