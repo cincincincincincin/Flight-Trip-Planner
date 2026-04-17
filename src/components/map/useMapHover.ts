@@ -70,14 +70,17 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
     const m = refs.map.current;
     const canvas = m.getCanvas();
 
-    // OPTYMALIZACJA WYDAJNOŚCI: Cache'owanie prostokąta canvasu, aby uniknąć wymuszonych reflow (getBoundingClientRect)
-    // podczas każdego zdarzenia mousemove.
     let canvasRect = canvas.getBoundingClientRect();
     const updateCanvasRect = () => {
       if (canvas) canvasRect = canvas.getBoundingClientRect();
     };
     window.addEventListener('resize', updateCanvasRect);
     window.addEventListener('scroll', updateCanvasRect, true);
+    // Wykrywa zmianę rozmiaru/pozycji canvasu gdy otwiera się panel boczny.
+    const resizeObs = new ResizeObserver(updateCanvasRect);
+    resizeObs.observe(canvas);
+    // Też aktualizuj gdy kursor wchodzi na canvas (po layoutshift bez resize).
+    canvas.addEventListener('mouseenter', updateCanvasRect);
 
     // 1. Dynamiczne buforowanie cech
     let cachedAirportsMap = new Map<string, AirportFeature>();
@@ -216,12 +219,13 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       hoverFeature.properties.h_text_color = textColor;
       hoverFeature.properties.h_type = type;
       const pad = 3;
-      const hRMin = isHigh ? n(cS.highlightedAirportRadiusMin, 4) : n(cS.generalAirportRadiusMin, 2);
-      const hRMax = isHigh ? n(cS.highlightedAirportRadiusMax, 16) : n(cS.generalAirportRadiusMax, 8);
-      const hFMin = isHigh ? n(cS.highlightedLabelSizeMin, 12) : n(cS.generalAirportLabelSizeMin, 10);
-      const hFMax = isHigh ? n(cS.highlightedLabelSizeMax, 18) : n(cS.generalAirportLabelSizeMax, 14);
-      hoverFeature.properties.h_off_n = [0, (hRMin + pad) / (hFMin || 11)];
-      hoverFeature.properties.h_off_f = [0, (hRMax + pad) / (hFMax || 13)];
+      // Offset hover labela: używamy HOVER radius (h_r_min/max), nie BASE radius
+      const hRMin = hoverFeature.properties.h_r_min;
+      const hRMax = hoverFeature.properties.h_r_max;
+      const hFMin = hoverFeature.properties.h_f_min;
+      const hFMax = hoverFeature.properties.h_f_max;
+      hoverFeature.properties.h_off_n = [0, (hRMin + pad) / (hFMin || 16)];
+      hoverFeature.properties.h_off_f = [0, (hRMax + pad) / (hFMax || 26)];
 
       const data = { type: 'FeatureCollection', features: [hoverFeature] };
       refs.hoverFeatureDataRef.current = data;
@@ -468,6 +472,8 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       canvas.removeEventListener('click', handleClick, { capture: true });
       window.removeEventListener('resize', updateCanvasRect);
       window.removeEventListener('scroll', updateCanvasRect, true);
+      resizeObs.disconnect();
+      canvas.removeEventListener('mouseenter', updateCanvasRect);
       if (applyColorsTimeout) clearTimeout(applyColorsTimeout);
     };
   }, [mapLoaded, showAirports, language, refs.map]);

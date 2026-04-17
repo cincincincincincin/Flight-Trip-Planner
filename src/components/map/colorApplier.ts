@@ -108,6 +108,16 @@ export function applyMapColors(
   }
   safeSetFilter('airports-labels-selected', isSelectedFilter);
 
+  const n = (v: any, fallback: number): number => {
+    const num = Number(v);
+    return isNaN(num) ? fallback : num;
+  };
+
+  const rawMin = n(colorState?.zoomRangeMin, 1.3);
+  const rawMax = n(colorState?.zoomRangeMax, 12.0);
+  const zMin = Math.min(rawMin, rawMax);
+  let zMax = Math.max(zMin + 0.001, rawMax);
+
   // --- CENTROIDY ETYKIET MIAST ---
   // Dla każdego miasta z 1+ wybranymi lotniskami: oblicz centroid i pokaż nazwę miasta.
   {
@@ -145,6 +155,15 @@ export function applyMapColors(
       if (centroidSrc) centroidSrc.setData({ type: 'FeatureCollection', features: centroidFeatures });
       if (map.getLayer('selected-city-centroid-labels')) {
         const lp = getLabelPaint(styleId);
+
+        // Ustawiamy rozmiar etykiety miasta (centroidu) zgodnie z ustawieniami zaznaczonych etykiet
+        const centroidTextSize: any = [
+          'interpolate', ['linear'], ['zoom'],
+          zMin, n(colorState?.highlightedLabelSizeMin, 12),
+          zMax, n(colorState?.highlightedLabelSizeMax, 18)
+        ];
+        map.setLayoutProperty('selected-city-centroid-labels', 'text-size', centroidTextSize);
+
         map.setPaintProperty('selected-city-centroid-labels', 'text-halo-color', lp.haloColor);
         map.setPaintProperty('selected-city-centroid-labels', 'text-halo-width', 2.5);
       }
@@ -154,16 +173,6 @@ export function applyMapColors(
   // ======================== PEŁNA AKTUALIZACJA ========================
 
   const labelPaint = getLabelPaint(styleId);
-
-  const n = (v: any, fallback: number): number => {
-    const num = Number(v);
-    return isNaN(num) ? fallback : num;
-  };
-
-  const rawMin = n(colorState?.zoomRangeMin, 1.3);
-  const rawMax = n(colorState?.zoomRangeMax, 12.0);
-  const zMin = Math.min(rawMin, rawMax);
-  let zMax = Math.max(zMin + 0.001, rawMax);
 
   safeSetZoomLimits(map, zMin, zMax);
 
@@ -282,8 +291,8 @@ export function applyMapColors(
 
     const textOffsetExpr: any = [
       'interpolate', ['linear'], ['zoom'],
-      1.3, ['case', isHighExpr, ['literal', off_n_high], ['literal', off_n_low]],
-      10, ['case', isHighExpr, ['literal', off_f_high], ['literal', off_f_low]]
+      zMin, ['case', isHighExpr, ['literal', off_n_high], ['literal', off_n_low]],
+      zMax, ['case', isHighExpr, ['literal', off_f_high], ['literal', off_f_low]]
     ];
 
     const textFieldExpr: any = [
@@ -343,6 +352,10 @@ export function applyMapColors(
     map.setPaintProperty('airports-labels', 'text-halo-width', ['case', isCityHighExpr, 2.5, labelPaint.haloWidth] as any);
     map.setPaintProperty('airports-labels-selected', 'text-halo-width', ['case', isCityHighExpr, 2.5, labelPaint.haloWidth] as any);
     map.setLayoutProperty('airports-labels', 'visibility', 'visible');
+    map.setLayoutProperty('airports-labels-selected', 'visibility', 'visible');
+    if (map.getLayer('selected-city-centroid-labels')) {
+      map.setLayoutProperty('selected-city-centroid-labels', 'visibility', 'visible');
+    }
   }
 
   // AKTUALIZACJA TRAS
@@ -350,6 +363,9 @@ export function applyMapColors(
     const routeColors: any[] = [];
     const routeHoverColors: any[] = [];
     const colorKey = pref === 'routeLine' ? 'transferRoute' : pref;
+
+    // Uzyskujemy klucz rozmiaru: transferRoute zawsze używa rozmiarów tripRoute
+    const sizePref = pref === 'transferRoute' ? 'tripRoute' : pref;
 
     (colorState?.startPoints || []).forEach((sp: any, i: number) => {
       routeColors.push(i, sp.route || colorState?.[colorKey] || '#3b82f6');
@@ -367,9 +383,9 @@ export function applyMapColors(
     return {
       color: ['case', ['boolean', ['feature-state', 'hover'], false], hoverColor, baseColor],
       width: ['interpolate', ['linear'], ['zoom'], zMin,
-        ['case', ['boolean', ['feature-state', 'hover'], false], n(colorState?.[`${pref}HoverWidthMin`], 6), n(colorState?.[`${pref}WidthMin`], 2)],
+        ['case', ['boolean', ['feature-state', 'hover'], false], n(colorState?.[`${sizePref}HoverWidthMin`], 6), n(colorState?.[`${sizePref}WidthMin`], 2)],
         zMax,
-        ['case', ['boolean', ['feature-state', 'hover'], false], n(colorState?.[`${pref}HoverWidthMax`], 15), n(colorState?.[`${pref}WidthMax`], 4)]
+        ['case', ['boolean', ['feature-state', 'hover'], false], n(colorState?.[`${sizePref}HoverWidthMax`], 15), n(colorState?.[`${sizePref}WidthMax`], 4)]
       ]
     };
   };

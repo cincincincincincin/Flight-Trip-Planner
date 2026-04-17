@@ -379,6 +379,21 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       const tvacUnique = Array.from(new Set(tvac));
 
       // Budowanie odcisku palca wizualnego (lekki - bez serializacji całego colorState)
+      const sizeKey = [
+        colorState.generalAirportRadiusMin, colorState.generalAirportRadiusMax,
+        colorState.generalAirportHoverRadiusMin, colorState.generalAirportHoverRadiusMax,
+        colorState.generalAirportLabelSizeMin, colorState.generalAirportLabelSizeMax,
+        colorState.generalLabelHoverSizeMin, colorState.generalLabelHoverSizeMax,
+        colorState.highlightedAirportRadiusMin, colorState.highlightedAirportRadiusMax,
+        colorState.highlightedAirportHoverRadiusMin, colorState.highlightedAirportHoverRadiusMax,
+        colorState.highlightedLabelSizeMin, colorState.highlightedLabelSizeMax,
+        colorState.highlightedLabelHoverSizeMin, colorState.highlightedLabelHoverSizeMax,
+        colorState.routeLineWidthMin, colorState.routeLineWidthMax,
+        colorState.routeLineHoverWidthMin, colorState.routeLineHoverWidthMax,
+        colorState.tripRouteWidthMin, colorState.tripRouteWidthMax,
+        colorState.tripRouteHoverWidthMin, colorState.tripRouteHoverWidthMax,
+      ].join(',');
+
       const fingerprint = [
         currentSAC.join(','),
         tvacUnique.join(','),
@@ -398,7 +413,8 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
         colorState.tripLabelColor || '',
         colorState.zoomRangeMin || '',
         colorState.zoomRangeMax || '',
-        (colorState.startPoints || []).map((sp: any) => `${sp.airport}|${sp.label}|${sp.route}`).join(';')
+        (colorState.startPoints || []).map((sp: any) => `${sp.airport}|${sp.label}|${sp.route}`).join(';'),
+        sizeKey
       ].join('|');
 
       if (fingerprint === lastAppliedFingerprintRef.current) {
@@ -426,7 +442,8 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
         colorState.tripLabelColor || '',
         colorState.zoomRangeMin || '',
         colorState.zoomRangeMax || '',
-        (colorState.startPoints || []).map((sp: any) => `${sp.airport}|${sp.label}|${sp.route}`).join(';')
+        (colorState.startPoints || []).map((sp: any) => `${sp.airport}|${sp.label}|${sp.route}`).join(';'),
+        sizeKey
       ].join('|');
 
       const skipLayout = layoutFingerprint === lastLayoutFingerprintRef.current;

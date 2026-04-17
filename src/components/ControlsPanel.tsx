@@ -229,7 +229,6 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
               <div className="stat-item">{t.controls.airportsCount}{airportsData?.features?.length || 0}{loadingAirports ? <span className="loading"> {t.controls.loading}</span> : ''}</div>
               {/* <div className="stat-item">{t.controls.routesCount}{routesData?.features?.length || 0}</div> */}
             </div>
-
             <button
               className={`color-settings-toggle ${showSizes ? 'active' : ''}`}
               onClick={() => setShowSizes(v => !v)}
@@ -239,12 +238,12 @@ const ControlsPanel = ({ onClose }: ControlsPanelProps) => {
             </button>
 
             {showSizes && <ColorSettings showOnlySizes={true} />}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
 };
 
 export default ControlsPanel;

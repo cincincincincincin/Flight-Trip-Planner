@@ -165,8 +165,39 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
     useEffect(() => {
       // MASTER FIX: Podświetlamy mapę na podstawie WSZYSTKICH dostępnych lotów (bez filtra destynacji).
       // Dzięki temu kliknięcie w jedną kropkę nie chowa pozostałych opcji.
+      // Stosujemy jednak ten sam filtr CZASOWY co displayedFlatFlights, żeby mapa zgadzała się z panelem.
       const validOrigins = new Set(airportCodes.map((c: string) => c.toUpperCase()));
-      const mapSourceFlights = todayFlights.filter(f => validOrigins.has((f.origin_airport_code || '').toUpperCase()));
+      let mapWithTs = todayFlights
+        .filter(f => validOrigins.has((f.origin_airport_code || '').toUpperCase()))
+        .map(f => ({
+          f,
+          ts: f.scheduled_departure_utc ? dayjs.utc(f.scheduled_departure_utc).valueOf() : 0
+        }));
+
+      if (tripArrivalTimeUTC) {
+        const arrMs = new Date(tripArrivalTimeUTC).getTime();
+        mapWithTs = mapWithTs.filter(x => x.f.scheduled_departure_utc && x.ts >= arrMs);
+      } else {
+        const selectedTodayStr = timezone ? getTodayInTz(timezone) : getTodayInTz();
+        if (travelDate === selectedTodayStr) {
+          mapWithTs = mapWithTs.filter(x => !x.f.scheduled_departure_utc || x.ts > nowMs);
+        }
+      }
+
+      const mapSourceFlights = mapWithTs.map(x => x.f);
+
+      // Gdy panel nie wyświetla żadnych lotów (filtr aktywny + brak wyników, albo naprawdę brak lotów na ten dzień
+      // wliczając loty po północy), wyczyść też destinacje na mapie.
+      if (displayedFlatFlights.length === 0) {
+        if (prevHighlightedAirportsRef.current.size > 0 || prevHighlightedCitiesRef.current.size > 0) {
+          setHighlightedAirports([]);
+          setHighlightedCities([]);
+          prevHighlightedAirportsRef.current = new Set();
+          prevHighlightedCitiesRef.current = new Set();
+        }
+        setDisplayedFlights([]);
+        return;
+      }
 
       // MASTER FILTER SYNC: Jeśli aktywny jest filtr destynacji, filtrujemy trasy (arcs), ale zachowujemy kropki.
       const isAnyFilterActive = isFilterActive;
@@ -175,7 +206,7 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       // Budujemy zestawy unikalnych kodów dla całej mapy (kropki)
       const newAirports = new Set<string>();
       const newCities = new Set<string>();
-      
+
       mapSourceFlights.forEach(f => {
         const rawCode = f.destination_airport_code;
         if (rawCode) {
@@ -204,7 +235,18 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
         prevHighlightedCitiesRef.current = newCities;
         setHighlightedCities(Array.from(newCities));
       }
-    }, [displayedFlatFlights, todayFlights, isFilterActive, setHighlightedAirports, setHighlightedCities, setDisplayedFlights, cityMap, airportCodes]);
+    }, [displayedFlatFlights, todayFlights, isFilterActive, setHighlightedAirports, setHighlightedCities, setDisplayedFlights, cityMap, airportCodes, nowMs, travelDate, timezone, tripArrivalTimeUTC]);
+
+    // Czyszczenie mapy gdy komponent zostaje odmontowany (deselected airport)
+    useEffect(() => {
+      return () => {
+        setHighlightedAirports([]);
+        setHighlightedCities([]);
+        setDisplayedFlights([]);
+        prevHighlightedAirportsRef.current = new Set();
+        prevHighlightedCitiesRef.current = new Set();
+      };
+    }, [setHighlightedAirports, setHighlightedCities, setDisplayedFlights]);
 
     // Interfejs imperatywny (Imperative handle)
     useImperativeHandle(ref, () => ({
