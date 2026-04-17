@@ -184,18 +184,36 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
         }
       }
 
+      // Filtr daty: wykluczamy loty spoza travelDate pobrane w szerokim 24h oknie.
+      // Używamy tego samego algorytmu co flightsByDate, żeby być spójnym z grupowaniem.
+      if (timezone) {
+        const dateFmt = new Intl.DateTimeFormat('en-CA', {
+          timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+        });
+        mapWithTs = mapWithTs.filter(x => {
+          if (!x.f.scheduled_departure_utc) return true;
+          const utcStr = x.f.scheduled_departure_utc.endsWith('Z')
+            ? x.f.scheduled_departure_utc
+            : x.f.scheduled_departure_utc + 'Z';
+          const ms = Date.parse(utcStr);
+          return !isNaN(ms) && dateFmt.format(ms) === travelDate;
+        });
+      } else {
+        mapWithTs = mapWithTs.filter(x => {
+          const localDate = x.f.scheduled_departure_local?.split('T')[0];
+          return !localDate || localDate === travelDate;
+        });
+      }
+
       const mapSourceFlights = mapWithTs.map(x => x.f);
 
-      // Gdy panel nie wyświetla żadnych lotów (filtr aktywny + brak wyników, albo naprawdę brak lotów na ten dzień
-      // wliczając loty po północy), wyczyść też destinacje na mapie.
-      if (displayedFlatFlights.length === 0) {
-        if (prevHighlightedAirportsRef.current.size > 0 || prevHighlightedCitiesRef.current.size > 0) {
-          setHighlightedAirports([]);
-          setHighlightedCities([]);
-          prevHighlightedAirportsRef.current = new Set();
-          prevHighlightedCitiesRef.current = new Set();
-        }
+      // Gdy panel nie wyświetla żadnych lotów, wyczyść też destinacje na mapie.
+      if (displayedFlatFlights.length === 0 || mapSourceFlights.length === 0) {
+        setHighlightedAirports([]);
+        setHighlightedCities([]);
         setDisplayedFlights([]);
+        prevHighlightedAirportsRef.current = new Set();
+        prevHighlightedCitiesRef.current = new Set();
         return;
       }
 

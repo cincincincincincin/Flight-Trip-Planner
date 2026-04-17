@@ -30,7 +30,9 @@ export function buildFlightRow(f: Flight, opts: BuildFlightRowOpts): string {
   let arrHtml = '';
   const hasArrival = !!(f.scheduled_arrival_local || f.scheduled_arrival_utc);
   if (hasArrival) {
-    const arrStr = formatTime(f.scheduled_arrival_local || f.scheduled_arrival_utc, destTimezone);
+    const arrStr = f.scheduled_arrival_local
+      ? formatTime(f.scheduled_arrival_local)
+      : formatTime(f.scheduled_arrival_utc, destTimezone);
     const depOff = getUTCOffH(f.scheduled_departure_local, f.scheduled_departure_utc);
     const arrOff = getUTCOffH(f.scheduled_arrival_local, f.scheduled_arrival_utc);
     const tzDiff = depOff !== null && arrOff !== null ? arrOff - depOff : null;
@@ -67,7 +69,7 @@ export function buildFlightRow(f: Flight, opts: BuildFlightRowOpts): string {
 
   return `
     <div class="mc-popup-row">
-      <div class="mc-popup-time">${formatTime(f.scheduled_departure_local || f.scheduled_departure_utc, srcTimezone)}</div>
+      <div class="mc-popup-time">${f.scheduled_departure_local ? formatTime(f.scheduled_departure_local) : formatTime(f.scheduled_departure_utc, srcTimezone)}</div>
       <div class="mc-popup-airline">${centerLabel}</div>
       <div class="mc-popup-arr">${arrHtml}</div>
     </div>`;

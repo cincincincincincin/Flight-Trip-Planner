@@ -3,7 +3,9 @@ export { haversineKm as popupHaversineKm } from '../../utils/math';
 
 export const formatTime = (dateString: string | null | undefined, tz?: string): string => {
   if (!dateString) return '';
-  const d = dayjs(dateString);
+  // Parsujemy zawsze jako UTC: dla stringów lokalnych (bez 'Z') zachowuje HH:mm wprost,
+  // dla stringów UTC z tz — poprawnie konwertuje do docelowej strefy.
+  const d = dayjs.utc(dateString);
   if (!d.isValid()) return '';
   return tz ? d.tz(tz).format('HH:mm') : d.format('HH:mm');
 };
