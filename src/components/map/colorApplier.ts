@@ -23,64 +23,24 @@ export function applyMapColors(
     hoveredAirportCode: string | null;
     previewAirportCode: string | null;
     coordsMap: Record<string, [number, number]>;
+    airportCityNamesMap: Record<string, string>; // code.toUpperCase() → cityName
     tripState: any;
     styleId: string; // Identyfikator stylu
+    skipLayout?: boolean; // Pomija wszystko poza filtrami labeli gdy zmienił się tylko hover
   }
 ) {
   if (!map || !(map as any).getStyle()) return;
 
-  const { colorState, hoveredAirportCode, previewAirportCode, coordsMap, tripState, styleId } = extra;
-  const labelPaint = getLabelPaint(styleId);
-
-  // POMOCNIK OKLUZJI: Każdy filtr jest automatycznie rozszerzany o wykluczenie hovera
-  const wrapOcclusion = (filter: any) => {
-    if (!hoveredAirportCode) return filter;
-    return ['all', ['!=', ['get', 'code'], hoveredAirportCode], filter];
-  };
+  const { colorState, hoveredAirportCode, previewAirportCode, coordsMap, tripState, styleId, skipLayout = false } = extra;
 
   const safeSetFilter = (id: string, filter: any) => {
     try {
       if (!map.getLayer(id)) return;
-      map.setFilter(id, wrapOcclusion(filter));
+      map.setFilter(id, filter);
     } catch (err) { logger.error(`BŁĄD warstwy (Filtr): ${id}`, err); }
   };
 
-  // Helper dla bezpiecznych liczb
-  const n = (v: any, fallback: number): number => {
-    const num = Number(v);
-    return isNaN(num) ? fallback : num;
-  };
-
-  const rawMin = n(colorState?.zoomRangeMin, 1.3);
-  const rawMax = n(colorState?.zoomRangeMax, 12.0);
-  // ZABEZPIECZENIE: Zawsze rosnące dla interpolate
-  const zMin = Math.min(rawMin, rawMax);
-  let zMax = Math.max(zMin + 0.001, rawMax);
-
-  // Aplikujemy hard-limits do obiektu mapy
-  safeSetZoomLimits(map, zMin, zMax);
-
-  const cDest = colorState?.destinationAirport || '#4CAF50';
-  const cTrip = colorState?.tripAirport || '#000000';
-
-  const zooLayers = [
-    'airports-circles', 'airports-trip', 'airports-highlighted', 'airports-selected',
-    'airports-labels'
-  ];
-  zooLayers.forEach(id => {
-    if (map.getLayer(id)) {
-      (map as any).setLayerZoomRange(id, 0, 24);
-    }
-  });
-
-  // PARAMETRY ROZMIARÓW (DYN.)
-  const rGen = ['interpolate', ['linear'], ['zoom'], zMin, n(colorState?.generalAirportRadiusMin, 2), zMax, n(colorState?.generalAirportRadiusMax, 8)];
-  const rHigh = ['interpolate', ['linear'], ['zoom'], zMin, n(colorState?.highlightedAirportRadiusMin, 4), zMax, n(colorState?.highlightedAirportRadiusMax, 16)];
-
-  // Etykiety
-  const fGen = ['interpolate', ['linear'], ['zoom'], zMin, n(colorState?.generalAirportLabelSizeMin, 10), zMax, n(colorState?.generalAirportLabelSizeMax, 14)];
-  const fHigh = ['interpolate', ['linear'], ['zoom'], zMin, n(colorState?.highlightedLabelSizeMin, 12), zMax, n(colorState?.highlightedLabelSizeMax, 18)];
-
+  // Minimalne obliczenia potrzebne zawsze (dla filtrów labeli)
   const sac = Array.from(new Set((extra.selectedAirportCodes || []).map(c => c.toUpperCase())));
   const mtac = Array.from(new Set((extra.manualTransferAirportCodes || []).map(c => c.toUpperCase())));
   const eac = Array.from(new Set((extra.explorationAirportCodes || []).map(c => c.toUpperCase())));
@@ -93,9 +53,137 @@ export function applyMapColors(
   const hCodes = Array.from(new Set([...sac, ...ha, ...tvac, ...mtac, ...eac]));
 
   const cityKeyMap = extra.airportCityKeyMap || {};
-  const citySelectedCodes = Array.from(new Set(sac.map(c => cityKeyMap[c]).filter(Boolean)));
   const cityDestCodes = Array.from(new Set(destCodes.map(c => cityKeyMap[c]).filter(Boolean)));
   const cityTripCodes = Array.from(new Set(tripCodes.map(c => cityKeyMap[c]).filter(Boolean)));
+
+  const isCityTrip = ['match', ['get', 'city_code'], cityTripCodes.length > 0 ? cityTripCodes : ['_NONE_'], true, false];
+  const isCityDest = ['match', ['get', 'city_code'], cityDestCodes.length > 0 ? cityDestCodes : ['_NONE_'], true, false];
+  const isCityDestPrimary = ['all', isCityDest, ['==', ['get', 'is_city_primary'], true]];
+  const isCityTripPrimary = ['all', isCityTrip, ['==', ['get', 'is_city_primary'], true]];
+
+  const labelGroupFilter = [
+    'case',
+    ['<', ['zoom'], 7.0],
+    ['case',
+      isCityDest, isCityDestPrimary,
+      isCityTrip, isCityTripPrimary,
+      ['==', ['get', 'is_city_primary'], true]
+    ],
+    true
+  ];
+
+  const isSelectedFilter = ['match', ['get', 'code'], sac.length > 0 ? sac : ['_NONE_'], true, false];
+  const notSelectedFilter = ['match', ['get', 'code'], sac.length > 0 ? sac : ['_NONE_'], false, true];
+
+  // Okluzja hovera przez text-opacity (setPaintProperty << setFilter — nie przebudowuje collision tree)
+  // airports-hover-single-label ma text-allow-overlap: true więc hover label zawsze się wyświetli.
+  const hoverOpacityExpr: any = hoveredAirportCode
+    ? ['case', ['==', ['get', 'code'], hoveredAirportCode], 0, 1]
+    : 1;
+  if (map.getLayer('airports-labels')) {
+    map.setPaintProperty('airports-labels', 'text-opacity', hoverOpacityExpr);
+    map.setPaintProperty('airports-labels-selected', 'text-opacity', hoverOpacityExpr);
+  }
+  // Ukryj centroid etykietę miasta gdy któreś lotnisko z tego miasta jest hoverowane
+  if (map.getLayer('selected-city-centroid-labels')) {
+    const hoveredCityCode = hoveredAirportCode ? (cityKeyMap[hoveredAirportCode.toUpperCase()] || '') : '';
+    const centroidHoverOpacity: any = hoveredCityCode
+      ? ['case', ['==', ['get', 'city_code'], hoveredCityCode], 0, 1]
+      : 1;
+    map.setPaintProperty('selected-city-centroid-labels', 'text-opacity', centroidHoverOpacity);
+  }
+
+  // Gdy zmienił się tylko hover - kończymy tutaj. Reszta (paint, circle filters, layout) nie wymaga aktualizacji.
+  if (skipLayout) {
+    map.triggerRepaint();
+    return;
+  }
+
+  // --- FILTRY LABELI (pełna aktualizacja — nie zawierają hover, hover obsługuje text-opacity) ---
+  if (isTripActive) {
+    const tripLabelFilter = ['match', ['get', 'code'], hCodes.length > 0 ? hCodes : ['_NONE_'], true, false];
+    safeSetFilter('airports-labels', mergeFilterConditions(mergeFilterConditions(labelGroupFilter, notSelectedFilter), tripLabelFilter));
+  } else {
+    safeSetFilter('airports-labels', mergeFilterConditions(labelGroupFilter, notSelectedFilter));
+  }
+  safeSetFilter('airports-labels-selected', isSelectedFilter);
+
+  // --- CENTROIDY ETYKIET MIAST ---
+  // Dla każdego miasta z 1+ wybranymi lotniskami: oblicz centroid i pokaż nazwę miasta.
+  {
+    const cityGroups = new Map<string, { lons: number[]; lats: number[]; cityName: string; cityCode: string; firstIdx: number }>();
+    sac.forEach((code, i) => {
+      const cityCode = cityKeyMap[code] || '';
+      if (!cityCode) return;
+      const coords = extra.coordsMap[code] || extra.coordsMap[code.toLowerCase()];
+      if (!coords) return;
+      const cityName = extra.airportCityNamesMap[code] || '';
+      if (!cityGroups.has(cityCode)) {
+        cityGroups.set(cityCode, { lons: [coords[0]], lats: [coords[1]], cityName, cityCode, firstIdx: i });
+      } else {
+        const g = cityGroups.get(cityCode)!;
+        g.lons.push(coords[0]);
+        g.lats.push(coords[1]);
+      }
+    });
+
+    const labelPaintForCentroid = getLabelPaint(styleId);
+    const centroidFeatures: any[] = [];
+    cityGroups.forEach(({ lons, lats, cityName, cityCode, firstIdx }) => {
+      const lon = lons.reduce((s, v) => s + v, 0) / lons.length;
+      const lat = lats.reduce((s, v) => s + v, 0) / lats.length;
+      const sp = colorState?.startPoints?.[firstIdx];
+      const textColor = sp?.label || labelPaintForCentroid.textColor;
+      centroidFeatures.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [lon, lat] },
+        properties: { city_label: cityName, city_code: cityCode, text_color: textColor }
+      });
+    });
+    try {
+      const centroidSrc = map.getSource('selected-city-centroids') as maplibregl.GeoJSONSource | undefined;
+      if (centroidSrc) centroidSrc.setData({ type: 'FeatureCollection', features: centroidFeatures });
+      if (map.getLayer('selected-city-centroid-labels')) {
+        const lp = getLabelPaint(styleId);
+        map.setPaintProperty('selected-city-centroid-labels', 'text-halo-color', lp.haloColor);
+        map.setPaintProperty('selected-city-centroid-labels', 'text-halo-width', 2.5);
+      }
+    } catch (_e) {}
+  }
+
+  // ======================== PEŁNA AKTUALIZACJA ========================
+
+  const labelPaint = getLabelPaint(styleId);
+
+  const n = (v: any, fallback: number): number => {
+    const num = Number(v);
+    return isNaN(num) ? fallback : num;
+  };
+
+  const rawMin = n(colorState?.zoomRangeMin, 1.3);
+  const rawMax = n(colorState?.zoomRangeMax, 12.0);
+  const zMin = Math.min(rawMin, rawMax);
+  let zMax = Math.max(zMin + 0.001, rawMax);
+
+  safeSetZoomLimits(map, zMin, zMax);
+
+  const zooLayers = [
+    'airports-circles', 'airports-trip', 'airports-highlighted', 'airports-selected',
+    'airports-labels'
+  ];
+  zooLayers.forEach(id => {
+    if (map.getLayer(id)) {
+      (map as any).setLayerZoomRange(id, 0, 24);
+    }
+  });
+
+  const cDest = colorState?.destinationAirport || '#4CAF50';
+  const cTrip = colorState?.tripAirport || '#000000';
+
+  const rGen = ['interpolate', ['linear'], ['zoom'], zMin, n(colorState?.generalAirportRadiusMin, 2), zMax, n(colorState?.generalAirportRadiusMax, 8)];
+  const rHigh = ['interpolate', ['linear'], ['zoom'], zMin, n(colorState?.highlightedAirportRadiusMin, 4), zMax, n(colorState?.highlightedAirportRadiusMax, 16)];
+
+  const citySelectedCodes = Array.from(new Set(sac.map(c => cityKeyMap[c]).filter(Boolean)));
   const cityHighCodes = Array.from(new Set(hCodes.map(c => cityKeyMap[c]).filter(Boolean)));
 
   const buildSelectedExpr = (type: 'airport' | 'label', fallback: string) => {
@@ -128,7 +216,6 @@ export function applyMapColors(
   const cSelLabel = buildSelectedExpr('label', labelPaint.textColor);
   const cCitySelLabel = buildCitySelectedExpr(labelPaint.textColor);
 
-  // APLIKACJA STYLU KROPEK
   const isImg = (styleId || '').toLowerCase().includes('imagery');
   const strokeColor = isImg ? '#000000' : '#ffffff';
 
@@ -147,7 +234,6 @@ export function applyMapColors(
   applyPointStyle('airports-highlighted', rHigh, cDest);
   applyPointStyle('airports-selected', rHigh, cSelCircle);
 
-  // APLIKACJA STYLU ETYKIET
   const destLabelC = colorState?.destinationLabelColor || labelPaint.textColor;
   const tripLabelC = colorState?.tripLabelColor || labelPaint.textColor;
   const genLabelC = colorState?.generalLabelColor || labelPaint.textColor;
@@ -157,15 +243,12 @@ export function applyMapColors(
   const isDest = ['match', ['get', 'code'], destCodes.length > 0 ? destCodes : ['_NONE_'], true, false];
 
   const isCitySelected = ['match', ['get', 'city_code'], citySelectedCodes.length > 0 ? citySelectedCodes : ['_NONE_'], true, false];
-  const isCityTrip = ['match', ['get', 'city_code'], cityTripCodes.length > 0 ? cityTripCodes : ['_NONE_'], true, false];
-  const isCityDest = ['match', ['get', 'city_code'], cityDestCodes.length > 0 ? cityDestCodes : ['_NONE_'], true, false];
   const isCityHighExpr = ['match', ['get', 'city_code'], cityHighCodes.length > 0 ? cityHighCodes : ['_NONE_'], true, false];
   const isHighExpr = ['match', ['get', 'code'], hCodes.length > 0 ? hCodes : ['_NONE_'], true, false];
 
   const textColorExpr: any = [
     'step',
     ['zoom'],
-    // Zoom < 7.0: Priorytet na poziomie MIASTA (Grouping)
     ['case',
       isSelected, cSelLabel,
       isCitySelected, cCitySelLabel,
@@ -176,7 +259,6 @@ export function applyMapColors(
       genLabelC
     ],
     7.0,
-    // Zoom >= 7.0: Priorytet na poziomie KONKRETNEGO LOTNISKA
     ['case',
       isSelected, cSelLabel,
       isDest, destLabelC,
@@ -186,7 +268,6 @@ export function applyMapColors(
   ];
 
   if (map.getLayer('airports-labels')) {
-    // Rozmiar: Wyróżnione (Wybrane/Cel/Trasa) zawsze korzystają z wysokiego detalu
     const textSizeExpr: any = [
       'interpolate', ['linear'], ['zoom'],
       zMin, ['case', isCityHighExpr, n(colorState?.highlightedLabelSizeMin, 12), n(colorState?.generalAirportLabelSizeMin, 10)],
@@ -208,23 +289,23 @@ export function applyMapColors(
     const textFieldExpr: any = [
       'step',
       ['zoom'],
-      // Zoom < 4.2
+      // zoom < 4.2: selected → '' (centroid layer przejmuje etykietę miasta)
       ['case',
-        isSelected, ['get', 'cl_hl_high'],
+        isSelected, '',
         ['all', isCityHighExpr, ['>', ['coalesce', ['get', 'city_airport_count'], 0], 1]], ['get', 'cl_grouped'],
         isHighExpr, ['get', 'cl_hl_low'],
         ['case', ['>', ['coalesce', ['get', 'city_airport_count'], 0], 1], ['get', 'cl_grouped'], ""]
       ],
       4.2,
-      // Zoom 4.2 - 7.0
+      // zoom 4.2-7.0: selected → '' (centroid layer przejmuje etykietę miasta)
       ['case',
-        isSelected, ['get', 'cl_hl_high'],
+        isSelected, '',
         ['all', isCityHighExpr, ['>', ['coalesce', ['get', 'city_airport_count'], 0], 1]], ['get', 'cl_grouped'],
         isHighExpr, ['get', 'cl_hl_low'],
         ['case', ['>', ['coalesce', ['get', 'city_airport_count'], 0], 1], ['get', 'cl_grouped'], ['get', 'cl_search']]
       ],
       7.0,
-      // Zoom > 7.0
+      // zoom >= 7.0: indywidualne etykiety lotnisk jak dotychczas
       ['case', isHighExpr, ['get', 'cl_hl_high'], ['get', 'cl_high']]
     ];
 
@@ -266,12 +347,8 @@ export function applyMapColors(
 
   // AKTUALIZACJA TRAS
   const getLineStyles = (pref: string, isSelection = false) => {
-    // 1. Definicja par Kolor -> srcIdx dla trybu Multi-start
     const routeColors: any[] = [];
     const routeHoverColors: any[] = [];
-
-    // pref to np. 'transferRoute' (kolory) lub 'routeLine' (szerokości)
-    // UWAGA UX: szerokości w store mają klucz 'routeLine', ale kolory 'transferRoute'.
     const colorKey = pref === 'routeLine' ? 'transferRoute' : pref;
 
     (colorState?.startPoints || []).forEach((sp: any, i: number) => {
@@ -279,12 +356,10 @@ export function applyMapColors(
       routeHoverColors.push(i, sp.routeHover || colorState?.[`${colorKey}Hover`] || '#2563eb');
     });
 
-    // 2. Kolor bazowy
     const baseColor = isSelection && routeColors.length > 0
       ? ['match', ['get', 'srcIdx'], ...routeColors, colorState?.[colorKey] || '#3b82f6']
       : colorState?.[colorKey] || '#3b82f6';
 
-    // 3. Kolor hover (z użyciem srcIdx dla precyzji w multi-start)
     const hoverColor = isSelection && routeHoverColors.length > 0
       ? ['match', ['get', 'srcIdx'], ...routeHoverColors, colorState?.[`${colorKey}Hover`] || '#2563eb']
       : colorState?.[`${colorKey}Hover`] || '#2563eb';
@@ -299,14 +374,13 @@ export function applyMapColors(
     };
   };
 
-  // --- STYLIZACJA TRAS (Trip i Transfer) ---
-  const transferStyles = getLineStyles('transferRoute', false); // Przegląd przesiadek nie potrzebuje multi-start logic
+  const transferStyles = getLineStyles('transferRoute', false);
   if (map.getLayer('manual-transfer-preview')) {
     map.setPaintProperty('manual-transfer-preview', 'line-color', transferStyles.color);
     map.setPaintProperty('manual-transfer-preview', 'line-width', transferStyles.width);
   }
 
-  const tripStyles = getLineStyles('tripRoute', false); // Trasa podróży korzysta z kolorów globalnych Trip
+  const tripStyles = getLineStyles('tripRoute', false);
   if (map.getLayer('trip-permanent-routes')) {
     map.setPaintProperty('trip-permanent-routes', 'line-color', tripStyles.color);
     map.setPaintProperty('trip-permanent-routes', 'line-width', tripStyles.width);
@@ -318,58 +392,24 @@ export function applyMapColors(
     map.setPaintProperty('selected-routes', 'line-width', globalStyles.width);
   }
 
-  const isCityDestPrimary = ['all', isCityDest, ['==', ['get', 'is_city_primary'], true]];
-  const isCityTripPrimary = ['all', isCityTrip, ['==', ['get', 'is_city_primary'], true]];
-  
-  // Filtr grupowania dla labeli: poniżej zooma 7 tylko główny port miasta
-  const labelGroupFilter = [
-    'case',
-    ['<', ['zoom'], 7.0],
-    ['case',
-      isCityDest, isCityDestPrimary,
-      isCityTrip, isCityTripPrimary,
-      ['==', ['get', 'is_city_primary'], true]
-    ],
-    true
-  ];
-
+  // FILTRY KÓŁEK (hover kółko nakrywa bazowe wizualnie — bez okluzji hover)
   safeSetFilter('airports-selected', ['match', ['get', 'code'], sac.length > 0 ? sac : ['_NONE_'], true, false]);
   safeSetFilter('airports-highlighted', ['match', ['get', 'code'], ha.length > 0 ? ha : ['_NONE_'], true, false]);
   safeSetFilter('airports-trip', ['match', ['get', 'code'], tripCodes.length > 0 ? tripCodes : ['_NONE_'], true, false]);
 
-  // TRYB FOCUS: Ukrywamy generalne lotniska ('airports-circles'), jeśli aktywna jest podróż
   if (isTripActive) {
     safeSetFilter('airports-circles', ['==', ['get', 'code'], '_NONE_']);
   } else {
     safeSetFilter('airports-circles', ['match', ['get', 'code'], hCodes.length > 0 ? hCodes : ['_NONE_'], false, true]);
   }
 
-  // APLIKACJA FILTRÓW DLA ETYKIET
-  // [SOLIDNA OKLUZJA]: Rozdzielamy na dwie warstwy, aby Wybrane (wymuszone nakładanie) 
-  // nie dublowało się z warstwą ogólną.
-  const isSelectedFilter = ['match', ['get', 'code'], sac.length > 0 ? sac : ['_NONE_'], true, false];
-  const notSelectedFilter = ['match', ['get', 'code'], sac.length > 0 ? sac : ['_NONE_'], false, true];
-
-  if (isTripActive) {
-    // W trybie podróży: warstwa ogólna pokazuje TYLKO wyróżnione (dest/trip/exploration), NIE general
-    const tripLabelFilter = ['match', ['get', 'code'], hCodes.length > 0 ? hCodes : ['_NONE_'], true, false];
-    safeSetFilter('airports-labels', mergeFilterConditions(mergeFilterConditions(labelGroupFilter, notSelectedFilter), tripLabelFilter));
-  } else {
-    // 1. Warstwa ogólna (Pozostałe - Standardowa okluzja)
-    safeSetFilter('airports-labels', mergeFilterConditions(labelGroupFilter, notSelectedFilter));
-  }
-
-  // 2. Warstwa wybrana (Selected Only - Zawsze widoczna)
-  safeSetFilter('airports-labels-selected', isSelectedFilter);
-
-  // --- SYNCHRONIZACJA DANYCH PRZEGLĄDU PRZESIADEK (Dash lines) ---
+  // SYNCHRONIZACJA DANYCH PRZESIADEK
   const transferSrc = map.getSource('manual-transfer-preview') as maplibregl.GeoJSONSource | undefined;
   if (transferSrc) {
     const features: any[] = [];
     const allDraftCodes = previewAirportCode ? [...mtac, previewAirportCode] : mtac;
 
     if (allDraftCodes.length > 0) {
-      // Wyznaczamy punkt startowy dla kropkowanej linii przesiadki (ostatni skok trasy)
       const lastLeg = tripState?.legs?.[tripState.legs.length - 1];
       const startCode = lastLeg ? lastLeg.toAirportCode : tripState?.startAirport?.code;
       const startCoords = startCode ? coordsMap[startCode] : null;

@@ -132,38 +132,32 @@ const FlightsList = forwardRef<unknown, FlightsListProps>(
       
       // FILTROWANIE DLA TRANSFERÓW: 
       // Jeśli jesteśmy w trybie planowania trasy, ukrywamy loty, które odlatują przed przylotem.
+      // Pre-compute UTC timestamps raz (O(n)) żeby uniknąć O(n log n × dayjs.parse) w sort/filter
+      let withTs = flights.map(f => ({
+        f,
+        ts: f.scheduled_departure_utc ? dayjs.utc(f.scheduled_departure_utc).valueOf() : 0
+      }));
+
       if (tripArrivalTimeUTC) {
         const arrMs = new Date(tripArrivalTimeUTC).getTime();
-        
-        // Pokazuj wszystkie loty od momentu przylotu. 
-        // Wyróżnienie połączeń "soon" (zbyt szybkich) obsługuje getTripHighlight.
-        flights = flights.filter(f => 
-          f.scheduled_departure_utc && dayjs.utc(f.scheduled_departure_utc).valueOf() >= arrMs
-        );
+        withTs = withTs.filter(x => x.f.scheduled_departure_utc && x.ts >= arrMs);
       } else {
-        // Jeśli nie jesteśmy w trybie planowania trasy, ukrywamy loty, które już odleciały.
         const selectedTodayStr = timezone ? getTodayInTz(timezone) : getTodayInTz();
         logger.log(`%c[ACTION-LOAD] %cFiltrowanie lotów | Dzisiaj: ${selectedTodayStr}, DataPodróży: ${travelDate}, Przed filtrem: ${todayFlights.length}, Po filtrze: ${flights.length}`, 'color: #10b981; font-weight: bold', 'color: inherit');
 
         if (travelDate === selectedTodayStr) {
-          // Ukrywamy wszystkie loty, które już odleciały.
-          // Używamy dayjs.utc(), ponieważ scheduled_departure_utc z API nie ma znaku 'Z'.
-          flights = flights.filter(f =>
-            !f.scheduled_departure_utc || dayjs.utc(f.scheduled_departure_utc).valueOf() > nowMs
-          );
+          withTs = withTs.filter(x => !x.f.scheduled_departure_utc || x.ts > nowMs);
         }
       }
-      const finalCount = flights.length;
+
+      const finalCount = withTs.length;
       if (finalCount === 0 && todayFlights.length > 0) {
         logger.warn(`%c[ACTION-LOAD] %cWYKRYTO REBOUND | todayFlights: ${todayFlights.length}, finalCount: 0. Klucze w flightsByDate: ${Object.keys(flightsByDate).join(',')}, travelDate: ${travelDate}, timezone: ${timezone}`, 'color: #f59e0b; font-weight: bold', 'color: inherit');
       }
       logger.log(`%c[ACTION-LOAD] %cFiltrowanie lotów | Ostateczna liczba: ${finalCount}`, 'color: #10b981; font-weight: bold', 'color: inherit');
-      // Wymuszamy ścisłą chronologię UTC (Przywrócenie logiki stabilnej)
-      flights.sort((a, b) => 
-        dayjs.utc(a.scheduled_departure_utc).valueOf() - dayjs.utc(b.scheduled_departure_utc).valueOf()
-      );
 
-      return flights;
+      withTs.sort((a, b) => a.ts - b.ts);
+      return withTs.map(x => x.f);
     }, [todayFlights, matchesFilter, tripArrivalTimeUTC, nowMs, travelDate, timezone, flightsByDate]);
 
     // Synchronizacja podświetlenia na mapie

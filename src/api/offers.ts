@@ -1,9 +1,9 @@
-import apiClient from './client';
+import { publicApiClient } from './client';
 import type { FlightOffer } from '../types';
 
 // Pobiera oferty cenowe dla trasy i konkretnego czasu wylotu.
-// Parametry (origin, destination, departure_at) siedzą w obiekcie params.
+// Używa publicApiClient (bez Authorization) żeby uniknąć CORS preflight OPTIONS.
 export const getOffers = (params: Record<string, unknown>): Promise<FlightOffer> => {
-  return apiClient.get('/offers', { params }).then(r => r.data);
+  return publicApiClient.get('/offers', { params }).then(r => r.data);
 };
 

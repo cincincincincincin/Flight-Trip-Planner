@@ -92,14 +92,28 @@ export function useFlightLoader({
 
   const anyLoading = Object.values(perAirportLoading).some(Boolean);
 
-  // Grupowanie lotów według daty wylotu w wybranej strefie czasowej
+  // Grupowanie lotów według daty wylotu w wybranej strefie czasowej.
+  // Intl.DateTimeFormat (natywny) jest ~10× szybszy niż dayjs.tz() dla konwersji masowej.
   const flightsByDate = useMemo<Record<string, Flight[]>>(() => {
     const byDate: Record<string, Flight[]> = {};
 
+    // Tworzymy formatter RAZ - en-CA daje format YYYY-MM-DD natywnie
+    const fmt = timezone
+      ? new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' })
+      : null;
+
     rawFlights.forEach((flight: Flight) => {
-      const dateStr = (flight.scheduled_departure_utc && timezone)
-        ? getIsoDate(flight.scheduled_departure_utc, timezone)
-        : (flight.scheduled_departure_local?.split('T')[0] ?? '');
+      let dateStr: string;
+      if (flight.scheduled_departure_utc && fmt) {
+        // API zwraca UTC bez 'Z' - dodajemy żeby Date() wiedział że to UTC
+        const utcStr = flight.scheduled_departure_utc.endsWith('Z')
+          ? flight.scheduled_departure_utc
+          : flight.scheduled_departure_utc + 'Z';
+        const ms = Date.parse(utcStr);
+        dateStr = isNaN(ms) ? '' : fmt.format(ms);
+      } else {
+        dateStr = flight.scheduled_departure_local?.split('T')[0] ?? '';
+      }
       if (!dateStr) return;
       (byDate[dateStr] ??= []).push(flight);
     });

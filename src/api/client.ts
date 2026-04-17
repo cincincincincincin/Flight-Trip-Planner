@@ -45,4 +45,10 @@ apiClient.interceptors.response.use(
   }
 );
 
+// Klient dla publicznych endpointów (bez Authorization) — eliminuje CORS preflight OPTIONS
+export const publicApiClient = axios.create({
+  baseURL: import.meta.env.VITE_API_URL,
+  timeout: CONFIG.API_TIMEOUT_MS,
+});
+
 export default apiClient;

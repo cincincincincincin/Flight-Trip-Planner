@@ -59,8 +59,7 @@ export interface MapHoverRefs {
   applyHoverRef: React.RefObject<((code: string | null) => void) | null>;
   mapStyle: string;
   selectedAirportCode: string | null;
-  // Tryb podróży
-  isTripActive: boolean;
+  isTripActiveRef: React.RefObject<boolean>;
 }
 
 export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports: boolean): void {
@@ -117,16 +116,19 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
         return;
       }
 
+      // Odczyt bezpośrednio ze store — refs mogą być przestarzałe gdy applyHover jest wywoływany
+      // z applyColors (po usunięciu lotniska ref jeszcze nie zaktualizowany przez useEffect).
+      const selState = useSelectionStore.getState();
+      const tripStoreState = useTripStore.getState();
+      const sac = selState.selectedAirportCodes || [];
+      const ha = selState.highlightedAirports || [];
+      const eac = selState.explorationItems.flatMap((i: any) => i.airportCodes);
+      const tvac = tripStoreState.tripState?.legs?.flatMap((l: any) => [l.fromAirportCode, l.toAirportCode]) || [];
+      const mtac = tripStoreState.manualTransferAirportCodes || [];
+
       // W trybie podróży ignorujemy wszystko, co nie jest widoczne (wyróżnione)
-      if (refs.isTripActive) {
-        const sac = refs.selectedAirportCodesRef.current || [];
-        const ha = refs.highlightedAirportsRef.current || [];
-        const tvac = refs.tripVisibleAirportCodesRef.current || [];
-        const eac = refs.explorationAirportCodesRef.current || [];
-        const mtac = (window as any).manualTransferAirportCodes || [];
-        
+      if (refs.isTripActiveRef.current) {
         const isVisibleInTrip = sac.includes(code) || ha.includes(code) || tvac.includes(code) || eac.includes(code) || mtac.includes(code);
-        
         if (!isVisibleInTrip) {
           applyHover(null);
           return;
@@ -143,10 +145,6 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       const isGroupingPhase = currentZoom < 7.0;
       let activeIdx = -1;
 
-      const sac = refs.selectedAirportCodesRef.current || [];
-      const ha = refs.highlightedAirportsRef.current || [];
-      const tvac = refs.tripVisibleAirportCodesRef.current || [];
-      const mtac = (window as any).manualTransferAirportCodes || [];
       const tripCodes = Array.from(new Set([...tvac, ...mtac]));
 
       const isSelected = sac.includes(code);
@@ -256,17 +254,19 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       const cS = useColorStore.getState();
       const currentHovered = refs.hoveredAirportCodeRef.current;
 
-      const sac = refs.selectedAirportCodesRef.current || [];
-      const ha = refs.highlightedAirportsRef.current || [];
-      const tvac = refs.tripVisibleAirportCodesRef.current || [];
-      const eac = refs.explorationAirportCodesRef.current || [];
-      const mtac = (window as any).manualTransferAirportCodes || [];
+      const selStateP = useSelectionStore.getState();
+      const tripStoreStateP = useTripStore.getState();
+      const sac = selStateP.selectedAirportCodes || [];
+      const ha = selStateP.highlightedAirports || [];
+      const eac = selStateP.explorationItems.flatMap((i: any) => i.airportCodes);
+      const tvac = tripStoreStateP.tripState?.legs?.flatMap((l: any) => [l.fromAirportCode, l.toAirportCode]) || [];
+      const mtac = tripStoreStateP.manualTransferAirportCodes || [];
 
       const currentNaturalHits = new Map<string, { dist: number }>();
       const HIT_MARGIN = 1.0;
 
       candidates.forEach(cand => {
-        if (refs.isTripActive) {
+        if (refs.isTripActiveRef.current) {
           const isVisibleInTrip = sac.includes(cand.code) || ha.includes(cand.code) || tvac.includes(cand.code) || eac.includes(cand.code) || mtac.includes(cand.code);
           if (!isVisibleInTrip) return;
         }
@@ -355,12 +355,14 @@ export function useMapHover(refs: MapHoverRefs, mapLoaded: boolean, showAirports
       nearby.forEach(cand => {
         const feat = cachedAirportsMap.get(cand.code.toUpperCase());
         if (feat && !seen.has(cand.code)) {
-          if (refs.isTripActive) {
-            const _sac = refs.selectedAirportCodesRef.current || [];
-            const _ha = refs.highlightedAirportsRef.current || [];
-            const _tvac = refs.tripVisibleAirportCodesRef.current || [];
-            const _eac = refs.explorationAirportCodesRef.current || [];
-            const _mtac = (window as any).manualTransferAirportCodes || [];
+          if (refs.isTripActiveRef.current) {
+            const _sel = useSelectionStore.getState();
+            const _trip = useTripStore.getState();
+            const _sac = _sel.selectedAirportCodes || [];
+            const _ha = _sel.highlightedAirports || [];
+            const _eac = _sel.explorationItems.flatMap((i: any) => i.airportCodes);
+            const _tvac = _trip.tripState?.legs?.flatMap((l: any) => [l.fromAirportCode, l.toAirportCode]) || [];
+            const _mtac = _trip.manualTransferAirportCodes || [];
             const visible = _sac.includes(cand.code) || _ha.includes(cand.code) || _tvac.includes(cand.code) || _eac.includes(cand.code) || _mtac.includes(cand.code);
             if (!visible) return;
           }

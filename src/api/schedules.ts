@@ -1,4 +1,4 @@
-import apiClient from './client';
+import { publicApiClient as apiClient } from './client';
 import type { Schedule } from '../types';
 
 /**

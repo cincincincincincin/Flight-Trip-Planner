@@ -106,6 +106,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
   const clearRouteHoverRef = useRef<((opts?: { keepLabels?: boolean }) => void) | null>(null);
 
   const airportCityKeyRef = useRef<Record<string, string>>({});
+  const airportCityNameRef = useRef<Record<string, string>>({});
   const cityLabelCodeByCityRef = useRef<Record<string, string>>({});
   const cityLabelCodesRef = useRef<string[]>([]);
   const highlightedLabelCodesRef = useRef<string[]>([]);
@@ -168,6 +169,11 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       cityMap.get(cityCode)!.push(f);
     });
     airportCityKeyRef.current = codeMap;
+    const nameMap: Record<string, string> = {};
+    airportsData.features.forEach(f => {
+      nameMap[f.properties.code.toUpperCase()] = getLocalizedProp(f.properties as any, 'city_name', language);
+    });
+    airportCityNameRef.current = nameMap;
 
     // 2. Flagi statyczne (ranking miasta i nazwy wyświetlane)
     const newFeatures = airportsData.features.map(f => {
@@ -333,6 +339,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
 
   // --- LOGIKA STYLU ---
   const lastAppliedFingerprintRef = useRef<string>('');
+  const lastLayoutFingerprintRef = useRef<string>('');
   /**
    * applyColors - ARCHITEKTURA "FINGERPRINT"
    * 
@@ -375,9 +382,9 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       const fingerprint = [
         currentSAC.join(','),
         tvacUnique.join(','),
-        currentHA.length,
+        currentHA.join(','),
         currentMTAC.join(','),
-        currentEAC.length,
+        currentEAC.join(','),
         currentSACode || '',
         language,
         mapStyle || '',
@@ -399,6 +406,32 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
       }
       lastAppliedFingerprintRef.current = fingerprint;
 
+      // Layout fingerprint - bez hovera. setLayoutProperty jest bardzo drogie
+      // (przebudowuje collision tree labeli), więc pomijamy je gdy zmienił się tylko hover.
+      const layoutFingerprint = [
+        currentSAC.join(','),
+        tvacUnique.join(','),
+        currentHA.join(','),
+        currentMTAC.join(','),
+        currentEAC.join(','),
+        currentSACode || '',
+        language,
+        mapStyle || '',
+        currentPreviewCode || '',
+        colorState.generalAirport || '',
+        colorState.destinationAirport || '',
+        colorState.tripAirport || '',
+        colorState.generalLabelColor || '',
+        colorState.destinationLabelColor || '',
+        colorState.tripLabelColor || '',
+        colorState.zoomRangeMin || '',
+        colorState.zoomRangeMax || '',
+        (colorState.startPoints || []).map((sp: any) => `${sp.airport}|${sp.label}|${sp.route}`).join(';')
+      ].join('|');
+
+      const skipLayout = layoutFingerprint === lastLayoutFingerprintRef.current;
+      if (!skipLayout) lastLayoutFingerprintRef.current = layoutFingerprint;
+
       // Wywołanie niskopoziomowej funkcji ustawiającej kolory warstw i filtry
       applyMapColors(m, {
         airportCityKeyMap: airportCityKeyRef.current,
@@ -413,8 +446,10 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
         hoveredAirportCode: hoveredAirportCodeRef.current,
         previewAirportCode: currentPreviewCode,
         coordsMap: coordsMap || {},
+        airportCityNamesMap: airportCityNameRef.current,
         tripState: currentTripState,
-        styleId: mapStyle || '', // JAWNE PRZEKAZANIE
+        styleId: mapStyle || '',
+        skipLayout,
       });
 
       if (applyHoverRef.current && hoveredAirportCodeRef.current) {
@@ -443,6 +478,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
   const addLayers = useCallback((initialData: any) => {
     const dataToUse = initialData || airportsDataRef.current;
     if (!map.current || !mapLoaded || !dataToUse) return;
+    if (!map.current.isStyleLoaded()) return;
 
     const m = map.current;
     const colorState = useColorStore.getState();
@@ -452,6 +488,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
 
     // Wymuszenie synchronizacji
     lastAppliedFingerprintRef.current = '';
+    lastLayoutFingerprintRef.current = '';
     applyColors();
   }, [mapLoaded, mapStyle, language, applyColors]);
 
@@ -467,9 +504,29 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     });
   }, [applyColors]);
 
+  // Szybka synchroniczna aktualizacja po zmianie selekcji — bez pełnego RAF.
+  // Zapobiega jednoklatkowemu błyskowi "selected" kolorów dla usuniętego lotniska.
+  const applySelectionQuick = useCallback(() => {
+    const m = map.current;
+    if (!m || !(m as any).getStyle?.()) return;
+    try {
+      const sac = useSelectionStore.getState().selectedAirportCodes || [];
+      const sacUp = Array.from(new Set(sac.map((c: string) => c.toUpperCase())));
+      const selFilter = ['match', ['get', 'code'], sacUp.length > 0 ? sacUp : ['_NONE_'], true, false] as any;
+      if (m.getLayer('airports-selected')) m.setFilter('airports-selected', selFilter);
+      if (m.getLayer('airports-labels-selected')) m.setFilter('airports-labels-selected', selFilter);
+    } catch (_e) {}
+    if (applyHoverRef.current && hoveredAirportCodeRef.current) {
+      applyHoverRef.current(hoveredAirportCodeRef.current);
+    }
+  }, []);
+
   useEffect(() => {
     const unsubColor = useColorStore.subscribe(scheduleApplyColors);
-    const unsubSelection = useSelectionStore.subscribe(scheduleApplyColors);
+    const unsubSelection = useSelectionStore.subscribe(() => {
+      applySelectionQuick();
+      scheduleApplyColors();
+    });
     const unsubTrip = useTripStore.subscribe(scheduleApplyColors);
 
     if (mapLoaded) applyColors();
@@ -483,7 +540,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
         applyColorsPendingRef.current = null;
       }
     };
-  }, [scheduleApplyColors, applyColors, mapLoaded]);
+  }, [scheduleApplyColors, applyColors, applySelectionQuick, mapLoaded]);
 
   // Twardy reset mapy przy braku selekcji
   // Gwarantuje, że po zamknięciu panelu (stan pusty) wszystkie źródła tras zostaną wyzerowane.
@@ -511,7 +568,7 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
   // Reaktywne dodawanie warstw
   useEffect(() => {
     const m = map.current;
-    if (mapLoaded && enrichedAirportsData && m) {
+    if (mapLoaded && enrichedAirportsData && m && m.isStyleLoaded()) {
       try {
         if (!m.getLayer('airports-circles')) {
           addLayers(enrichedAirportsData);
@@ -520,7 +577,8 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
           ensureAirportsOnTop(m);
         }
       } catch (e) {
-        addLayers(enrichedAirportsData);
+        // Nie wywołuj addLayers w catch — jeśli styl nie jest gotowy, event 'load' wywoła je sam
+        logger.warn("[MapComponent] Pominięto addLayers w catch (styl nie gotowy)", e);
       }
     }
   }, [mapLoaded, mapStyle, enrichedAirportsData, addLayers]);
@@ -549,6 +607,8 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
   };
 
   const isTripActive = (tripState?.legs?.length || 0) > 0;
+  const isTripActiveRef = useRef(isTripActive);
+  useEffect(() => { isTripActiveRef.current = isTripActive; }, [isTripActive]);
 
   // Interakcja i hover
   const hoverRefs: MapHoverRefs = {
@@ -561,9 +621,9 @@ const MapComponent = forwardRef<MapComponentRef, MapComponentProps>(({
     hoverFeatureDataRef,
     applyColors: (mode) => { if (mode === 'all') applyColors(); },
     applyHoverRef,
-    mapStyle: mapStyle || '', // PRZEKAZANIE STYLU
-    selectedAirportCode: selectedAirportCode, // PRZEKAZANIE
-    isTripActive,
+    mapStyle: mapStyle || '',
+    selectedAirportCode: selectedAirportCode,
+    isTripActiveRef,
   };
   useMapHover(hoverRefs, mapLoaded, showAirports);
 

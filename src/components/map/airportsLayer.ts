@@ -9,6 +9,7 @@ import { logger } from '../../utils/logger';
 export const AIRPORT_LAYERS_ALL = [
   'airports-circles', 'airports-trip', 'airports-highlighted', 'airports-selected',
   'airports-labels', 'airports-labels-selected',
+  'selected-city-centroid-labels',
   'airports-hover-single-circle', 'airports-hover-single-label'
 ];
 
@@ -34,6 +35,7 @@ export function addAirportsLayer(
     });
     try { if (map.getSource('airports')) map.removeSource('airports'); } catch (e) { }
     try { if (map.getSource('airports-hover-single')) map.removeSource('airports-hover-single'); } catch (e) { }
+    try { if (map.getSource('selected-city-centroids')) map.removeSource('selected-city-centroids'); } catch (e) { }
 
     // 2. DODANIE ŹRÓDEŁ
     map.addSource('airports', {
@@ -44,6 +46,7 @@ export function addAirportsLayer(
       tolerance: 0
     });
     map.addSource('airports-hover-single', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addSource('selected-city-centroids', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
     // 3. DEFINICJA WARSTW
     const fonts = getSafeFontsFromStyle(map);
@@ -64,6 +67,45 @@ export function addAirportsLayer(
 
     // 2. Warstwa ogólna (Pozostałe - Standardowa okluzja)
     addLabelLayer(map, 'airports-labels', ['all'], fonts, lang, colorState, styleId, false);
+
+    // Pre-warm ewaluatora wyrażeń text-opacity w MapLibre. Bez tego pierwsze setPaintProperty
+    // z wyrażeniem case/== inicjalizuje cały pipeline ewaluacji → 74ms spike przy pierwszym hoverze.
+    // '__PREWARM__' nie pasuje do żadnego kodu lotniska — efekt wizualny: opacity=1 dla wszystkich.
+    try {
+      const prewarmExpr = ['case', ['==', ['get', 'code'], '__PREWARM__'], 0, 1] as any;
+      map.setPaintProperty('airports-labels', 'text-opacity', prewarmExpr);
+      map.setPaintProperty('airports-labels-selected', 'text-opacity', prewarmExpr);
+    } catch (e) {}
+
+    // 3. WARSTWA CENTROID ETYKIET MIAST (zoom < 7)
+    // Przy niskim zoomie wyświetla nazwę miasta w centroidzie wybranych lotnisk z tego miasta.
+    // Dla 1 lotniska z miasta: centroid = pozycja lotniska. Dla 2+: geometryczny centroid.
+    try {
+      const labelPaint = getLabelPaint(styleId);
+      map.addLayer({
+        id: 'selected-city-centroid-labels',
+        type: 'symbol',
+        source: 'selected-city-centroids',
+        maxzoom: 7,
+        layout: {
+          'text-field': ['get', 'city_label'],
+          'text-font': fontsBold,
+          'text-size': 12,
+          'text-anchor': 'top',
+          'text-offset': [0, 1.3],
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+          'text-pitch-alignment': 'map',
+          'symbol-sort-key': -50000
+        },
+        paint: {
+          'text-color': ['get', 'text_color'],
+          'text-halo-color': labelPaint.haloColor,
+          'text-halo-width': 2.5,
+          'text-halo-blur': 0.5
+        }
+      });
+    } catch (e) { logger.warn("[GPU_INIT] Nie udało się dodać warstwy centroid etykiet", e); }
 
     // 4. WARSTWY HOVER (Na szczycie)
     try {
